@@ -1,6 +1,7 @@
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
-import { jsonResult, textResult } from '../types.js'
+import { jsonResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 export function createCatalogTools(client: ShataleClient): ToolModule {
   return {
@@ -45,7 +46,11 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           const result = await client.request('GET', `/v1/merchants/catalog?${params}`)
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Catalog error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'catalog_search_failed',
+            message: 'Could not search the merchant catalog.',
+            suggested_fix: 'Retry with simpler filters; the catalog service may be temporarily unavailable.',
+          })
         }
       },
 
@@ -54,7 +59,11 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           const result = await client.request('GET', `/v1/merchants/catalog/${encodeURIComponent(String(args.merchant_id))}`)
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Catalog error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'merchant_details_failed',
+            message: 'Could not fetch merchant details.',
+            suggested_fix: 'Use a merchant_id from search_merchants results.',
+          })
         }
       },
     },

@@ -179,6 +179,19 @@ Built-in documentation available as MCP resources:
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
 
+## Privacy & telemetry
+
+This server has **no telemetry**: no analytics endpoint, no beacons, no install ID, no fingerprinting.
+
+- **Guest mode (no API key)** sends **no attribution headers and no telemetry**. The simulation tools (`simulate_purchase_flow`, `generate_policy_template`) run fully offline and make no network calls. Guest activity is intentionally **not measured remotely**.
+- **Sandbox mode (`sh_test_*`)** already authenticates to the Shatale Sandbox API. Those requests carry three static **attribution** headers so we can understand aggregate adoption of the official client:
+  - `User-Agent: shatale-mcp-server/<version>`
+  - `X-Shatale-Client: shatale-mcp-server`
+  - `X-Shatale-Client-Version: <version>`
+
+  These add no new transport, endpoint, or payload — they only label calls you are already making. Analytics are derived **server-side** from your authenticated activity.
+- **Never collected:** API key values, prompts, policy contents, merchant/customer/card data, PAN, and no machine identifiers (OS, hostname, username, file path, or persistent install ID).
+
 ## Links
 
 - [Shatale Website](https://shatale.com)
