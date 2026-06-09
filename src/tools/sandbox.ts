@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
 const createTestUserSchema = z.object({
@@ -98,7 +99,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           const result = await client.sandboxCreateTestUser(parsed.data)
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Sandbox request failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
+          return errorResult(err, {
+            code: 'sandbox_create_user_failed',
+            message: 'Could not create the sandbox test user.',
+            suggested_fix: 'Ensure you are using a sandbox key (sh_test_*) and retry.',
+          })
         }
       },
 
@@ -107,7 +112,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           const result = await client.sandboxCompleteOnboarding(String(args.user_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Sandbox API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'sandbox_onboarding_failed',
+            message: 'Could not complete sandbox onboarding.',
+            suggested_fix: 'Pass a user_id returned by sandbox_create_test_user.',
+          })
         }
       },
 
@@ -116,7 +125,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           const result = await client.sandboxApproveRequest(String(args.request_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Sandbox API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'sandbox_approve_failed',
+            message: 'Could not approve the sandbox request.',
+            suggested_fix: 'Pass a request_id for a pending purchase or credential request.',
+          })
         }
       },
 
@@ -128,7 +141,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           )
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Sandbox API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'sandbox_decline_failed',
+            message: 'Could not decline the sandbox request.',
+            suggested_fix: 'Pass a request_id for a pending request.',
+          })
         }
       },
 
@@ -137,7 +154,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           const result = await client.sandboxReset()
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Sandbox API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'sandbox_reset_failed',
+            message: 'Could not reset the sandbox.',
+            suggested_fix: 'Ensure you are using a sandbox key (sh_test_*) and retry.',
+          })
         }
       },
     },

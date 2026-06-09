@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
@@ -126,7 +127,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           })
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase request failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
+          return errorResult(err, {
+            code: 'purchase_failed',
+            message: 'Could not complete the purchase request.',
+            suggested_fix: 'Confirm the merchant, amount, and user details are valid, then retry.',
+          })
         }
       },
 
@@ -135,7 +140,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           const result = await client.getPurchaseStatus(String(args.purchase_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'purchase_status_failed',
+            message: 'Could not fetch the purchase status.',
+            suggested_fix: 'Check that purchase_id is the id returned by request_purchase, then retry.',
+          })
         }
       },
 
@@ -147,7 +156,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           )
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'purchase_cancel_failed',
+            message: 'Could not cancel the purchase.',
+            suggested_fix: 'Only pending purchases can be cancelled. Verify purchase_id and its current status.',
+          })
         }
       },
     },

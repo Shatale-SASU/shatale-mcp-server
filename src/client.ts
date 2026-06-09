@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxUserInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
+import { mapHttpError } from './errors.js'
 
 /**
  * Translate the LLM-facing purchase shape (`merchant` + decimal `amount`)
@@ -36,12 +37,18 @@ export class ShataleClient {
   async request(method: string, path: string, body?: unknown): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-Shatale-Client': 'mcp-server',
-      'X-Shatale-Client-Version': CLIENT_VERSION,
     }
 
+    // SHAT-1465: attribution headers identify the official MCP client so the
+    // backend can derive guest→sandbox→purchase funnel events from already-
+    // authenticated traffic. Gated on apiKey presence ON PURPOSE — guest mode
+    // sends no attribution headers and stays intentionally untracked (no new
+    // transport, no telemetry endpoint; see README "Privacy & telemetry").
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`
+      headers['User-Agent'] = `shatale-mcp-server/${CLIENT_VERSION}`
+      headers['X-Shatale-Client'] = 'shatale-mcp-server'
+      headers['X-Shatale-Client-Version'] = CLIENT_VERSION
     }
 
     const controller = new AbortController()
@@ -56,18 +63,9 @@ export class ShataleClient {
       })
 
       if (!res.ok) {
-        // F-006: Don't leak raw backend error messages to the LLM
-        const statusCode = res.status
-        if (statusCode === 401 || statusCode === 403) {
-          throw new Error('Authentication failed. Check your API key and try again.')
-        }
-        if (statusCode === 404) {
-          throw new Error(`Resource not found (${method} ${path}).`)
-        }
-        if (statusCode === 429) {
-          throw new Error('Rate limit exceeded. Please wait and try again.')
-        }
-        throw new Error(`API request failed (HTTP ${statusCode}). Check your API key and parameters.`)
+        // F-006 / SHAT-1463: never leak raw backend bodies — map the status to a
+        // structured {code, message, suggested_fix} error instead.
+        throw mapHttpError(res.status, method, path)
       }
 
       return res.json()

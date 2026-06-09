@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
 const registerUserProfileSchema = z.object({
@@ -90,7 +91,11 @@ export function createOnboardingTools(client: ShataleClient): ToolModule {
           })
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Registration failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
+          return errorResult(err, {
+            code: 'registration_failed',
+            message: 'Could not register the user profile.',
+            suggested_fix: 'Confirm user_claims.email is a valid email, then retry.',
+          })
         }
       },
 
@@ -99,7 +104,11 @@ export function createOnboardingTools(client: ShataleClient): ToolModule {
           const result = await client.getOnboardingStatus(String(args.session_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Onboarding API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'onboarding_status_failed',
+            message: 'Could not fetch the onboarding status.',
+            suggested_fix: 'Use the session_id returned by register_user_profile or request_purchase.',
+          })
         }
       },
     },
