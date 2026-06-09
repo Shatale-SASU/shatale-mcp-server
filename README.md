@@ -2,30 +2,47 @@
 
 MCP server for [Shatale](https://shatale.com) — AI-native payment infrastructure. Give your AI agents the ability to make purchases, issue virtual cards, and manage spending within delegated budgets and policy controls.
 
-**19 tools** for the complete agent payment lifecycle: from merchant discovery to card issuance to purchase completion.
+## 60-second demo, no API key required
 
-## Quick Start
+See the whole agent payment lifecycle before you sign up. **Guest mode makes no real API call and no payment.**
 
-### 1. Install and run
+**1. Run it:**
 
 ```bash
 npx shatale-mcp-server
 ```
 
-The server starts in **guest mode** with discovery tools. No API key needed to explore.
-
-### 2. Get full access
-
-Sign up at [admin.shatale.com/register](https://admin.shatale.com/register?ref=mcp) (free, no credit card) and set your sandbox key:
+**2. Point your IDE at it** (Claude Code shown — see [Configure your IDE](#configure-your-ide) for Desktop/Cursor/Windsurf):
 
 ```bash
-export SHATALE_API_KEY=sh_test_your_key_here
-npx shatale-mcp-server
+claude mcp add shatale -- npx shatale-mcp-server
 ```
 
-Now you have **19 tools** — full purchase flow, merchant catalog, user onboarding, card credentials, and sandbox testing.
+**3. Ask your assistant:**
+
+> Use Shatale to simulate an AI agent buying a $25 developer tool subscription with a $100 monthly budget. Show the policy check, approval decision, virtual card step, and final timeline.
+
+You'll see the policy evaluation, the approve / decline / requires-approval decision, the (simulated) virtual card step, and a trace — all in guest mode, with no key.
+
+> **Tip:** call `explain_shatale` first. It reports the current mode, the tools available to you, and the recommended first prompt.
+
+## Run the same flow in sandbox
+
+**No code changes required. Add a sandbox key and re-run the same prompt.** The guest simulation becomes a real sandbox integration — onboarding, purchase requests, approval, credential issuance, status and audit — against Shatale Sandbox APIs, with no real money.
+
+```bash
+SHATALE_API_KEY=sh_test_xxx npx shatale-mcp-server
+```
+
+…or just add the key to the `env` block of your IDE's MCP config (see below) — same prompt, no other changes.
+
+Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
+
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 19-tool lifecycle). Production keys (`sh_live_*`) are blocked in this MCP server by design — a local IDE/agent is not a trust boundary for live payment credentials; integrate via your backend.
 
 ## Configure Your IDE
+
+> Omit the `SHATALE_API_KEY` env entirely to run in guest mode (60-second demo). Add a `sh_test_*` key to unlock the full sandbox.
 
 ### Claude Desktop
 
@@ -75,10 +92,11 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
+| `explain_shatale` | **Start here.** Reports the current mode (guest/sandbox/blocked production), the tools available to you, and the recommended first prompt |
+| `simulate_purchase_flow` | Simulates the Shatale agent payment lifecycle in guest mode — policy check, approve/decline/requires-approval decision, virtual card step, timeline. No real API call or payment is made |
+| `generate_policy_template` | Generates **and validates** a spending policy for your use case — returns risk level, warnings, and recommended controls (never a silently unsafe policy) |
 | `list_mcc_codes` | Browse merchant category codes for policy design |
-| `explain_shatale` | Learn what Shatale is and how it works |
 | `list_capabilities` | See all available tools and capabilities |
-| `generate_policy_template` | Generate a spending policy template for your use case |
 
 ### Purchase Flow
 
@@ -87,7 +105,6 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 | `request_purchase` | Request a purchase on behalf of a user — starts the full flow |
 | `get_purchase_status` | Check the status of an existing purchase request |
 | `cancel_purchase` | Cancel a pending purchase |
-| `simulate_purchase_flow` | Simulate an end-to-end purchase flow for testing |
 
 ### Merchant Catalog
 
@@ -135,15 +152,17 @@ Try these with your AI assistant:
 ## How It Works
 
 ```
-AI Agent → MCP Server → Shatale API → Card Issuer → Visa/Mastercard
+AI Agent → MCP Server → Shatale Sandbox API → issuing partner → virtual card
 ```
 
 1. **Agent requests purchase** via `request_purchase` with merchant and amount
 2. **Shatale evaluates policy** — checks delegation scope, amount limits, MCC rules
 3. **User verifies** (if new) — opens personalized onboarding URL, confirms identity
-4. **Virtual card issued** — issuing partner provisions a Visa card locked to the merchant and amount
+4. **Virtual card issued** — the issuing partner provisions a card locked to the merchant and amount
 5. **Agent receives credentials** — PAN, CVV, expiry via `request_temporary_credentials`
 6. **Agent completes purchase** — uses card at the merchant
+
+In **guest mode** none of this hits the network — `simulate_purchase_flow` walks the same steps deterministically so you can see them before registering for a sandbox key.
 
 ## Resources
 
