@@ -56,12 +56,74 @@ describe('Guest Mode (no API key)', () => {
     expect(result.content[0].text).toContain('amazon.com')
   })
 
+  test('simulate_purchase_flow approves a small in-budget purchase', async () => {
+    const result = await client.callTool('simulate_purchase_flow', {
+      merchant: 'github.com',
+      amount: 25,
+      description: 'dev tool subscription',
+    })
+    const text = result.content[0].text
+    expect(text).toContain('"result": "approved"')
+    expect(text).toContain('demo_trace_')
+    expect(text).toContain('sandbox_equivalent_tools')
+  })
+
+  test('simulate_purchase_flow declines a blocked category (gambling)', async () => {
+    const result = await client.callTool('simulate_purchase_flow', {
+      merchant: 'casino-royale.com',
+      amount: 50,
+      description: 'chips',
+    })
+    const text = result.content[0].text
+    expect(text).toContain('"result": "declined"')
+    expect(text).toContain('blocked_category')
+  })
+
+  test('simulate_purchase_flow declines an amount over the guest cap', async () => {
+    const result = await client.callTool('simulate_purchase_flow', {
+      merchant: 'apple.com',
+      amount: 5000,
+      description: 'a laptop',
+    })
+    const text = result.content[0].text
+    expect(text).toContain('"result": "declined"')
+    expect(text).toContain('guest_cap')
+  })
+
+  test('simulate_purchase_flow requires approval above the threshold', async () => {
+    const result = await client.callTool('simulate_purchase_flow', {
+      merchant: 'apple.com',
+      amount: 750,
+      description: 'a tablet',
+    })
+    expect(result.content[0].text).toContain('"result": "requires_approval"')
+  })
+
   test('generate_policy_template returns JSON policy', async () => {
     const result = await client.callTool('generate_policy_template', {
       use_case: 'SaaS subscriptions',
     })
     expect(result.content[0].text).toContain('Spending Policy Template')
     expect(result.content[0].text).toContain('SaaS subscriptions')
+  })
+
+  test('generate_policy_template includes a validation block', async () => {
+    const result = await client.callTool('generate_policy_template', {
+      use_case: 'cloud infrastructure',
+      monthly_budget: 8000,
+    })
+    const text = result.content[0].text
+    expect(text).toContain('Validation')
+    expect(text).toContain('risk_level')
+    expect(text).toContain('recommended_controls')
+  })
+
+  test('explain_shatale reports GUEST mode and lists available tools', async () => {
+    const result = await client.callTool('explain_shatale')
+    const text = result.content[0].text
+    expect(text).toContain('Current mode: GUEST')
+    expect(text).toContain('simulate_purchase_flow')
+    expect(text).toContain('register?ref=mcp')
   })
 
   test('list_capabilities shows guest mode', async () => {

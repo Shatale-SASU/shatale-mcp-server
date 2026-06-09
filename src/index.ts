@@ -53,8 +53,16 @@ function registerModule(mod: { tools: ToolDefinition[]; handlers: Record<string,
   Object.assign(allHandlers, mod.handlers)
 }
 
-// Always register guest + common + catalog tools
-registerModule(createGuestTools())
+// Always register guest + common + catalog tools.
+// explain_shatale reports the live tool list, so getToolNames is lazy — it reads
+// allTools at call time, after every module below has registered.
+registerModule(
+  createGuestTools({
+    isGuest,
+    isSandbox,
+    getToolNames: () => allTools.map((t) => t.name),
+  }),
+)
 registerModule(createCommonTools(client))
 registerModule(createCatalogTools(client))
 
