@@ -29,7 +29,6 @@ describe('Guest Mode (no API key)', () => {
 
     // Should NOT have authenticated tools
     expect(tools).not.toContain('request_purchase')
-    expect(tools).not.toContain('preview_purchase')
     expect(tools).not.toContain('request_temporary_credentials')
     expect(tools).not.toContain('sandbox_create_test_user')
     expect(tools).not.toContain('sandbox_reset')

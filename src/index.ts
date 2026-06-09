@@ -10,6 +10,8 @@ import {
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { ShataleClient } from './client.js'
+import { installStdioErrorHandling } from './stdio-hardening.js'
+import { VERSION } from './version.js'
 import { createGuestTools } from './tools/guest.js'
 import { createPurchaseTools } from './tools/purchase.js'
 import { createCredentialTools } from './tools/credentials.js'
@@ -29,7 +31,7 @@ if (apiKey.startsWith('sh_live_') || apiKey.startsWith('sk_live_')) {
 }
 
 // F-005: Whitelist API URL
-const ALLOWED_HOSTS = ['api.shatale.com', 'localhost', '127.0.0.1', 'api-production-bad6.up.railway.app']
+const ALLOWED_HOSTS = ['api.shatale.com', 'localhost', '127.0.0.1']
 const apiBaseUrl = new URL(process.env.SHATALE_API_URL ?? 'https://api.shatale.com')
 if (!ALLOWED_HOSTS.some(h => apiBaseUrl.hostname === h || apiBaseUrl.hostname.endsWith('.shatale.com'))) {
   console.error(`ERROR: Untrusted API URL: ${apiBaseUrl.hostname}. Only *.shatale.com and localhost are allowed.`)
@@ -215,9 +217,12 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
 
 // Create server
 const server = new Server(
-  { name: 'shatale-mcp', version: '0.1.0' },
+  { name: 'shatale-mcp', version: VERSION },
   { capabilities: { tools: {}, resources: {}, prompts: {} } },
 )
+
+// F-009: harden the stdio session against malformed JSON-RPC frames.
+installStdioErrorHandling(server)
 
 // Register list_tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {

@@ -65,7 +65,6 @@ function handleListCapabilities(mode: string) {
 
   const purchaseTools = [
     'request_purchase -- Execute a purchase',
-    'preview_purchase -- Preview without executing',
     'get_purchase_status -- Check purchase status',
     'cancel_purchase -- Cancel a pending purchase',
   ]

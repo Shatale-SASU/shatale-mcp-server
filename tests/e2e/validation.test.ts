@@ -25,8 +25,8 @@ describeIfKey('Input Validation', () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
-      merchant_ref: testId('merchant'),
-      amount_cents: -100,
+      merchant: testId('merchant'),
+      amount: -1,
       currency: 'EUR',
       description: 'e2e validation test',
     })
@@ -38,8 +38,8 @@ describeIfKey('Input Validation', () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
-      merchant_ref: testId('merchant'),
-      amount_cents: 0,
+      merchant: testId('merchant'),
+      amount: 0,
       currency: 'EUR',
       description: 'e2e validation test',
     })
@@ -50,8 +50,8 @@ describeIfKey('Input Validation', () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
-      merchant_ref: testId('merchant'),
-      amount_cents: 99_999_999,
+      merchant: testId('merchant'),
+      amount: 999_999,
       currency: 'EUR',
       description: 'e2e validation test',
     })
@@ -63,8 +63,8 @@ describeIfKey('Input Validation', () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
-      merchant_ref: testId('merchant'),
-      amount_cents: 1000,
+      merchant: testId('merchant'),
+      amount: 10,
       currency: 'EURO',
       description: 'e2e validation test',
     })
@@ -74,7 +74,7 @@ describeIfKey('Input Validation', () => {
   test('request_purchase rejects missing required fields', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
-      // missing agent_id, merchant_ref, etc.
+      // missing agent_id, merchant, etc.
     })
     expect(result.content[0].text).toContain('Invalid input')
   })

@@ -1,17 +1,13 @@
 name: "CI: Sandbox (authenticated)"
 
+# SHAT-1449: live-sandbox tests no longer gate PRs/pushes. Deterministic
+# contract coverage runs in ci-public.yml (mock upstream, no live key); the
+# full live suite runs nightly (nightly.yml) and on-demand via this workflow.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   sandbox-tests:
-    # Only run on internal PRs (not forks) or pushes to main
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,12 +19,10 @@ jobs:
       - run: npm ci
       - run: npx tsc
 
-      # Fail on main if key is missing (no silent skip)
-      - name: Check SHATALE_TEST_KEY on main
-        if: github.ref == 'refs/heads/main'
+      - name: Check SHATALE_TEST_KEY
         run: |
           if [ -z "$SHATALE_TEST_KEY" ]; then
-            echo "::error::SHATALE_TEST_KEY is not configured. Sandbox tests cannot be skipped on main."
+            echo "::error::SHATALE_TEST_KEY is required to run the live sandbox suite."
             exit 1
           fi
         env:
@@ -47,12 +41,3 @@ jobs:
           path: /tmp/mcp-test-*.log
           retention-days: 7
           if-no-files-found: ignore
-
-  # Status check for fork PRs (sandbox skipped)
-  sandbox-skipped:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Sandbox tests skipped for fork PR"

@@ -50,25 +50,12 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
 
   // ── Purchase tools ──
 
-  test('preview_purchase returns preview data', async () => {
-    const result = await client.callTool('preview_purchase', {
-      publisher_user_id: testId('user'),
-      agent_id: testId('agent'),
-      merchant_ref: 'amazon.com',
-      amount_cents: 2500,
-      currency: 'EUR',
-      description: `E2E happy path test ${run}`,
-    })
-    expect(result.content[0].type).toBe('text')
-    expect(result.content[0].text).toBeDefined()
-  })
-
   test('request_purchase creates a purchase', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
-      merchant_ref: 'amazon.com',
-      amount_cents: 1500,
+      merchant: 'amazon.com',
+      amount: 15.00,
       currency: 'EUR',
       description: `E2E happy path purchase ${run}`,
       idempotency_key: testId('idem'),

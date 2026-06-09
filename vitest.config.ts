@@ -5,6 +5,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     testTimeout: 30000,
     hookTimeout: 15000,
-    retry: 2,
+    // SHAT-1449: no retry — tests must be deterministic. The mcpClient harness
+    // already retries only the readiness/initialize handshake.
   },
 })

@@ -1,6 +1,31 @@
+import { randomUUID } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxUserInput } from './types.js'
+import { VERSION as CLIENT_VERSION } from './version.js'
 
-const CLIENT_VERSION = '0.1.0'
+/**
+ * Translate the LLM-facing purchase shape (`merchant` + decimal `amount`)
+ * into the backend wire contract. apps/api (api/v1/purchases.go) decodes
+ * `merchant_ref` (string) + `amount_cents` (int64), so convert here at the
+ * HTTP boundary rather than leaking cents into the agent-facing schema.
+ */
+export function toPurchaseWireBody(
+  input: PurchaseInput,
+  generateIdempotencyKey: boolean,
+): Record<string, unknown> {
+  const amountCents = Math.round(Number(input.amount) * 100)
+  const body: Record<string, unknown> = {
+    publisher_user_id: input.publisher_user_id,
+    agent_id: input.agent_id,
+    merchant_ref: input.merchant,
+    amount_cents: amountCents,
+    currency: input.currency,
+    description: input.description,
+  }
+  if (input.user_hint) body.user_hint = input.user_hint
+  if (input.idempotency_key) body.idempotency_key = input.idempotency_key
+  else if (generateIdempotencyKey) body.idempotency_key = randomUUID()
+  return body
+}
 
 export class ShataleClient {
   constructor(
@@ -54,11 +79,7 @@ export class ShataleClient {
   // ---- Purchase flow ----
 
   async requestPurchase(input: PurchaseInput): Promise<unknown> {
-    return this.request('POST', '/v1/purchases', input)
-  }
-
-  async previewPurchase(input: PurchaseInput): Promise<unknown> {
-    return this.request('POST', '/v1/purchases/preview', input)
+    return this.request('POST', '/v1/purchases', toPurchaseWireBody(input, true))
   }
 
   async getPurchaseStatus(id: string): Promise<unknown> {

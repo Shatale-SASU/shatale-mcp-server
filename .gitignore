@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+
+# Local agent/tooling artifacts — never publish to this public repo
+.claude-flow/
+memory/

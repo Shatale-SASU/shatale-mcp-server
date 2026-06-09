@@ -7,8 +7,8 @@ import { jsonResult, textResult } from '../types.js'
 const requestPurchaseSchema = z.object({
   publisher_user_id: z.string().min(1, 'publisher_user_id is required'),
   agent_id: z.string().min(1, 'agent_id is required'),
-  merchant_ref: z.string().min(1, 'merchant_ref is required'),
-  amount_cents: z.number().int('amount_cents must be an integer').positive('amount_cents must be positive').max(10_000_000, 'amount_cents exceeds maximum (10,000,000)'),
+  merchant: z.string().min(1, 'merchant is required'),
+  amount: z.number().positive('amount must be positive').max(100_000, 'amount exceeds maximum (100,000)'),
   currency: z.string().length(3, 'currency must be a 3-letter ISO code').default('EUR'),
   description: z.string().min(1, 'description is required'),
   user_hint: z.object({
@@ -38,13 +38,13 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
               type: 'string',
               description: 'Identifier for the AI agent making the request',
             },
-            merchant_ref: {
+            merchant: {
               type: 'string',
-              description: 'Merchant reference — name or domain (e.g. "amazon.com")',
+              description: 'Merchant name or domain (e.g. "amazon.com")',
             },
-            amount_cents: {
+            amount: {
               type: 'number',
-              description: 'Purchase amount in cents (e.g. 4999 for $49.99)',
+              description: 'Purchase amount in major currency units (e.g. 49.99 for $49.99)',
             },
             currency: {
               type: 'string',
@@ -69,42 +69,7 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
               description: 'Unique key for idempotent requests (prevents duplicate purchases). Auto-generated if omitted.',
             },
           },
-          required: ['publisher_user_id', 'agent_id', 'merchant_ref', 'amount_cents', 'currency', 'description'],
-        },
-      },
-      {
-        name: 'preview_purchase',
-        description:
-          'Preview a purchase without executing it. Returns policy check results and estimated fees.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            publisher_user_id: {
-              type: 'string',
-              description: 'The publisher-side user ID',
-            },
-            agent_id: {
-              type: 'string',
-              description: 'Identifier for the AI agent',
-            },
-            merchant_ref: {
-              type: 'string',
-              description: 'Merchant reference — name or domain',
-            },
-            amount_cents: {
-              type: 'number',
-              description: 'Purchase amount in cents',
-            },
-            currency: {
-              type: 'string',
-              description: 'ISO 4217 currency code',
-            },
-            description: {
-              type: 'string',
-              description: 'Description of the purchase',
-            },
-          },
-          required: ['publisher_user_id', 'agent_id', 'merchant_ref', 'amount_cents', 'currency', 'description'],
+          required: ['publisher_user_id', 'agent_id', 'merchant', 'amount', 'currency', 'description'],
         },
       },
       {
@@ -149,30 +114,20 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
         }
         try {
           const input = parsed.data
-          const idempotencyKey = input.idempotency_key
-            ?? `sha-${Date.now()}-${Math.random().toString(36).slice(2)}`
           const result = await client.requestPurchase({
             publisher_user_id: input.publisher_user_id,
             agent_id: input.agent_id,
-            merchant_ref: input.merchant_ref,
-            amount_cents: input.amount_cents,
+            merchant: input.merchant,
+            amount: input.amount,
             currency: input.currency,
             description: input.description,
             user_hint: input.user_hint,
-            idempotency_key: idempotencyKey,
+            idempotency_key: input.idempotency_key,
           })
           return jsonResult(result)
         } catch (err) {
           return textResult(`Purchase request failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
         }
-      },
-
-      preview_purchase: async (_args) => {
-        // F-013: Preview endpoint returns 405 — mark as coming soon
-        return textResult(
-          'Purchase preview is not yet available via the API. Use request_purchase to create a purchase, ' +
-          'or use simulate_purchase_flow (no API key required) to walk through the flow step by step.',
-        )
       },
 
       get_purchase_status: async (args) => {

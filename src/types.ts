@@ -1,9 +1,15 @@
-/** Purchase request input */
+/**
+ * LLM-facing purchase request input.
+ *
+ * `merchant` and `amount` are the ergonomic shape exposed to the agent.
+ * They are translated to the backend wire contract (`merchant_ref` +
+ * integer `amount_cents`) at the HTTP boundary via `toPurchaseWireBody`.
+ */
 export interface PurchaseInput {
   publisher_user_id: string
   agent_id: string
-  merchant_ref: string
-  amount_cents: number
+  merchant: string
+  amount: number
   currency: string
   description: string
   user_hint?: {
@@ -12,7 +18,7 @@ export interface PurchaseInput {
     phone?: string
     country?: string
   }
-  idempotency_key: string
+  idempotency_key?: string
 }
 
 /** Credential request input */

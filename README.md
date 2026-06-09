@@ -2,7 +2,7 @@
 
 MCP server for [Shatale](https://shatale.com) — AI-native payment infrastructure. Give your AI agents the ability to make purchases, issue virtual cards, and manage spending within delegated budgets and policy controls.
 
-**20+ tools** for the complete agent payment lifecycle: from merchant discovery to card issuance to purchase completion.
+**19 tools** for the complete agent payment lifecycle: from merchant discovery to card issuance to purchase completion.
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ export SHATALE_API_KEY=sh_test_your_key_here
 npx shatale-mcp-server
 ```
 
-Now you have **20+ tools** — full purchase flow, merchant catalog, user onboarding, card credentials, and sandbox testing.
+Now you have **19 tools** — full purchase flow, merchant catalog, user onboarding, card credentials, and sandbox testing.
 
 ## Configure Your IDE
 
@@ -87,7 +87,6 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 | `request_purchase` | Request a purchase on behalf of a user — starts the full flow |
 | `get_purchase_status` | Check the status of an existing purchase request |
 | `cancel_purchase` | Cancel a pending purchase |
-| `preview_purchase` | Preview a purchase without committing — see policy evaluation |
 | `simulate_purchase_flow` | Simulate an end-to-end purchase flow for testing |
 
 ### Merchant Catalog
