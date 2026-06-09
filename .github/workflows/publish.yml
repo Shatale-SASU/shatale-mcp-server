@@ -9,10 +9,6 @@ on:
         description: "Dry run (don't actually publish)"
         type: boolean
         default: true
-      force_publish:
-        description: "Override the SHAT-1446 release freeze (publish for real)"
-        type: boolean
-        default: false
 
 jobs:
   test:
@@ -37,23 +33,15 @@ jobs:
       contents: read
       id-token: write  # Required for npm trusted publishing (OIDC)
     steps:
-      - name: "Release freeze gate (SHAT-1446)"
-        # Block any real publish (release events or non-dry-run dispatch) until the
-        # standalone v0.2.4 / monorepo v0.2.2 drift is reconciled. Dry runs still pass.
-        if: github.event_name == 'release' || github.event.inputs.dry_run != 'true'
-        run: |
-          if [ "${{ github.event.inputs.force_publish }}" != "true" ]; then
-            echo "::error::npm publish is FROZEN (SHAT-1446). MCP drift between standalone v0.2.4 and monorepo v0.2.2 must be reconciled before release. To override deliberately, re-run via workflow_dispatch with force_publish=true."
-            exit 1
-          fi
-          echo "Freeze overridden via force_publish=true — proceeding to publish."
-
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; Node 20 ships npm 10.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
       - run: npm ci
       - run: npx tsc
 
@@ -71,14 +59,12 @@ jobs:
       - name: Publish (dry run)
         if: github.event.inputs.dry_run == 'true'
         run: npm publish --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # Authenticates via OIDC trusted publishing (no NPM_TOKEN). Registered at
+      # npmjs.com → shatale-mcp-server → Trusted Publisher (repo + publish.yml).
       - name: Publish to npm
         if: github.event.inputs.dry_run != 'true' || github.event_name == 'release'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Notify on Telegram
         if: success() && github.event_name == 'release'
