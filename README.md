@@ -197,7 +197,7 @@ This server has **no telemetry**: no analytics endpoint, no beacons, no install 
 - [Shatale Website](https://shatale.com)
 - [Publisher Admin](https://admin.shatale.com)
 - [Sign Up](https://admin.shatale.com/register?ref=mcp)
-- [GitHub](https://github.com/solskiysb/shatale-mcp-server)
+- [GitHub](https://github.com/Shatale-SASU/shatale-mcp-server)
 
 ## License
 

@@ -31,7 +31,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/solskiysb/shatale-mcp-server"
+    "url": "git+https://github.com/Shatale-SASU/shatale-mcp-server.git"
   },
   "engines": {
     "node": ">=20"
