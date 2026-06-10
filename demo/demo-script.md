@@ -5,7 +5,7 @@
 ### Setup
 ```bash
 # Terminal 1: Start MCP server
-export SHATALE_API_KEY=sh_test_demo_key
+export SHATALE_API_KEY=sk_sandbox_demo_key
 npx @shatale/mcp-server
 # Output: ✓ Shatale MCP Server started (sandbox mode)
 ```

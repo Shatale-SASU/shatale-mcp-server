@@ -89,9 +89,22 @@ describeIfKey('Input Validation', () => {
     expect(result.content[0].text).toContain('Invalid input')
   })
 
-  test('sandbox_create_test_user rejects invalid email', async () => {
-    const result = await client.callTool('sandbox_create_test_user', {
-      email: 'not-valid',
+  test('sandbox_simulate_authorization rejects missing required fields', async () => {
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: testId('agent'),
+      // missing amount, currency, mcc, merchant_name, card_number
+    })
+    expect(result.content[0].text).toContain('Invalid input')
+  })
+
+  test('sandbox_simulate_authorization rejects non-integer amount', async () => {
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: testId('agent'),
+      amount: 150.5,
+      currency: 'EUR',
+      mcc: 5691,
+      merchant_name: 'Validation Co',
+      card_number: '4242424242424242',
     })
     expect(result.content[0].text).toContain('Invalid input')
   })

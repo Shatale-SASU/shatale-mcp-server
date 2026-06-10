@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import type { PurchaseInput, CredentialInput, SandboxUserInput } from './types.js'
+import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
+import { mapHttpError } from './errors.js'
 
 /**
  * Translate the LLM-facing purchase shape (`merchant` + decimal `amount`)
@@ -36,12 +37,18 @@ export class ShataleClient {
   async request(method: string, path: string, body?: unknown): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-Shatale-Client': 'mcp-server',
-      'X-Shatale-Client-Version': CLIENT_VERSION,
     }
 
+    // SHAT-1465: attribution headers identify the official MCP client so the
+    // backend can derive guest→sandbox→purchase funnel events from already-
+    // authenticated traffic. Gated on apiKey presence ON PURPOSE — guest mode
+    // sends no attribution headers and stays intentionally untracked (no new
+    // transport, no telemetry endpoint; see README "Privacy & telemetry").
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`
+      headers['User-Agent'] = `shatale-mcp-server/${CLIENT_VERSION}`
+      headers['X-Shatale-Client'] = 'shatale-mcp-server'
+      headers['X-Shatale-Client-Version'] = CLIENT_VERSION
     }
 
     const controller = new AbortController()
@@ -56,18 +63,9 @@ export class ShataleClient {
       })
 
       if (!res.ok) {
-        // F-006: Don't leak raw backend error messages to the LLM
-        const statusCode = res.status
-        if (statusCode === 401 || statusCode === 403) {
-          throw new Error('Authentication failed. Check your API key and try again.')
-        }
-        if (statusCode === 404) {
-          throw new Error(`Resource not found (${method} ${path}).`)
-        }
-        if (statusCode === 429) {
-          throw new Error('Rate limit exceeded. Please wait and try again.')
-        }
-        throw new Error(`API request failed (HTTP ${statusCode}). Check your API key and parameters.`)
+        // F-006 / SHAT-1463: never leak raw backend bodies — map the status to a
+        // structured {code, message, suggested_fix} error instead.
+        throw mapHttpError(res.status, method, path)
       }
 
       return res.json()
@@ -169,24 +167,36 @@ export class ShataleClient {
   }
 
   // ---- Sandbox ----
+  //
+  // These map 1:1 to the three sandbox routes the backend actually deploys
+  // (apps/api/main.go): the side-effect-free policy engine and the two
+  // SandboxOnly-gated lifecycle helpers. The previously-shipped
+  // create-user / requests/{id}/{approve,decline} / reset methods were built
+  // against endpoints that were never deployed and have been removed
+  // (SHAT-1488).
 
-  async sandboxCreateTestUser(input?: SandboxUserInput): Promise<unknown> {
-    return this.request('POST', '/v1/sandbox/users', input ?? {})
+  /**
+   * Run the policy engine without side effects (no ledger, no outbox, no
+   * money). amount is an integer minor-unit value per the backend
+   * sandboxAuthRequest struct. Test cards: 4242… force-approve, 4000…0002
+   * force-decline, neutral (e.g. 4111…) → real policy decides.
+   */
+  async sandboxSimulateAuthorization(input: SandboxAuthInput): Promise<unknown> {
+    return this.request('POST', '/v1/sandbox/authorizations', {
+      agent_id: input.agent_id,
+      amount: input.amount,
+      currency: input.currency,
+      mcc: input.mcc,
+      merchant_name: input.merchant_name,
+      card_number: input.card_number,
+    })
   }
 
   async sandboxCompleteOnboarding(userId: string): Promise<unknown> {
     return this.request('POST', `/v1/sandbox/users/${encodeURIComponent(userId)}/onboarding`)
   }
 
-  async sandboxApproveRequest(requestId: string): Promise<unknown> {
-    return this.request('POST', `/v1/sandbox/requests/${encodeURIComponent(requestId)}/approve`)
-  }
-
-  async sandboxDeclineRequest(requestId: string, reason?: string): Promise<unknown> {
-    return this.request('POST', `/v1/sandbox/requests/${encodeURIComponent(requestId)}/decline`, { reason })
-  }
-
-  async sandboxReset(): Promise<unknown> {
-    return this.request('POST', '/v1/sandbox/reset')
+  async sandboxApprovePurchase(purchaseId: string): Promise<unknown> {
+    return this.request('POST', `/v1/sandbox/purchases/${encodeURIComponent(purchaseId)}/approve`)
   }
 }

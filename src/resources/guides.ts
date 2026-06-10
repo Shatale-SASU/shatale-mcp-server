@@ -24,11 +24,11 @@ AI-native payment infrastructure. Give your AI agents the ability to spend money
 Sign up at https://admin.shatale.com/register — free sandbox access, no credit card required.
 
 ### 2. Get Your API Key
-After signup, your sandbox API key (\`sh_test_...\`) is on the dashboard. Copy it.
+After signup, your sandbox API key (\`sk_sandbox_...\`) is on the dashboard. Copy it.
 
 ### 3. Connect MCP Server
 \`\`\`bash
-export SHATALE_API_KEY=sh_test_your_key_here
+export SHATALE_API_KEY=sk_sandbox_your_key_here
 npx @shatale/mcp-server
 \`\`\`
 
