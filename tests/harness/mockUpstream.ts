@@ -113,20 +113,14 @@ export class MockUpstream {
     if (method === 'GET' && path.startsWith('/v1/onboarding/sessions/')) {
       return ok({ session_id: path.split('/').pop(), status: 'pending_verification' })
     }
-    if (method === 'POST' && path === '/v1/sandbox/users') {
-      return ok({ user_id: 'usr_mock_1', status: 'verified' })
+    if (method === 'POST' && path === '/v1/sandbox/authorizations') {
+      return ok({ decision: 'approved', explanation: 'all_rules_passed', sandbox: true })
     }
     if (method === 'POST' && /\/v1\/sandbox\/users\/[^/]+\/onboarding$/.test(path)) {
       return ok({ status: 'onboarded' })
     }
-    if (method === 'POST' && /\/v1\/sandbox\/requests\/[^/]+\/approve$/.test(path)) {
+    if (method === 'POST' && /\/v1\/sandbox\/purchases\/[^/]+\/approve$/.test(path)) {
       return ok({ status: 'approved' })
-    }
-    if (method === 'POST' && /\/v1\/sandbox\/requests\/[^/]+\/decline$/.test(path)) {
-      return ok({ status: 'declined' })
-    }
-    if (method === 'POST' && path === '/v1/sandbox/reset') {
-      return ok({ status: 'reset' })
     }
     return { status: 404, payload: { error: 'not_found', path } }
   }

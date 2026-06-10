@@ -38,7 +38,7 @@ export function mapHttpError(status: number, method: string, path: string): Shat
       code: 'auth_failed',
       message: 'Authentication failed.',
       suggested_fix:
-        'Set SHATALE_API_KEY to a valid sandbox key (sh_test_*). Get a free one at https://admin.shatale.com/register?ref=mcp',
+        'Set SHATALE_API_KEY to a valid sandbox key (sk_sandbox_*). Get a free one at https://admin.shatale.com/register?ref=mcp',
     })
   }
   if (status === 404) {

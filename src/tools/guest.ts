@@ -61,15 +61,16 @@ call or payment is made.** You can:
 ### Unlock the same flow in Sandbox
 No code changes required. Add a sandbox key and re-run the same prompt:
 \`\`\`bash
-npx shatale-mcp-server --env SHATALE_API_KEY=sh_test_xxx
+npx shatale-mcp-server --env SHATALE_API_KEY=sk_sandbox_xxx
 \`\`\`
 Free sandbox key, no card required: ${REGISTER_URL}`
     : ctx.isSandbox
-      ? `## You are in SANDBOX mode (\`sh_test_*\` key)
+      ? `## You are in SANDBOX mode (\`sk_sandbox_*\` key)
 Real integration dev-mode against Shatale Sandbox APIs with test data — no real money.
-Onboarding, purchase requests, approval, credential issuance, status and audit are live.`
+Onboarding, sandbox authorization simulation, approval, credential issuance, status and audit are live.
+request_purchase is disabled here (use sandbox_simulate_authorization instead).`
       : `## PRODUCTION mode
-Production keys (\`sh_live_*\`) are blocked in this MCP server by design.`
+Production keys (\`sk_live_*\`) are blocked in this MCP server by design.`
 
   return textResult(`# What is Shatale?
 
@@ -91,8 +92,8 @@ ${toolList}
 
 ## Modes
 - **GUEST** (no key): explore, simulate, generate policy — no real call or payment
-- **SANDBOX** (\`sh_test_*\`): full API with test data, no real money
-- **PRODUCTION** (\`sh_live_*\`): blocked in this MCP server by design — a local IDE/agent
+- **SANDBOX** (\`sk_sandbox_*\`): full API with test data, no real money
+- **PRODUCTION** (\`sk_live_*\`): blocked in this MCP server by design — a local IDE/agent
   is not a trust boundary for live payment credentials; integrate via your backend
 
 ## Production safety note

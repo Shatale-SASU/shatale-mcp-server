@@ -26,7 +26,7 @@ const apiKey = process.env.SHATALE_API_KEY ?? ''
 
 // F-001/F-010: Reject production keys
 if (apiKey.startsWith('sh_live_') || apiKey.startsWith('sk_live_')) {
-  console.error('ERROR: Production keys are not allowed. Use a sandbox key (sk_test_*).')
+  console.error('ERROR: Production keys are not allowed. Use a sandbox key (sk_sandbox_*).')
   process.exit(1)
 }
 
@@ -68,7 +68,7 @@ registerModule(createCatalogTools(client))
 
 // Register authenticated tools if API key provided
 if (!isGuest) {
-  registerModule(createPurchaseTools(client))
+  registerModule(createPurchaseTools(client, { isSandbox }))
   registerModule(createCredentialTools(client))
   registerModule(createOnboardingTools(client))
   if (isSandbox) {
@@ -110,11 +110,11 @@ AI-native payment infrastructure. Give your AI agents the ability to spend money
 Sign up at https://admin.shatale.com/register — free sandbox access, no credit card required.
 
 ### 2. Get Your API Key
-After signup, your sandbox API key (\`sh_test_...\`) is on the dashboard. Copy it.
+After signup, your sandbox API key (\`sk_sandbox_...\`) is on the dashboard. Copy it.
 
 ### 3. Connect MCP Server
 \`\`\`bash
-export SHATALE_API_KEY=sh_test_your_key_here
+export SHATALE_API_KEY=sk_sandbox_your_key_here
 npx @shatale/mcp-server
 \`\`\`
 

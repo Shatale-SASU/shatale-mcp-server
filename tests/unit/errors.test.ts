@@ -7,7 +7,7 @@ describe('SHAT-1463 structured errors: mapHttpError', () => {
       const e = mapHttpError(s, 'POST', '/v1/purchases')
       expect(e).toBeInstanceOf(ShataleApiError)
       expect(e.code).toBe('auth_failed')
-      expect(e.suggested_fix).toContain('sh_test_')
+      expect(e.suggested_fix).toContain('sk_sandbox_')
     }
   })
 
