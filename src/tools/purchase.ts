@@ -21,7 +21,18 @@ const requestPurchaseSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-export function createPurchaseTools(client: ShataleClient): ToolModule {
+export interface PurchaseToolOptions {
+  /**
+   * SHAT-1488 safety guard. `POST /v1/purchases` is NOT sandbox-gated on the
+   * backend (apps/api/main.go), so a `sk_sandbox_*` key can otherwise reach a
+   * live, side-effectful path (real ledger/outbox). When the active key is a
+   * sandbox key we block `request_purchase` client-side and steer callers to
+   * the side-effect-free `sandbox_simulate_authorization` instead.
+   */
+  isSandbox: boolean
+}
+
+export function createPurchaseTools(client: ShataleClient, options: PurchaseToolOptions): ToolModule {
   return {
     tools: [
       {
@@ -112,6 +123,23 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
         const parsed = requestPurchaseSchema.safeParse(args)
         if (!parsed.success) {
           return textResult(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`, true)
+        }
+        // SHAT-1488 safety guard. /v1/purchases is NOT sandbox-gated on the
+        // backend, so a sk_sandbox_* key could otherwise reach a live,
+        // side-effectful path (real ledger/outbox). Refuse the call here —
+        // placed right before the network call so it can never escape the
+        // client under a sandbox key — and steer callers to the
+        // side-effect-free sandbox_simulate_authorization.
+        if (options.isSandbox) {
+          return errorResult(new Error('sandbox_key_purchase_blocked'), {
+            code: 'sandbox_key_purchase_blocked',
+            message:
+              'request_purchase creates real purchase state (ledger/outbox) and is ' +
+              'unavailable with sandbox keys.',
+            suggested_fix:
+              'Use sandbox_simulate_authorization to exercise the policy engine without side ' +
+              'effects, or switch to a live key in an environment cleared for real purchases.',
+          })
         }
         try {
           const input = parsed.data

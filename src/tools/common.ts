@@ -75,11 +75,9 @@ function handleListCapabilities(mode: string) {
   ]
 
   const sandboxTools = [
-    'sandbox_create_test_user -- Create a test user',
+    'sandbox_simulate_authorization -- Run the policy engine (side-effect-free: no ledger, no money)',
     'sandbox_complete_onboarding -- Skip onboarding for a test user',
-    'sandbox_approve_request -- Approve a pending request',
-    'sandbox_decline_request -- Decline a pending request',
-    'sandbox_reset -- Reset sandbox environment',
+    'sandbox_approve_purchase -- Approve a sandbox purchase pending approval',
   ]
 
   let tools = [...guestTools, ...commonTools]
@@ -90,7 +88,9 @@ function handleListCapabilities(mode: string) {
       description = 'Guest mode -- no API key configured. Set SHATALE_API_KEY to unlock more tools.'
       break
     case 'sandbox':
-      description = 'Sandbox mode -- using test API key. All tools available with test data.'
+      description =
+        'Sandbox mode -- using a sandbox API key. request_purchase is disabled here ' +
+        '(it is not sandbox-gated on the backend); use sandbox_simulate_authorization instead.'
       tools = [...tools, ...purchaseTools, ...credentialTools, ...sandboxTools]
       break
     case 'production':

@@ -26,10 +26,10 @@ afterEach(() => vi.unstubAllGlobals())
 describe('SHAT-1465 attribution headers', () => {
   test('sandbox (authenticated) requests carry attribution headers', async () => {
     const fn = mockFetch(200, { ok: true })
-    const client = new ShataleClient(BASE, 'sh_test_abc')
+    const client = new ShataleClient(BASE, 'sk_sandbox_abc')
     await client.getPurchaseStatus('pur_1')
     const h = lastHeaders(fn)
-    expect(h['Authorization']).toBe('Bearer sh_test_abc')
+    expect(h['Authorization']).toBe('Bearer sk_sandbox_abc')
     expect(h['User-Agent']).toBe(`shatale-mcp-server/${VERSION}`)
     expect(h['X-Shatale-Client']).toBe('shatale-mcp-server')
     expect(h['X-Shatale-Client-Version']).toBe(VERSION)
@@ -52,7 +52,7 @@ describe('SHAT-1465 attribution headers', () => {
 describe('SHAT-1463 client throws structured ShataleApiError', () => {
   test('401 → ShataleApiError auth_failed', async () => {
     mockFetch(401, { error: 'nope' })
-    const client = new ShataleClient(BASE, 'sh_test_abc')
+    const client = new ShataleClient(BASE, 'sk_sandbox_abc')
     await expect(client.getPurchaseStatus('x')).rejects.toMatchObject({
       code: 'auth_failed',
     })

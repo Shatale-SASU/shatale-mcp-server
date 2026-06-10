@@ -31,18 +31,18 @@ You'll see the policy evaluation, the approve / decline / requires-approval deci
 **No code changes required. Add a sandbox key and re-run the same prompt.** The guest simulation becomes a real sandbox integration — onboarding, purchase requests, approval, credential issuance, status and audit — against Shatale Sandbox APIs, with no real money.
 
 ```bash
-SHATALE_API_KEY=sh_test_xxx npx shatale-mcp-server
+SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 ```
 
 …or just add the key to the `env` block of your IDE's MCP config (see below) — same prompt, no other changes.
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 19-tool lifecycle). Production keys (`sh_live_*`) are blocked in this MCP server by design — a local IDE/agent is not a trust boundary for live payment credentials; integrate via your backend.
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 17-tool lifecycle). Production keys (`sk_live_*`) are blocked in this MCP server by design — a local IDE/agent is not a trust boundary for live payment credentials; integrate via your backend.
 
 ## Configure Your IDE
 
-> Omit the `SHATALE_API_KEY` env entirely to run in guest mode (60-second demo). Add a `sh_test_*` key to unlock the full sandbox.
+> Omit the `SHATALE_API_KEY` env entirely to run in guest mode (60-second demo). Add a `sk_sandbox_*` key to unlock the full sandbox.
 
 ### Claude Desktop
 
@@ -55,7 +55,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "command": "npx",
       "args": ["shatale-mcp-server"],
       "env": {
-        "SHATALE_API_KEY": "sh_test_your_key_here"
+        "SHATALE_API_KEY": "sk_sandbox_your_key_here"
       }
     }
   }
@@ -79,7 +79,7 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
       "command": "npx",
       "args": ["shatale-mcp-server"],
       "env": {
-        "SHATALE_API_KEY": "sh_test_your_key_here"
+        "SHATALE_API_KEY": "sk_sandbox_your_key_here"
       }
     }
   }
@@ -131,11 +131,11 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `sandbox_create_test_user` | Create a test user with verified status for sandbox testing |
+| `sandbox_simulate_authorization` | Run the policy engine on a simulated authorization — side-effect-free (no ledger, no money). Returns approve/decline + explanation. Test cards: `4242…` approve, `4000…0002` decline, neutral → real policy |
 | `sandbox_complete_onboarding` | Instantly complete user onboarding (skip verification) |
-| `sandbox_approve_request` | Approve a pending purchase request |
-| `sandbox_decline_request` | Decline a pending purchase request |
-| `sandbox_reset` | Reset sandbox state — clear test data |
+| `sandbox_approve_purchase` | Approve a sandbox purchase that is pending approval |
+
+> **Note (v0.4.0, SHAT-1488):** the sandbox surface now maps 1:1 to the routes the backend actually deploys. `request_purchase` is **disabled when a sandbox key is set** (it is not sandbox-gated on the backend and would create real ledger state) — use `sandbox_simulate_authorization` instead. The previous `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` and `sandbox_approve_request` tools have been removed/renamed.
 
 ## Example Prompts
 
@@ -145,7 +145,7 @@ Try these with your AI assistant:
 - *"Request a purchase of $49.99 at Amazon for user john@example.com"*
 - *"Check the status of my last purchase"*
 - *"Register a new user with email alice@startup.io and country US"*
-- *"Create a test user and simulate a complete purchase flow"*
+- *"Run a sandbox authorization for a $49.99 charge at MCC 5732 and explain the policy decision"*
 - *"What merchants are available in the travel category?"*
 - *"Generate a spending policy for a procurement bot with $5000 monthly limit"*
 
@@ -174,7 +174,7 @@ Built-in documentation available as MCP resources:
 
 ## Security
 
-- Only sandbox keys (`sk_test_*` / `sh_test_*`) are accepted — production keys are rejected
+- Only sandbox keys (`sk_sandbox_*`) are accepted — production keys (`sk_live_*`) are rejected
 - Card credentials are encrypted (JWE) and delivered only to authorized agents
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
@@ -184,7 +184,7 @@ Built-in documentation available as MCP resources:
 This server has **no telemetry**: no analytics endpoint, no beacons, no install ID, no fingerprinting.
 
 - **Guest mode (no API key)** sends **no attribution headers and no telemetry**. The simulation tools (`simulate_purchase_flow`, `generate_policy_template`) run fully offline and make no network calls. Guest activity is intentionally **not measured remotely**.
-- **Sandbox mode (`sh_test_*`)** already authenticates to the Shatale Sandbox API. Those requests carry three static **attribution** headers so we can understand aggregate adoption of the official client:
+- **Sandbox mode (`sk_sandbox_*`)** already authenticates to the Shatale Sandbox API. Those requests carry three static **attribution** headers so we can understand aggregate adoption of the official client:
   - `User-Agent: shatale-mcp-server/<version>`
   - `X-Shatale-Client: shatale-mcp-server`
   - `X-Shatale-Client-Version: <version>`

@@ -23,7 +23,7 @@ startCommand:
     properties:
       SHATALE_API_KEY:
         type: string
-        description: "Sandbox API key (sh_test_*). Get one free at shatale.com/signup. Optional — guest mode works without it."
+        description: "Sandbox API key (sk_sandbox_*). Get one free at shatale.com/signup. Optional — guest mode works without it."
     required: []
   commandFunction: |
     (config) => ({
