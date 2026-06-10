@@ -16,9 +16,9 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists all 19 tools in sandbox mode', async () => {
+  test('lists all 17 tools in sandbox mode', async () => {
     const tools = await client.listTools()
-    expect(tools).toHaveLength(19)
+    expect(tools).toHaveLength(17)
 
     // Guest tools
     expect(tools).toContain('explain_shatale')
@@ -33,7 +33,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('search_merchants')
     expect(tools).toContain('get_merchant_details')
 
-    // Purchase tools
+    // Purchase tools (request_purchase is present but guarded under sandbox keys)
     expect(tools).toContain('request_purchase')
     expect(tools).toContain('get_purchase_status')
     expect(tools).toContain('cancel_purchase')
@@ -46,12 +46,16 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('register_user_profile')
     expect(tools).toContain('get_onboarding_status')
 
-    // Sandbox tools
-    expect(tools).toContain('sandbox_create_test_user')
+    // Sandbox tools (SHAT-1488: deployed routes only)
+    expect(tools).toContain('sandbox_simulate_authorization')
     expect(tools).toContain('sandbox_complete_onboarding')
-    expect(tools).toContain('sandbox_approve_request')
-    expect(tools).toContain('sandbox_decline_request')
-    expect(tools).toContain('sandbox_reset')
+    expect(tools).toContain('sandbox_approve_purchase')
+
+    // SHAT-1488: phantom tools removed
+    expect(tools).not.toContain('sandbox_create_test_user')
+    expect(tools).not.toContain('sandbox_decline_request')
+    expect(tools).not.toContain('sandbox_reset')
+    expect(tools).not.toContain('sandbox_approve_request')
   })
 
   test('list_capabilities shows sandbox mode', async () => {
@@ -70,11 +74,30 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(result.content[0].text).toContain('Shatale')
   })
 
-  test('sandbox_create_test_user with unique email', async () => {
-    const email = testEmail()
-    const result = await client.callTool('sandbox_create_test_user', { email })
+  test('sandbox_simulate_authorization runs the policy engine (side-effect-free)', async () => {
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: testId('agent'),
+      amount: 15000,
+      currency: 'EUR',
+      mcc: 5691,
+      merchant_name: 'E2E Clothing Co',
+      card_number: '4242424242424242',
+    })
     // Should succeed or return a meaningful response (not crash)
     expect(result.content).toBeDefined()
     expect(result.content[0].type).toBe('text')
+  })
+
+  test('request_purchase is blocked under a sandbox key', async () => {
+    const result = await client.callTool('request_purchase', {
+      publisher_user_id: testId('user'),
+      agent_id: testId('agent'),
+      merchant: 'amazon.com',
+      amount: 15.0,
+      currency: 'EUR',
+      description: 'Should be blocked under sandbox key',
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('sandbox_key_purchase_blocked')
   })
 })

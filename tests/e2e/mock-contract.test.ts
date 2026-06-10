@@ -1,10 +1,15 @@
 /**
- * SHAT-1449: Deterministic fixture/mock contract tests.
+ * SHAT-1449 / SHAT-1488: Deterministic fixture/mock contract tests.
  *
  * Exercises the authenticated + sandbox tool paths with NO live
  * SHATALE_TEST_KEY by pointing the MCP server at a local mock upstream
- * (127.0.0.1 is in the server's host allowlist) using a fake `sk_test_` key.
+ * (127.0.0.1 is in the server's host allowlist) using a fake `sk_sandbox_` key.
  * Runs in `test:public`, so CI no longer needs a live key for contract coverage.
+ *
+ * SHAT-1488 changes the sandbox surface: `sandbox_simulate_authorization`
+ * (side-effect-free policy engine) replaces the phantom create-user/decline/reset
+ * tools, and `request_purchase` is blocked client-side under a sandbox key
+ * because `/v1/purchases` is not sandbox-gated on the backend.
  */
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { McpTestClient } from '../harness/mcpClient'
@@ -22,7 +27,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
   beforeAll(async () => {
     mock = await MockUpstream.start()
     client = new McpTestClient(
-      { SHATALE_API_KEY: 'sk_test_mock', SHATALE_API_URL: mock.url },
+      { SHATALE_API_KEY: 'sk_sandbox_mock', SHATALE_API_URL: mock.url },
       'mock-contract',
     )
     await client.initialize()
@@ -33,12 +38,32 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks all 19 tools', async () => {
+  test('sandbox key unlocks all 17 tools', async () => {
     const res = await client.send('tools/list')
-    expect(res.result?.tools ?? []).toHaveLength(19)
+    expect(res.result?.tools ?? []).toHaveLength(17)
   })
 
-  test('request_purchase sends merchant_ref + integer amount_cents on the wire', async () => {
+  test('sandbox_simulate_authorization hits the side-effect-free policy engine', async () => {
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: 'agent-1',
+      amount: 15000,
+      currency: 'EUR',
+      mcc: 5691,
+      merchant_name: 'Mock Clothing Co',
+      card_number: '4242424242424242',
+    })
+    expect(ToolResultText(result)).toContain('approved')
+
+    const wire = mock.lastRequest('POST', '/v1/sandbox/authorizations')
+    expect(wire).toBeDefined()
+    const body = wire!.body as Record<string, unknown>
+    expect(body.agent_id).toBe('agent-1')
+    expect(body.amount).toBe(15000)
+    expect(body.mcc).toBe(5691)
+    expect(body.card_number).toBe('4242424242424242')
+  })
+
+  test('request_purchase is blocked under a sandbox key (never hits /v1/purchases)', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: 'pub-1',
       agent_id: 'agent-1',
@@ -47,24 +72,16 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
       currency: 'EUR',
       description: 'Mock contract purchase',
     })
-    const text = ToolResultText(result)
-    expect(text).toContain('pur_mock_1')
-
-    const wire = mock.lastRequest('POST', '/v1/purchases')
-    expect(wire).toBeDefined()
-    const body = wire!.body as Record<string, unknown>
-    expect(body.merchant_ref).toBe('amazon.com')
-    expect(body.amount_cents).toBe(4999)
-    expect(body).not.toHaveProperty('merchant')
-    expect(body).not.toHaveProperty('amount')
-    // idempotency_key auto-generated when omitted
-    expect(typeof body.idempotency_key).toBe('string')
+    expect(result.isError).toBe(true)
+    expect(ToolResultText(result)).toContain('sandbox_key_purchase_blocked')
+    // The guard must short-circuit before any outbound call.
+    expect(mock.lastRequest('POST', '/v1/purchases')).toBeUndefined()
   })
 
   test('forwards the API key as a Bearer token', async () => {
-    await client.callTool('get_purchase_status', { purchase_id: 'pur_mock_1' })
-    const wire = mock.lastRequest('GET', '/v1/purchases/')
-    expect(wire?.authorization).toBe('Bearer sk_test_mock')
+    await client.callTool('sandbox_complete_onboarding', { user_id: 'usr_mock_1' })
+    const wire = mock.lastRequest('POST', '/v1/sandbox/users/')
+    expect(wire?.authorization).toBe('Bearer sk_sandbox_mock')
   })
 
   test('search_merchants returns catalog data', async () => {
@@ -72,9 +89,10 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(ToolResultText(result)).toContain('Mock Merchant')
   })
 
-  test('sandbox_reset returns a ToolResult', async () => {
-    const result = await client.callTool('sandbox_reset', {})
-    expect(ToolResultText(result)).toContain('reset')
+  test('sandbox_approve_purchase repoints to /v1/sandbox/purchases/{id}/approve', async () => {
+    const result = await client.callTool('sandbox_approve_purchase', { purchase_id: 'pur_mock_1' })
+    expect(ToolResultText(result)).toContain('approved')
+    expect(mock.lastRequest('POST', '/v1/sandbox/purchases/')).toBeDefined()
   })
 
   test('register_user_profile reaches onboarding endpoint', async () => {

@@ -29,10 +29,21 @@ export interface CredentialInput {
   purpose: string
 }
 
-/** Sandbox test user input */
-export interface SandboxUserInput {
-  email?: string
-  name?: string
+/**
+ * Sandbox authorization simulation input.
+ *
+ * Maps to the deployed `POST /v1/sandbox/authorizations` policy engine, which
+ * is side-effect-free (no ledger, no outbox, no money). `amount` is an integer
+ * minor-unit value per the backend `sandboxAuthRequest` struct. The agent must
+ * belong to the publisher that owns the sandbox key.
+ */
+export interface SandboxAuthInput {
+  agent_id: string
+  amount: number
+  currency: string
+  mcc: number
+  merchant_name: string
+  card_number: string
 }
 
 /** Tool definition for listing */

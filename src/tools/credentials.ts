@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
 const requestCredentialsSchema = z.object({
@@ -75,7 +76,11 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           }
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Credentials request failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
+          return errorResult(err, {
+            code: 'credentials_failed',
+            message: 'Could not issue temporary credentials.',
+            suggested_fix: 'Confirm the user is onboarded and the merchant_domain is valid, then retry.',
+          })
         }
       },
 
@@ -84,7 +89,11 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           const result = await client.getCredentialStatus(String(args.credential_request_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Credentials API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'credential_status_failed',
+            message: 'Could not fetch the credential status.',
+            suggested_fix: 'Use the credential_request_id returned by request_temporary_credentials.',
+          })
         }
       },
     },

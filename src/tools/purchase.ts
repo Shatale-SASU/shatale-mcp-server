@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
@@ -20,7 +21,18 @@ const requestPurchaseSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-export function createPurchaseTools(client: ShataleClient): ToolModule {
+export interface PurchaseToolOptions {
+  /**
+   * SHAT-1488 safety guard. `POST /v1/purchases` is NOT sandbox-gated on the
+   * backend (apps/api/main.go), so a `sk_sandbox_*` key can otherwise reach a
+   * live, side-effectful path (real ledger/outbox). When the active key is a
+   * sandbox key we block `request_purchase` client-side and steer callers to
+   * the side-effect-free `sandbox_simulate_authorization` instead.
+   */
+  isSandbox: boolean
+}
+
+export function createPurchaseTools(client: ShataleClient, options: PurchaseToolOptions): ToolModule {
   return {
     tools: [
       {
@@ -112,6 +124,23 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
         if (!parsed.success) {
           return textResult(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`, true)
         }
+        // SHAT-1488 safety guard. /v1/purchases is NOT sandbox-gated on the
+        // backend, so a sk_sandbox_* key could otherwise reach a live,
+        // side-effectful path (real ledger/outbox). Refuse the call here —
+        // placed right before the network call so it can never escape the
+        // client under a sandbox key — and steer callers to the
+        // side-effect-free sandbox_simulate_authorization.
+        if (options.isSandbox) {
+          return errorResult(new Error('sandbox_key_purchase_blocked'), {
+            code: 'sandbox_key_purchase_blocked',
+            message:
+              'request_purchase creates real purchase state (ledger/outbox) and is ' +
+              'unavailable with sandbox keys.',
+            suggested_fix:
+              'Use sandbox_simulate_authorization to exercise the policy engine without side ' +
+              'effects, or switch to a live key in an environment cleared for real purchases.',
+          })
+        }
         try {
           const input = parsed.data
           const result = await client.requestPurchase({
@@ -126,7 +155,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           })
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase request failed: ${err instanceof Error ? err.message : 'unexpected error'}`, true)
+          return errorResult(err, {
+            code: 'purchase_failed',
+            message: 'Could not complete the purchase request.',
+            suggested_fix: 'Confirm the merchant, amount, and user details are valid, then retry.',
+          })
         }
       },
 
@@ -135,7 +168,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           const result = await client.getPurchaseStatus(String(args.purchase_id))
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'purchase_status_failed',
+            message: 'Could not fetch the purchase status.',
+            suggested_fix: 'Check that purchase_id is the id returned by request_purchase, then retry.',
+          })
         }
       },
 
@@ -147,7 +184,11 @@ export function createPurchaseTools(client: ShataleClient): ToolModule {
           )
           return jsonResult(result)
         } catch (err) {
-          return textResult(`Purchase API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, {
+            code: 'purchase_cancel_failed',
+            message: 'Could not cancel the purchase.',
+            suggested_fix: 'Only pending purchases can be cancelled. Verify purchase_id and its current status.',
+          })
         }
       },
     },

@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 | # | Tool | Happy Path | Validation | Contract | Security | File |
 |---|------|:---:|:---:|:---:|:---:|------|
@@ -18,18 +18,18 @@ Last updated: 2026-06-09
 | 12 | `get_credential_status` | ✅ | - | - | - | happy-path |
 | 13 | `register_user_profile` | ✅ | ✅ | - | - | happy-path, validation |
 | 14 | `get_onboarding_status` | ✅ | - | - | - | happy-path |
-| 15 | `sandbox_create_test_user` | ✅ | ✅ | - | - | sandbox-tools, validation |
-| 16 | `sandbox_complete_onboarding` | ✅ | - | - | - | happy-path |
-| 17 | `sandbox_approve_request` | ✅ | - | - | - | happy-path |
-| 18 | `sandbox_decline_request` | ✅ | - | - | - | happy-path |
-| 19 | `sandbox_reset` | ✅ | - | - | - | happy-path |
+| 15 | `sandbox_simulate_authorization` | ✅ | ✅ | ✅ | - | mock-contract, sandbox-tools, validation, happy-path |
+| 16 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
+| 17 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
+
+> **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` is **blocked when a sandbox key is set** (would create real ledger/outbox) — use `sandbox_simulate_authorization` instead.
 
 ## Coverage Summary
 
-- **Happy path**: 19/19 (100%)
-- **Input validation**: 3/19 (tools with user input)
-- **Contract (Zod)**: 6/19 (all guest tools + schema checks)
-- **Security edge cases**: 1/19 + global injection/leak tests
+- **Happy path**: 17/17 (100%)
+- **Input validation**: 3/17 (tools with user input)
+- **Contract (Zod)**: 6/17 (all guest tools + schema checks)
+- **Security edge cases**: 1/17 + global injection/leak tests + `request_purchase` sandbox-guard
 
 ## Test Files
 
@@ -38,7 +38,7 @@ Last updated: 2026-06-09
 | `guest-mode.test.ts` | 9 | No |
 | `security.test.ts` | 16 | No |
 | `contract.test.ts` | 7 | Partial |
-| `sandbox-tools.test.ts` | 5 | Yes |
-| `validation.test.ts` | 8 | Yes |
+| `mock-contract.test.ts` | 8 | No (mock upstream) |
+| `sandbox-tools.test.ts` | 6 | Yes |
+| `validation.test.ts` | 9 | Yes |
 | `happy-path-all-tools.test.ts` | 12 | Partial |
-| **Total** | **57** | |

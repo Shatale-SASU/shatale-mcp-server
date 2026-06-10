@@ -50,7 +50,7 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
 
   // ── Purchase tools ──
 
-  test('request_purchase creates a purchase', async () => {
+  test('request_purchase is blocked under a sandbox key (SHAT-1488 guard)', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
@@ -61,8 +61,8 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
       idempotency_key: testId('idem'),
     })
     expect(result.content[0].type).toBe('text')
-    // Should contain purchase info or onboarding_required status
-    expect(result.content[0].text).toBeDefined()
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('sandbox_key_purchase_blocked')
   })
 
   test('get_purchase_status with non-existent ID', async () => {
@@ -125,35 +125,33 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
     expect(result.content[0].text).toBeDefined()
   })
 
-  // ── Sandbox-specific tools ──
+  // ── Sandbox-specific tools (SHAT-1488: deployed routes only) ──
+
+  test('sandbox_simulate_authorization runs the policy engine', async () => {
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: testId('agent'),
+      amount: 15000,
+      currency: 'EUR',
+      mcc: 5691,
+      merchant_name: 'E2E Clothing Co',
+      card_number: '4242424242424242',
+    })
+    expect(result.content[0].type).toBe('text')
+    expect(result.content[0].text).toBeDefined()
+  })
 
   test('sandbox_complete_onboarding with non-existent user', async () => {
     const result = await client.callTool('sandbox_complete_onboarding', {
-      publisher_user_id: testId('user'),
+      user_id: testId('user'),
     })
     expect(result.content[0].type).toBe('text')
     expect(result.content[0].text).toBeDefined()
   })
 
-  test('sandbox_approve_request with non-existent purchase', async () => {
-    const result = await client.callTool('sandbox_approve_request', {
+  test('sandbox_approve_purchase with non-existent purchase', async () => {
+    const result = await client.callTool('sandbox_approve_purchase', {
       purchase_id: testId('fake-purchase'),
     })
-    expect(result.content[0].type).toBe('text')
-    expect(result.content[0].text).toBeDefined()
-  })
-
-  test('sandbox_decline_request with non-existent purchase', async () => {
-    const result = await client.callTool('sandbox_decline_request', {
-      purchase_id: testId('fake-purchase'),
-      reason: 'E2E test decline',
-    })
-    expect(result.content[0].type).toBe('text')
-    expect(result.content[0].text).toBeDefined()
-  })
-
-  test('sandbox_reset returns response', async () => {
-    const result = await client.callTool('sandbox_reset', {})
     expect(result.content[0].type).toBe('text')
     expect(result.content[0].text).toBeDefined()
   })
