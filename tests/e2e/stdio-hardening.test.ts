@@ -141,13 +141,15 @@ describe('stdio hardening', () => {
     }
   })
 
-  test('rejects production keys at startup without echoing the key', async () => {
-    const h = spawnServer({ SHATALE_API_KEY: 'sk_live_prod_should_be_rejected' })
+  test('rejects a bare live key at startup without echoing the key', async () => {
+    // No SHATALE_MODE=live intent → fat-finger guard trips. Critically, the key
+    // must never be echoed into stderr regardless of the message wording.
+    const h = spawnServer({ SHATALE_API_KEY: 'sk_live_prod_should_be_rejected', SHATALE_MODE: '' })
     try {
       const code: number = await new Promise((res) => h.proc.on('exit', (c) => res(c ?? -1)))
       expect(code).toBe(1)
       expect(h.stderr()).not.toContain('sk_live_prod_should_be_rejected')
-      expect(h.stderr().toLowerCase()).toContain('production keys')
+      expect(h.stderr().toLowerCase()).toContain('without shatale_mode=live')
     } finally {
       h.kill()
     }

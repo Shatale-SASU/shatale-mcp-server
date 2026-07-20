@@ -1,7 +1,31 @@
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError } from './errors.js'
+
+/**
+ * SHAT-1682: derive a STABLE idempotency key from the purchase's identifying
+ * fields, so an LLM (or transport) that retries the same logical `request_purchase`
+ * — e.g. after the 30s fetch timeout below — reuses the same key and the backend
+ * de-dups instead of charging twice. A per-call `randomUUID()` did the opposite:
+ * every retry got a fresh key and became a SECOND real purchase (the money-out
+ * "intent-first / stable key" lesson). Callers who genuinely want to repeat an
+ * identical purchase must pass an explicit `idempotency_key` to differentiate.
+ */
+export function deriveIdempotencyKey(input: PurchaseInput, amountCents: number): string {
+  // JSON.stringify (not a space-join): fields can contain spaces, so a delimiter
+  // join lets two DIFFERENT purchases canonicalize to the same string and collide
+  // onto one key (e.g. merchant="nike 4999 EUR" vs description carrying "4999 EUR").
+  const canonical = JSON.stringify([
+    input.publisher_user_id,
+    input.agent_id,
+    input.merchant,
+    amountCents,
+    input.currency,
+    input.description,
+  ])
+  return 'mcp-' + createHash('sha256').update(canonical).digest('hex').slice(0, 32)
+}
 
 /**
  * Translate the LLM-facing purchase shape (`merchant` + decimal `amount`)
@@ -23,8 +47,10 @@ export function toPurchaseWireBody(
     description: input.description,
   }
   if (input.user_hint) body.user_hint = input.user_hint
+  // Explicit caller key wins; otherwise a DETERMINISTIC key (not random) so
+  // retries of the same logical purchase de-dup rather than double-charge.
   if (input.idempotency_key) body.idempotency_key = input.idempotency_key
-  else if (generateIdempotencyKey) body.idempotency_key = randomUUID()
+  else if (generateIdempotencyKey) body.idempotency_key = deriveIdempotencyKey(input, amountCents)
   return body
 }
 
@@ -91,7 +117,32 @@ export class ShataleClient {
   // ---- Credentials ----
 
   async requestCredentials(input: CredentialInput): Promise<unknown> {
-    return this.request('POST', '/v1/credentials', input)
+    // SHAT-1685: the backend REQUIRES idempotency_key (credentials.go:57 → 400
+    // without it), and minting a card burns real funding, so an explicit key wins
+    // and otherwise we derive one. Unlike purchases (eternal de-dup is correct),
+    // credential de-dup is (agent_id, key) FOREVER while the credential itself
+    // EXPIRES — an eternally-stable key would forever replay an expired credential
+    // and permanently block re-issuing for the same (user, agent, merchant). So the
+    // derived key carries a coarse HOURLY bucket: rapid retries within the hour
+    // de-dup (no accidental double-mint), while a later legitimate re-request gets
+    // a fresh key. (SHAT: a principled TTL-aligned window is tracked separately.)
+    const hourBucket = Math.floor(Date.now() / 3_600_000)
+    const idempotency_key =
+      input.idempotency_key ||
+      'mcp-cred-' +
+        createHash('sha256')
+          .update(
+            JSON.stringify([
+              input.publisher_user_id,
+              input.agent_id,
+              input.merchant_domain,
+              input.purpose,
+              hourBucket,
+            ]),
+          )
+          .digest('hex')
+          .slice(0, 32)
+    return this.request('POST', '/v1/credentials', { ...input, idempotency_key })
   }
 
   async getCredentialStatus(id: string): Promise<unknown> {

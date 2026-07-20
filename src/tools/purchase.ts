@@ -21,6 +21,34 @@ const requestPurchaseSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
+/**
+ * Defense-in-depth PCI guard. The backend's purchase response embeds the raw
+ * pool-card PAN + CVV under `payment.card` when a card is issued (apps/api
+ * purchases.go purchaseToJSON). That raw card MUST NOT flow into the LLM
+ * reasoning context / MCP-host logs / chat history — it belongs only in the
+ * out-of-band checkout executor via the dedicated reveal path. Strip it here so
+ * the tool result carries last4 + constraints, never the full number/cvv.
+ * (Backend ticket B-1/SHAT will also stop emitting it; this stays as belt-and-braces.)
+ */
+export function redactPurchaseCard(result: unknown): unknown {
+  if (!result || typeof result !== 'object') return result
+  const r = result as Record<string, unknown>
+  const payment = r.payment as Record<string, unknown> | undefined
+  const card = payment?.card as Record<string, unknown> | undefined
+  if (!card) return result
+  const number = typeof card.number === 'string' ? card.number : undefined
+  const redactedCard: Record<string, unknown> = { ...card }
+  if (number) {
+    redactedCard.last4 = number.slice(-4)
+    delete redactedCard.number
+  }
+  if ('cvv' in redactedCard) delete redactedCard.cvv
+  redactedCard._note =
+    'Raw PAN/CVV are withheld from the agent context (PCI). Retrieve the card out-of-band ' +
+    'via the checkout executor, not from this response.'
+  return { ...r, payment: { ...payment, card: redactedCard } }
+}
+
 export interface PurchaseToolOptions {
   /**
    * SHAT-1488 safety guard. `POST /v1/purchases` is NOT sandbox-gated on the
@@ -78,7 +106,11 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             },
             idempotency_key: {
               type: 'string',
-              description: 'Unique key for idempotent requests (prevents duplicate purchases). Auto-generated if omitted.',
+              description:
+                'Unique key for idempotent requests (prevents duplicate purchases). If omitted, a ' +
+                'DETERMINISTIC key is derived from the purchase fields, so re-sending an identical ' +
+                'request returns the SAME (possibly already-completed) purchase instead of charging ' +
+                'again. To intentionally repeat an identical purchase, pass a fresh unique key.',
             },
           },
           required: ['publisher_user_id', 'agent_id', 'merchant', 'amount', 'currency', 'description'],
@@ -138,7 +170,8 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
               'unavailable with sandbox keys.',
             suggested_fix:
               'Use sandbox_simulate_authorization to exercise the policy engine without side ' +
-              'effects, or switch to a live key in an environment cleared for real purchases.',
+              'effects, or run with a live key (sk_live_) plus SHATALE_MODE=live and SHATALE_MONEY_GO ' +
+              'in an environment cleared for real purchases.',
           })
         }
         try {
@@ -153,7 +186,8 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             user_hint: input.user_hint,
             idempotency_key: input.idempotency_key,
           })
-          return jsonResult(result)
+          // PCI: never surface raw PAN/CVV into the agent context.
+          return jsonResult(redactPurchaseCard(result))
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_failed',
@@ -166,7 +200,10 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       get_purchase_status: async (args) => {
         try {
           const result = await client.getPurchaseStatus(String(args.purchase_id))
-          return jsonResult(result)
+          // PCI: GET /v1/purchases/{id} advances the state machine and can itself
+          // issue a card (legacy issueCard path returns the raw PAN inline), so
+          // redact here too — never surface a raw PAN/CVV into the agent context.
+          return jsonResult(redactPurchaseCard(result))
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_status_failed',
@@ -182,7 +219,8 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             String(args.purchase_id),
             args.reason ? String(args.reason) : undefined,
           )
-          return jsonResult(result)
+          // Belt-and-braces: cancel's response also carries the payment block.
+          return jsonResult(redactPurchaseCard(result))
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_cancel_failed',

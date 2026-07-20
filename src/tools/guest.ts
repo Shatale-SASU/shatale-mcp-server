@@ -9,6 +9,10 @@ import { textResult } from '../types.js'
 export interface GuestContext {
   isGuest: boolean
   isSandbox: boolean
+  /** Live (prod) mode: `sk_live_` key + SHATALE_MODE=live. */
+  isLive?: boolean
+  /** Live money-GO present → purchase/credentials (real €) are enabled. */
+  moneyEnabled?: boolean
   /** Lazily evaluated so it reflects every module registered after guest. */
   getToolNames: () => string[]
 }
@@ -38,7 +42,13 @@ function shortHash(input: string): string {
 }
 
 function handleExplainShatale(ctx: GuestContext) {
-  const mode = ctx.isGuest ? 'GUEST' : ctx.isSandbox ? 'SANDBOX' : 'PRODUCTION'
+  const mode = ctx.isGuest
+    ? 'GUEST'
+    : ctx.isSandbox
+      ? 'DEMO (SANDBOX)'
+      : ctx.moneyEnabled
+        ? 'LIVE (money-GO)'
+        : 'LIVE (onboarding-only)'
   const toolNames = ctx.getToolNames().filter((n) => n !== 'explain_shatale')
   const toolList = toolNames.map((n) => `- \`${n}\``).join('\n')
 
@@ -65,12 +75,18 @@ npx shatale-mcp-server --env SHATALE_API_KEY=sk_sandbox_xxx
 \`\`\`
 Free sandbox key, no card required: ${REGISTER_URL}`
     : ctx.isSandbox
-      ? `## You are in SANDBOX mode (\`sk_sandbox_*\` key)
+      ? `## You are in DEMO (SANDBOX) mode (\`sk_sandbox_*\` key)
 Real integration dev-mode against Shatale Sandbox APIs with test data — no real money.
 Onboarding, sandbox authorization simulation, approval, credential issuance, status and audit are live.
 request_purchase is disabled here (use sandbox_simulate_authorization instead).`
-      : `## PRODUCTION mode
-Production keys (\`sk_live_*\`) are blocked in this MCP server by design.`
+      : ctx.moneyEnabled
+        ? `## You are in LIVE mode with money-GO (\`sk_live_*\` + SHATALE_MODE=live + SHATALE_MONEY_GO)
+Real production APIs. Onboarding, request_purchase and credentials move REAL money.
+Card credentials (PAN/CVV) are NEVER returned into this reasoning context — the raw card is
+revealed out-of-band to the checkout executor only (PCI). request_purchase returns last4 + constraints.`
+        : `## You are in LIVE mode, onboarding-only (\`sk_live_*\` + SHATALE_MODE=live, no money-GO)
+Real production APIs, but MONEY tools are disabled. You can drive a real user to Shatale
+onboarding (registration + card + limits); request_purchase/credentials require SHATALE_MONEY_GO.`
 
   return textResult(`# What is Shatale?
 
@@ -92,13 +108,15 @@ ${toolList}
 
 ## Modes
 - **GUEST** (no key): explore, simulate, generate policy — no real call or payment
-- **SANDBOX** (\`sk_sandbox_*\`): full API with test data, no real money
-- **PRODUCTION** (\`sk_live_*\`): blocked in this MCP server by design — a local IDE/agent
-  is not a trust boundary for live payment credentials; integrate via your backend
+- **DEMO / SANDBOX** (\`sk_sandbox_*\`): full API with test data, no real money
+- **LIVE** (\`sk_live_*\` + \`SHATALE_MODE=live\`): real production APIs. Onboarding is available;
+  money tools (purchase/credentials) additionally require \`SHATALE_MONEY_GO\`. A bare live key
+  without \`SHATALE_MODE=live\` is refused (fat-finger guard).
 
-## Production safety note
-Live payment credentials are never issued from a local IDE/agent context. That block is a
-trust signal, not a limitation — production execution runs through your server-side integration.`)
+## PCI safety note
+Raw card credentials (PAN/CVV) are NEVER returned into this reasoning context, even in LIVE mode:
+request_purchase yields last4 + constraints, and the raw card is revealed out-of-band to the
+checkout executor only. A local IDE/agent is not a trust boundary for live PANs.`)
 }
 
 type SimResult = 'approved' | 'declined' | 'requires_approval'
@@ -356,9 +374,9 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
       {
         name: 'explain_shatale',
         description:
-          'Entry point. Reports the current mode (GUEST / SANDBOX / blocked PRODUCTION), the ' +
-          'tools available in that mode, the recommended first prompt, and how to unlock the ' +
-          'same flow in sandbox. Call this first. No API key required.',
+          'Entry point. Reports the current mode (GUEST / DEMO(SANDBOX) / LIVE), the tools ' +
+          'available in that mode, the recommended first prompt, and how to move from demo to ' +
+          'live. Call this first. No API key required.',
         inputSchema: {
           type: 'object',
           properties: {},
