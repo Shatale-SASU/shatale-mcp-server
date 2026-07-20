@@ -51,6 +51,30 @@ describe('toPurchaseWireBody', () => {
     expect((body.idempotency_key as string).length).toBeGreaterThan(0)
   })
 
+  // SHAT-1682: a retry of the SAME logical purchase must reuse the SAME key so
+  // the backend de-dups instead of double-charging. A per-call randomUUID broke
+  // this — every retry became a second real purchase.
+  test('auto-generated idempotency_key is DETERMINISTIC for identical input', () => {
+    const a = toPurchaseWireBody(base, true)
+    const b = toPurchaseWireBody(base, true)
+    expect(a.idempotency_key).toBe(b.idempotency_key)
+  })
+
+  test('auto-generated idempotency_key DIFFERS when a purchase field differs', () => {
+    const k = (i: Partial<PurchaseInput>) =>
+      toPurchaseWireBody({ ...base, ...i }, true).idempotency_key
+    const baseKey = toPurchaseWireBody(base, true).idempotency_key
+    expect(k({ amount: 50.0 })).not.toBe(baseKey)
+    expect(k({ merchant: 'ebay.com' })).not.toBe(baseKey)
+    expect(k({ description: 'Different item' })).not.toBe(baseKey)
+    expect(k({ publisher_user_id: 'pub-2' })).not.toBe(baseKey)
+  })
+
+  test('explicit idempotency_key overrides the deterministic one', () => {
+    const body = toPurchaseWireBody({ ...base, idempotency_key: 'caller-supplied' }, true)
+    expect(body.idempotency_key).toBe('caller-supplied')
+  })
+
   test('omits idempotency_key when missing and generation not requested', () => {
     const body = toPurchaseWireBody(base, false)
     expect(body).not.toHaveProperty('idempotency_key')

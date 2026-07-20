@@ -27,6 +27,7 @@ export interface CredentialInput {
   agent_id: string
   merchant_domain: string
   purpose: string
+  idempotency_key?: string
 }
 
 /**
