@@ -33,27 +33,54 @@ function spawnAndCapture(env: Record<string, string>): Promise<{ stderr: string;
 // ── Key rejection ───────────────────────────────────────────────────────
 
 describe('Security: Key Validation', () => {
-  test('rejects sh_live_ keys', async () => {
+  // A live key WITHOUT explicit SHATALE_MODE=live intent must fail fast (fat-finger
+  // guard) — the security property is unchanged from the old blanket reject; only the
+  // message differs now that a legitimate intent-gated live path exists.
+  test('rejects sh_live_ keys without SHATALE_MODE=live', async () => {
     const { stderr, code } = await spawnAndCapture({
       SHATALE_API_KEY: 'sh_live_TESTING_ONLY_NOT_REAL',
+      SHATALE_MODE: '',
     })
-    expect(stderr).toContain('Production keys are not allowed')
+    expect(stderr).toContain('without SHATALE_MODE=live')
     expect(code).toBe(1)
   })
 
-  test('rejects sk_live_ keys', async () => {
+  test('rejects sk_live_ keys without SHATALE_MODE=live', async () => {
     const { stderr, code } = await spawnAndCapture({
       SHATALE_API_KEY: 'sk_live_TESTING_ONLY',
+      SHATALE_MODE: '',
     })
-    expect(stderr).toContain('Production keys are not allowed')
+    expect(stderr).toContain('without SHATALE_MODE=live')
     expect(code).toBe(1)
   })
 
-  test('rejects malformed key with live prefix variant', async () => {
+  test('rejects bare sk_live_ prefix without SHATALE_MODE=live', async () => {
     const { stderr, code } = await spawnAndCapture({
       SHATALE_API_KEY: 'sk_live_',
+      SHATALE_MODE: '',
     })
-    expect(stderr).toContain('Production keys are not allowed')
+    expect(stderr).toContain('without SHATALE_MODE=live')
+    expect(code).toBe(1)
+  })
+
+  // A live key WITH explicit intent is ACCEPTED — the MCP now has a working
+  // normal/prod mode (SHAT two-mode design). Without money-GO it starts in
+  // onboarding-only live mode and does NOT hit the fat-finger refusal.
+  test('accepts sk_live_ key WITH SHATALE_MODE=live (starts live mode)', async () => {
+    const { stderr } = await spawnAndCapture({
+      SHATALE_API_KEY: 'sk_live_TESTING_ONLY',
+      SHATALE_MODE: 'live',
+    })
+    expect(stderr).not.toContain('without SHATALE_MODE=live')
+    expect(stderr.toLowerCase()).toContain('live')
+  })
+
+  test('rejects SHATALE_MODE=live with a non-live key', async () => {
+    const { stderr, code } = await spawnAndCapture({
+      SHATALE_API_KEY: 'sk_sandbox_TESTING',
+      SHATALE_MODE: 'live',
+    })
+    expect(stderr).toContain('requires a live key')
     expect(code).toBe(1)
   })
 
@@ -61,7 +88,7 @@ describe('Security: Key Validation', () => {
     const { stderr } = await spawnAndCapture({
       SHATALE_API_KEY: '',
     })
-    expect(stderr).not.toContain('Production keys are not allowed')
+    expect(stderr).not.toContain('without SHATALE_MODE=live')
   })
 })
 

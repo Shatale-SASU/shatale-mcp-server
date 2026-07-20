@@ -10,6 +10,8 @@ const requestCredentialsSchema = z.object({
   agent_id: z.string().min(1, 'agent_id is required'),
   merchant_domain: z.string().min(1, 'merchant_domain is required'),
   purpose: z.string().min(1, 'purpose is required'),
+  // SHAT-1685: backend requires idempotency_key; auto-derived in the client if omitted.
+  idempotency_key: z.string().optional(),
 })
 
 export function createCredentialTools(client: ShataleClient): ToolModule {
@@ -18,7 +20,9 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
       {
         name: 'request_temporary_credentials',
         description:
-          'Request temporary payment credentials for a merchant that requires card details. Returns short-lived virtual card numbers.',
+          'Request temporary, short-lived merchant credentials (a relay email and a single-use ' +
+          'relay password) for a merchant that requires an account. Raw card numbers are never ' +
+          'returned here — card payment goes through request_purchase and the out-of-band checkout.',
         inputSchema: {
           type: 'object',
           properties: {

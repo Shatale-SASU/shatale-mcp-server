@@ -24,9 +24,26 @@ import { textResult } from './types.js'
 
 const apiKey = process.env.SHATALE_API_KEY ?? ''
 
-// F-001/F-010: Reject production keys
-if (apiKey.startsWith('sh_live_') || apiKey.startsWith('sk_live_')) {
-  console.error('ERROR: Production keys are not allowed. Use a sandbox key (sk_sandbox_*).')
+// ── Honest two-mode model: demo (sandbox) and live (prod). ──────────────────
+// The backend issues LIVE keys as `sk_live_` (apps/api internal/identity/
+// service.go GenerateAPIKeyWithEnv). A live key therefore MUST be accepted for
+// the MCP to have a working normal/prod mode — but only under EXPLICIT operator
+// intent (`SHATALE_MODE=live`). A bare live key without that intent fails fast:
+// a local IDE/agent is not, by default, a trust boundary for live payments, and
+// a fat-fingered live key must never silently move real money.
+const isLiveKey = apiKey.startsWith('sk_live_') || apiKey.startsWith('sh_live_')
+const liveIntent = process.env.SHATALE_MODE === 'live'
+
+if (isLiveKey && !liveIntent) {
+  console.error(
+    'ERROR: a live key (sk_live_) was supplied without SHATALE_MODE=live. Refusing to run.\n' +
+      'Set SHATALE_MODE=live ONLY in an environment cleared for real operations, or use a ' +
+      'sandbox key (sk_sandbox_) for the demo.',
+  )
+  process.exit(1)
+}
+if (liveIntent && apiKey && !isLiveKey) {
+  console.error('ERROR: SHATALE_MODE=live requires a live key (sk_live_); got a non-live key.')
   process.exit(1)
 }
 
@@ -41,6 +58,28 @@ const apiBase = apiBaseUrl.toString().replace(/\/$/, '')
 
 const isGuest = !apiKey
 const isSandbox = apiKey.startsWith('sk_test_') || apiKey.startsWith('sh_test_') || apiKey.startsWith('sk_sandbox_')
+const isLive = isLiveKey && liveIntent
+
+// Reject keys that are neither sandbox nor live. Previously such a key fell into
+// a phantom "production" mode that could never authenticate (the real live
+// prefix was hard-rejected) — misleading. Fail fast with a clear message.
+if (!isGuest && !isSandbox && !isLive) {
+  console.error(
+    'ERROR: unrecognized API key. Use a sandbox key (sk_sandbox_) for the demo, or a live ' +
+      'key (sk_live_) together with SHATALE_MODE=live for production.',
+  )
+  process.exit(1)
+}
+
+// Separate gate for MONEY movement in live mode. Onboarding (no money) is always
+// available once authenticated; purchase/credentials (which move money / issue
+// cards) additionally require an explicit money-GO token. This keeps
+// registration (free) and payment (real €) on DIFFERENT gates (council + Fable).
+// Affirmative-only: a bare non-empty check is a footgun (SHATALE_MONEY_GO=false
+// would ENABLE money). Treat common negatives as OFF; money is enabled only by a
+// real, non-negative token (Sergey's money-GO code).
+const moneyGoRaw = (process.env.SHATALE_MONEY_GO ?? '').trim()
+const moneyGo = moneyGoRaw !== '' && !['false', '0', 'no', 'off', 'null', 'undefined'].includes(moneyGoRaw.toLowerCase())
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -60,19 +99,30 @@ registerModule(
   createGuestTools({
     isGuest,
     isSandbox,
+    isLive,
+    moneyEnabled: moneyGo,
     getToolNames: () => allTools.map((t) => t.name),
   }),
 )
 registerModule(createCommonTools(client))
 registerModule(createCatalogTools(client))
 
-// Register authenticated tools if API key provided
+// Register authenticated tools once a key is present.
 if (!isGuest) {
-  registerModule(createPurchaseTools(client, { isSandbox }))
-  registerModule(createCredentialTools(client))
+  // Onboarding moves no money and touches no PAN — available in demo and live.
   registerModule(createOnboardingTools(client))
+
   if (isSandbox) {
+    // Demo: request_purchase is registered but client-blocked (steers to the
+    // side-effect-free simulator); sandbox lifecycle helpers are live.
+    registerModule(createPurchaseTools(client, { isSandbox: true }))
+    registerModule(createCredentialTools(client))
     registerModule(createSandboxTools(client))
+  } else if (isLive && moneyGo) {
+    // Live + explicit money-GO: real purchase/credentials. Without money-GO,
+    // live mode is onboarding-only (can drive registration, cannot move money).
+    registerModule(createPurchaseTools(client, { isSandbox: false }))
+    registerModule(createCredentialTools(client))
   }
 }
 
@@ -290,7 +340,7 @@ async function main() {
   await server.connect(transport)
 
   // Log mode to stderr so it does not interfere with stdio transport
-  const mode = isGuest ? 'guest' : isSandbox ? 'sandbox' : 'production'
+  const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(onboarding-only)'
   const toolCount = allTools.length
   process.stderr.write(`Shatale MCP server started (${mode} mode, ${toolCount} tools)\n`)
 }
