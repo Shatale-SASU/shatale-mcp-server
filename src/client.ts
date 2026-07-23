@@ -149,6 +149,15 @@ export class ShataleClient {
     return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}`)
   }
 
+  // ---- Checkout identity ----
+
+  // Returns the two honest identities for a purchase's checkout: billing_identity (Shatale, the
+  // cardholder on the pool card) and merchant_customer_identity (the end-user / buyer). Live money
+  // path (agent-scoped by the API key's publisher); no card credentials here.
+  async getCheckoutIdentity(id: string): Promise<unknown> {
+    return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}/checkout-identity`)
+  }
+
   // ---- Onboarding / User Resolution ----
 
   async registerUserProfile(input: {

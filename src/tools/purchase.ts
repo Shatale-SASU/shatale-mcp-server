@@ -45,7 +45,8 @@ export function redactPurchaseCard(result: unknown): unknown {
   if ('cvv' in redactedCard) delete redactedCard.cvv
   redactedCard._note =
     'Raw PAN/CVV are withheld from the agent context (PCI). Retrieve the card out-of-band ' +
-    'via the checkout executor, not from this response.'
+    'via the checkout executor, not from this response. For the checkout form\'s identity fields, ' +
+    'use get_checkout_cardholder (cardholder/billing) and get_checkout_customer (buyer).'
   return { ...r, payment: { ...payment, card: redactedCard } }
 }
 
