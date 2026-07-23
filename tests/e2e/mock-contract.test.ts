@@ -43,6 +43,16 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(res.result?.tools ?? []).toHaveLength(17)
   })
 
+  // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox
+  // keys on /v1/purchases, so exposing them here would only 403. Assert their absence by INTENT, not
+  // just by the count above.
+  test('checkout-identity tools are NOT exposed in sandbox mode', async () => {
+    const res = await client.send('tools/list')
+    const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+    expect(names).not.toContain('get_checkout_cardholder')
+    expect(names).not.toContain('get_checkout_customer')
+  })
+
   test('sandbox_simulate_authorization hits the side-effect-free policy engine', async () => {
     const result = await client.callTool('sandbox_simulate_authorization', {
       agent_id: 'agent-1',

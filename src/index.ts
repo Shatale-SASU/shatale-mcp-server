@@ -15,6 +15,7 @@ import { VERSION } from './version.js'
 import { createGuestTools } from './tools/guest.js'
 import { createPurchaseTools } from './tools/purchase.js'
 import { createCredentialTools } from './tools/credentials.js'
+import { createCheckoutTools } from './tools/checkout.js'
 import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
@@ -123,6 +124,9 @@ if (!isGuest) {
     // live mode is onboarding-only (can drive registration, cannot move money).
     registerModule(createPurchaseTools(client, { isSandbox: false }))
     registerModule(createCredentialTools(client))
+    // Checkout identity is on the live money path (backend rejects sandbox keys) — register it only
+    // here, alongside the real purchase flow.
+    registerModule(createCheckoutTools(client))
   }
 }
 
