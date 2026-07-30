@@ -16,9 +16,9 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists all 17 tools in sandbox mode', async () => {
+  test('lists all 18 tools in sandbox mode', async () => {
     const tools = await client.listTools()
-    expect(tools).toHaveLength(17)
+    expect(tools).toHaveLength(18)
 
     // Guest tools
     expect(tools).toContain('explain_shatale')

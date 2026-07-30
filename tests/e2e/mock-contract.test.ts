@@ -38,9 +38,9 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks all 17 tools', async () => {
+  test('sandbox key unlocks all 18 tools', async () => {
     const res = await client.send('tools/list')
-    expect(res.result?.tools ?? []).toHaveLength(17)
+    expect(res.result?.tools ?? []).toHaveLength(18)
   })
 
   // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox
