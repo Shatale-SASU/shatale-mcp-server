@@ -119,7 +119,7 @@ describeIfKey('Contract: Sandbox mode response schemas', () => {
 
   afterAll(() => client.close())
 
-  test('all 17 tool definitions are valid', async () => {
+  test('all 18 tool definitions are valid', async () => {
     const res = await client.send('tools/list')
     const tools = res.result?.tools ?? []
     expect(tools).toHaveLength(18)

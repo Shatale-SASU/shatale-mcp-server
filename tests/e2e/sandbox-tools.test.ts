@@ -41,6 +41,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     // Credential tools
     expect(tools).toContain('request_temporary_credentials')
     expect(tools).toContain('get_credential_status')
+    expect(tools).toContain('get_credential_emails')
 
     // Onboarding tools
     expect(tools).toContain('register_user_profile')

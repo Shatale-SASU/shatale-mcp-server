@@ -113,4 +113,18 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(ToolResultText(result)).toContain('sess_mock_1')
     expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
   })
+
+  test('get_credential_emails reads the relay inbox and flows the body through', async () => {
+    const result = await client.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+    const text = ToolResultText(result)
+    // The OTP body must reach the agent verbatim (it's the payload)...
+    expect(text).toContain('483920')
+    expect(text).toContain('noreply@namecheap.com')
+    // ...alongside the untrusted-content warning in the payload.
+    expect(text).toContain('untrusted external content')
+    // Hit the right, publisher-scoped backend route.
+    const wire = mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')
+    expect(wire).toBeDefined()
+    expect(wire?.authorization).toBe('Bearer sk_sandbox_mock')
+  })
 })
