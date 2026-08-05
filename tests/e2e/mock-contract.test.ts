@@ -38,9 +38,14 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks all 18 tools', async () => {
+  test('sandbox key unlocks the 17 backed tools (get_credential_emails gated until #361)', async () => {
     const res = await client.send('tools/list')
-    expect(res.result?.tools ?? []).toHaveLength(18)
+    // 17, not 18: get_credential_emails is withheld until its backend (PR #361,
+    // GET /v1/credentials/{id}/emails) is deployed, so we never advertise a
+    // working-but-404ing tool. It returns once SHATALE_CREDENTIAL_EMAILS_ENABLED=true.
+    expect(res.result?.tools ?? []).toHaveLength(17)
+    const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+    expect(names).not.toContain('get_credential_emails')
   })
 
   // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox

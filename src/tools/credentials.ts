@@ -14,9 +14,18 @@ const requestCredentialsSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-export function createCredentialTools(client: ShataleClient): ToolModule {
-  return {
-    tools: [
+// get_credential_emails calls GET /v1/credentials/{id}/emails, which does NOT exist on the API
+// yet — it ships in PR #361 (credentials inbound email). Until that backend is merged AND
+// deployed, advertising the tool as working would be a soft "success reported": it appears in the
+// list, gets called, and only 404s. So it is gated OFF by default and only surfaced when the
+// caller confirms the backend is live (index.ts reads SHATALE_CREDENTIAL_EMAILS_ENABLED). Ship the
+// two together, or flip the flag once #361 is deployed. (Odin money/PCI review.)
+export function createCredentialTools(
+  client: ShataleClient,
+  opts: { emailsEnabled?: boolean } = {},
+): ToolModule {
+  const emailsEnabled = opts.emailsEnabled ?? false
+  const tools = ([
       {
         name: 'request_temporary_credentials',
         description:
@@ -79,7 +88,10 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           required: ['credential_request_id'],
         },
       },
-    ],
+    ] as ToolModule['tools']).filter((t) => emailsEnabled || t.name !== 'get_credential_emails')
+
+  return {
+    tools,
     handlers: {
       request_temporary_credentials: async (args) => {
         // F-003: Validate input with zod
