@@ -10,6 +10,7 @@ import {
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { ShataleClient } from './client.js'
+import { resolveMoneyGo } from './money-gate.js'
 import { installStdioErrorHandling } from './stdio-hardening.js'
 import { VERSION } from './version.js'
 import { createGuestTools } from './tools/guest.js'
@@ -76,18 +77,13 @@ if (!isGuest && !isSandbox && !isLive) {
 // available once authenticated; purchase/credentials (which move money / issue
 // cards) additionally require an explicit money-GO token. This keeps
 // registration (free) and payment (real €) on DIFFERENT gates (council + Fable).
-// Affirmative-only: a bare non-empty check is a footgun (SHATALE_MONEY_GO=false
-// would ENABLE money). SHATALE_MONEY_GO is Sergey's opaque money-GO CODE, not a
-// boolean, so money is enabled only by a *plausibly-real* token:
-//   • at least MIN_MONEY_GO_LEN chars — a real go-code is long, so short/typo values
-//     ('n', 'no', 'off', '0', 'f') can never flip money on (Odin review: a deny-list
-//     alone lets 'n' fall through and ENABLE money), and
-//   • not a recognised negative word (belt-and-suspenders for longer negatives).
-// Any doubt → OFF. Onboarding (no money) stays on a separate, always-available gate.
-const MIN_MONEY_GO_LEN = 4
-const MONEY_GO_NEGATIVES = ['false', '0', 'no', 'off', 'null', 'undefined', 'n', 'f', 'none', 'nan', 'disable', 'disabled']
-const moneyGoRaw = (process.env.SHATALE_MONEY_GO ?? '').trim()
-const moneyGo = moneyGoRaw.length >= MIN_MONEY_GO_LEN && !MONEY_GO_NEGATIVES.includes(moneyGoRaw.toLowerCase())
+// SHATALE_MONEY_GO is Sergey's opaque go-code; money turns on ONLY when its
+// SHA-256 equals SHATALE_MONEY_GO_SHA256 (exact match, resolveMoneyGo). The
+// earlier length+deny-list heuristic kept the fatal polarity — an unknown ≥4-char
+// value ('nope', 'money-off', a typo) still ENABLED money. A hash match has no
+// such input: everything except the one real code is OFF, and a missing digest
+// is OFF too (fail-closed).
+const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE_MONEY_GO_SHA256)
 
 // get_credential_emails' backend (GET /v1/credentials/{id}/emails) ships in PR #361, not yet
 // deployed. Keep the tool out of the advertised list until the backend is live so it never reads
