@@ -119,17 +119,47 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
   })
 
-  test('get_credential_emails reads the relay inbox and flows the body through', async () => {
+  // With the flag off (default), the gate must hold at BOTH layers: unlisted
+  // (asserted above) AND uncallable — the dispatch resolves handlers, not the
+  // advertised list, so a listing-only gate would leave the tool reachable by
+  // name and 404ing against its not-yet-deployed backend.
+  test('get_credential_emails is not callable while gated (flag off)', async () => {
     const result = await client.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
-    const text = ToolResultText(result)
-    // The OTP body must reach the agent verbatim (it's the payload)...
-    expect(text).toContain('483920')
-    expect(text).toContain('noreply@namecheap.com')
-    // ...alongside the untrusted-content warning in the payload.
-    expect(text).toContain('untrusted external content')
-    // Hit the right, publisher-scoped backend route.
-    const wire = mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')
-    expect(wire).toBeDefined()
-    expect(wire?.authorization).toBe('Bearer sk_sandbox_mock')
+    expect(ToolResultText(result)).toContain('Unknown tool: get_credential_emails')
+    expect(mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')).toBeUndefined()
+  })
+
+  // The email flow itself stays covered: same server, flag ON — the shape the
+  // deploy takes once #361 is live and SHATALE_CREDENTIAL_EMAILS_ENABLED=true.
+  test('get_credential_emails (flag on) reads the relay inbox and flows the body through', async () => {
+    const flagged = new McpTestClient(
+      {
+        SHATALE_API_KEY: 'sk_sandbox_mock',
+        SHATALE_API_URL: mock.url,
+        SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true',
+      },
+      'mock-contract-emails-on',
+    )
+    try {
+      await flagged.initialize()
+
+      const res = await flagged.send('tools/list')
+      const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+      expect(names).toContain('get_credential_emails')
+
+      const result = await flagged.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+      const text = ToolResultText(result)
+      // The OTP body must reach the agent verbatim (it's the payload)...
+      expect(text).toContain('483920')
+      expect(text).toContain('noreply@namecheap.com')
+      // ...alongside the untrusted-content warning in the payload.
+      expect(text).toContain('untrusted external content')
+      // Hit the right, publisher-scoped backend route.
+      const wire = mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')
+      expect(wire).toBeDefined()
+      expect(wire?.authorization).toBe('Bearer sk_sandbox_mock')
+    } finally {
+      flagged.close()
+    }
   })
 })

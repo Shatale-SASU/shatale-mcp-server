@@ -90,7 +90,11 @@ export function createCredentialTools(
       },
     ] as ToolModule['tools']).filter((t) => emailsEnabled || t.name !== 'get_credential_emails')
 
-  return {
+  // The gate must remove the HANDLER too, not just the listing: the CallTool
+  // dispatch looks up handlers only, so a merely-unlisted tool would still be
+  // callable by name and 404 against the missing backend. Absent handler →
+  // "Unknown tool", consistent with it not being advertised. (Odin review.)
+  const mod: ToolModule = {
     tools,
     handlers: {
       request_temporary_credentials: async (args) => {
@@ -152,4 +156,6 @@ export function createCredentialTools(
       },
     },
   }
+  if (!emailsEnabled) delete mod.handlers.get_credential_emails
+  return mod
 }
