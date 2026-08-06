@@ -10,11 +10,13 @@ import {
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { ShataleClient } from './client.js'
+import { resolveMoneyGo } from './money-gate.js'
 import { installStdioErrorHandling } from './stdio-hardening.js'
 import { VERSION } from './version.js'
 import { createGuestTools } from './tools/guest.js'
 import { createPurchaseTools } from './tools/purchase.js'
 import { createCredentialTools } from './tools/credentials.js'
+import { createCheckoutTools } from './tools/checkout.js'
 import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
@@ -75,11 +77,18 @@ if (!isGuest && !isSandbox && !isLive) {
 // available once authenticated; purchase/credentials (which move money / issue
 // cards) additionally require an explicit money-GO token. This keeps
 // registration (free) and payment (real €) on DIFFERENT gates (council + Fable).
-// Affirmative-only: a bare non-empty check is a footgun (SHATALE_MONEY_GO=false
-// would ENABLE money). Treat common negatives as OFF; money is enabled only by a
-// real, non-negative token (Sergey's money-GO code).
-const moneyGoRaw = (process.env.SHATALE_MONEY_GO ?? '').trim()
-const moneyGo = moneyGoRaw !== '' && !['false', '0', 'no', 'off', 'null', 'undefined'].includes(moneyGoRaw.toLowerCase())
+// SHATALE_MONEY_GO is Sergey's opaque go-code; money turns on ONLY when its
+// SHA-256 equals SHATALE_MONEY_GO_SHA256 (exact match, resolveMoneyGo). The
+// earlier length+deny-list heuristic kept the fatal polarity — an unknown ≥4-char
+// value ('nope', 'money-off', a typo) still ENABLED money. A hash match has no
+// such input: everything except the one real code is OFF, and a missing digest
+// is OFF too (fail-closed).
+const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE_MONEY_GO_SHA256)
+
+// get_credential_emails' backend (GET /v1/credentials/{id}/emails) ships in PR #361, not yet
+// deployed. Keep the tool out of the advertised list until the backend is live so it never reads
+// as a working-but-404ing tool. Flip this once #361 is merged AND deployed. (Odin review.)
+const credentialEmailsEnabled = (process.env.SHATALE_CREDENTIAL_EMAILS_ENABLED ?? '').toLowerCase() === 'true'
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -116,13 +125,16 @@ if (!isGuest) {
     // Demo: request_purchase is registered but client-blocked (steers to the
     // side-effect-free simulator); sandbox lifecycle helpers are live.
     registerModule(createPurchaseTools(client, { isSandbox: true }))
-    registerModule(createCredentialTools(client))
+    registerModule(createCredentialTools(client, { emailsEnabled: credentialEmailsEnabled }))
     registerModule(createSandboxTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
     // live mode is onboarding-only (can drive registration, cannot move money).
     registerModule(createPurchaseTools(client, { isSandbox: false }))
-    registerModule(createCredentialTools(client))
+    registerModule(createCredentialTools(client, { emailsEnabled: credentialEmailsEnabled }))
+    // Checkout identity is on the live money path (backend rejects sandbox keys) — register it only
+    // here, alongside the real purchase flow.
+    registerModule(createCheckoutTools(client))
   }
 }
 
