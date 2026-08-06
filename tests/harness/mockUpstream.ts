@@ -101,6 +101,13 @@ export class MockUpstream {
     if (method === 'DELETE' && path.startsWith('/v1/purchases/')) {
       return ok({ purchase_id: path.split('/').pop(), status: 'cancelled' })
     }
+    if (method === 'GET' && path.startsWith('/v1/credentials/') && path.endsWith('/emails')) {
+      return ok({
+        emails: [
+          { id: '01EMAIL00000000000000000AA', from: 'noreply@namecheap.com', subject: 'Verify your email', body_text: 'Your verification code is 483920', received_at: '2026-07-30T09:00:00Z' },
+        ],
+      })
+    }
     if (method === 'POST' && path === '/v1/credentials') {
       return ok({ credential_id: 'cred_mock_1', status: 'issued' })
     }

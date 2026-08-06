@@ -38,9 +38,24 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks all 17 tools', async () => {
+  test('sandbox key unlocks the 17 backed tools (get_credential_emails gated until #361)', async () => {
     const res = await client.send('tools/list')
+    // 17, not 18: get_credential_emails is withheld until its backend (PR #361,
+    // GET /v1/credentials/{id}/emails) is deployed, so we never advertise a
+    // working-but-404ing tool. It returns once SHATALE_CREDENTIAL_EMAILS_ENABLED=true.
     expect(res.result?.tools ?? []).toHaveLength(17)
+    const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+    expect(names).not.toContain('get_credential_emails')
+  })
+
+  // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox
+  // keys on /v1/purchases, so exposing them here would only 403. Assert their absence by INTENT, not
+  // just by the count above.
+  test('checkout-identity tools are NOT exposed in sandbox mode', async () => {
+    const res = await client.send('tools/list')
+    const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+    expect(names).not.toContain('get_checkout_cardholder')
+    expect(names).not.toContain('get_checkout_customer')
   })
 
   test('sandbox_simulate_authorization hits the side-effect-free policy engine', async () => {
@@ -102,5 +117,49 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     })
     expect(ToolResultText(result)).toContain('sess_mock_1')
     expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
+  })
+
+  // With the flag off (default), the gate must hold at BOTH layers: unlisted
+  // (asserted above) AND uncallable — the dispatch resolves handlers, not the
+  // advertised list, so a listing-only gate would leave the tool reachable by
+  // name and 404ing against its not-yet-deployed backend.
+  test('get_credential_emails is not callable while gated (flag off)', async () => {
+    const result = await client.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+    expect(ToolResultText(result)).toContain('Unknown tool: get_credential_emails')
+    expect(mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')).toBeUndefined()
+  })
+
+  // The email flow itself stays covered: same server, flag ON — the shape the
+  // deploy takes once #361 is live and SHATALE_CREDENTIAL_EMAILS_ENABLED=true.
+  test('get_credential_emails (flag on) reads the relay inbox and flows the body through', async () => {
+    const flagged = new McpTestClient(
+      {
+        SHATALE_API_KEY: 'sk_sandbox_mock',
+        SHATALE_API_URL: mock.url,
+        SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true',
+      },
+      'mock-contract-emails-on',
+    )
+    try {
+      await flagged.initialize()
+
+      const res = await flagged.send('tools/list')
+      const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+      expect(names).toContain('get_credential_emails')
+
+      const result = await flagged.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+      const text = ToolResultText(result)
+      // The OTP body must reach the agent verbatim (it's the payload)...
+      expect(text).toContain('483920')
+      expect(text).toContain('noreply@namecheap.com')
+      // ...alongside the untrusted-content warning in the payload.
+      expect(text).toContain('untrusted external content')
+      // Hit the right, publisher-scoped backend route.
+      const wire = mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')
+      expect(wire).toBeDefined()
+      expect(wire?.authorization).toBe('Bearer sk_sandbox_mock')
+    } finally {
+      flagged.close()
+    }
   })
 })

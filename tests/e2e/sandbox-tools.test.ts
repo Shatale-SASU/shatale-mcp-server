@@ -16,8 +16,13 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists all 17 tools in sandbox mode', async () => {
+  test('lists the 17 backed tools in sandbox mode (get_credential_emails gated until #361)', async () => {
     const tools = await client.listTools()
+    // 17, not 18: get_credential_emails is withheld until its backend (PR #361)
+    // is deployed — kept in lockstep with mock-contract.test.ts. This file is
+    // key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count here
+    // stays green-by-skip and only breaks the first keyed run — exactly the
+    // skipped-but-green trap (#276).
     expect(tools).toHaveLength(17)
 
     // Guest tools
@@ -38,9 +43,11 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('get_purchase_status')
     expect(tools).toContain('cancel_purchase')
 
-    // Credential tools
+    // Credential tools (get_credential_emails returns behind
+    // SHATALE_CREDENTIAL_EMAILS_ENABLED=true once #361 is deployed)
     expect(tools).toContain('request_temporary_credentials')
     expect(tools).toContain('get_credential_status')
+    expect(tools).not.toContain('get_credential_emails')
 
     // Onboarding tools
     expect(tools).toContain('register_user_profile')
