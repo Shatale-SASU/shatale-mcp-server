@@ -38,14 +38,22 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 17 backed tools (get_credential_emails gated until #361)', async () => {
+  test('sandbox key unlocks the 15 backed tools; the three unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
-    // 17, not 18: get_credential_emails is withheld until its backend (PR #361,
-    // GET /v1/credentials/{id}/emails) is deployed, so we never advertise a
-    // working-but-404ing tool. It returns once SHATALE_CREDENTIAL_EMAILS_ENABLED=true.
-    expect(res.result?.tools ?? []).toHaveLength(17)
+    // 15, and every one missing is missing on purpose — a tool we advertise is a
+    // tool an agent will try, and it cannot ask a follow-up question when the answer
+    // is a 404.
+    //
+    //   get_credential_emails ... backend not deployed (PR #361)
+    //   register_user_profile  \ the register→status loop cannot close on ANY
+    //   get_onboarding_status  / deployed backend — the session id is never
+    //                            persisted, so the second step 404s forever
+    //                            (SHAT-1662)
+    expect(res.result?.tools ?? []).toHaveLength(15)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).not.toContain('get_credential_emails')
+    expect(names).not.toContain('register_user_profile')
+    expect(names).not.toContain('get_onboarding_status')
   })
 
   // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox
@@ -134,13 +142,51 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(mock.lastRequest('POST', '/v1/sandbox/purchases/')).toBeDefined()
   })
 
-  test('register_user_profile reaches onboarding endpoint', async () => {
-    const result = await client.callTool('register_user_profile', {
-      publisher_user_id: 'pub-1',
-      user_claims: { email: 'a@b.com', name: 'Mock User' },
-    })
-    expect(ToolResultText(result)).toContain('sess_mock_1')
-    expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
+  // Same two-layer gate as get_credential_emails: unlisted AND uncallable. The
+  // dispatch resolves handlers, not the advertised list, so a listing-only gate
+  // leaves the tool reachable by name — and this pair must not reach the backend at
+  // all, because the call succeeds and hands back a session id that will never
+  // resolve. A silent dead end is worse than a refusal.
+  test('the onboarding pair is not callable while gated (flag off)', async () => {
+    for (const name of ['register_user_profile', 'get_onboarding_status']) {
+      const result = await client.callTool(name, {
+        publisher_user_id: 'pub-1',
+        user_claims: { email: 'a@b.com', name: 'Mock User' },
+        session_id: 'sess_mock_1',
+      })
+      expect(ToolResultText(result)).toContain(`Unknown tool: ${name}`)
+    }
+    expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeUndefined()
+  })
+
+  // And the gate opens. A gate nobody has seen open is a gate that may simply be a
+  // deletion — this is the shape the deploy takes once Funnel B is merged AND
+  // deployed, which is the flip condition, not "the backend flag is on".
+  test('the onboarding pair returns when SHATALE_ONBOARDING_ENABLED=true', async () => {
+    const flagged = new McpTestClient(
+      {
+        SHATALE_API_KEY: 'sk_sandbox_mock',
+        SHATALE_API_URL: mock.url,
+        SHATALE_ONBOARDING_ENABLED: 'true',
+      },
+      'mock-contract-onboarding-on',
+    )
+    try {
+      await flagged.initialize()
+      const res = await flagged.send('tools/list')
+      const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
+      expect(names).toContain('register_user_profile')
+      expect(names).toContain('get_onboarding_status')
+
+      const result = await flagged.callTool('register_user_profile', {
+        publisher_user_id: 'pub-1',
+        user_claims: { email: 'a@b.com', name: 'Mock User' },
+      })
+      expect(ToolResultText(result)).toContain('sess_mock_1')
+      expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
+    } finally {
+      await flagged.close()
+    }
   })
 
   // With the flag off (default), the gate must hold at BOTH layers: unlisted

@@ -1,6 +1,6 @@
 {
   "name": "shatale-mcp-server",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "files": [
     "dist",
     "README.md",
@@ -8,7 +8,7 @@
     "SECURITY.md",
     "CHANGELOG.md"
   ],
-  "description": "MCP server for Shatale — AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (17 tools; 18 with credential emails enabled)",
+  "description": "MCP server for Shatale — AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (15 tools; more as gated backends ship)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
