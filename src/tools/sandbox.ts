@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { redactPurchaseCard } from './purchase.js'
 import type { ShataleClient } from '../client.js'
 import type { ToolDefinition, ToolHandler, ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
@@ -21,7 +22,14 @@ const simulateAuthorizationSchema = z.object({
   // struct — which is why both spellings are accepted here and normalised to the one the
   // backend reads. An agent that sends 5999 or "5999" is asking the same question.
   mcc: z
-    .union([z.number().int(), z.string().regex(/^\d{3,4}$/, 'mcc must be a 3-4 digit category code')])
+    .union([
+      // Both spellings validate to the same range. The number arm used to accept any
+      // int, so mcc: -5 became "-5" on the wire and the backend, which takes any
+      // string, would have stored it — the two spellings have to agree on what is
+      // valid, not only on what type comes out.
+      z.number().int().min(100).max(9999),
+      z.string().regex(/^\d{3,4}$/, 'mcc must be a 3-4 digit category code'),
+    ])
     .transform((v) => String(v)),
   merchant_name: z.string().min(1).max(200),
   card_number: z.string().min(12).max(19),
@@ -143,7 +151,13 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     const purchaseId = String(args.purchase_id ?? args.request_id ?? '')
     try {
       const result = await client.sandboxApprovePurchase(purchaseId)
-      return jsonResult(result)
+      // This returns a top-level `card` with number and cvv. It is the static 4242
+      // test card, so nothing sensitive leaks today — but "harmless because of what
+      // the backend happens to emit" is a property of the other side of the wire,
+      // and it is not ours to rely on. The invariant is that no tool result carries
+      // a number+cvv pair, without exceptions that have to be re-checked whenever
+      // the backend changes.
+      return jsonResult(redactPurchaseCard(result))
     } catch (err) {
       return errorResult(err, {
         code: 'sandbox_approve_failed',
