@@ -183,6 +183,16 @@ Built-in documentation available as MCP resources:
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
 
+## Release gate
+
+Before a version is published, `npm run gate` drives the **built** server over stdio against a
+real deployment with a real sandbox key and demands a policy **decision** back — not merely the
+absence of an error, because the backend answers HTTP 400 for "agent not found" exactly as it
+answers it for a rejected body, and the MCP discards upstream bodies. This is the check that
+would have stopped 0.2.1 and 0.5.0, both of which shipped green.
+
+See [docs/release-gate.md](docs/release-gate.md).
+
 ## Privacy & telemetry
 
 This server has **no telemetry**: no analytics endpoint, no beacons, no install ID, no fingerprinting.

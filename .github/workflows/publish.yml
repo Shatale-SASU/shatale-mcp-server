@@ -25,8 +25,39 @@ jobs:
       - name: Run public tests
         run: npm run test:public
 
-  publish:
+  # SHAT-2165. The suite above cannot catch a type divergence against the Go backend —
+  # it shipped the same numeric-`mcc` defect in 0.2.1 and again in 0.5.0, green both
+  # times, because the mock upstream is this side of the contract. This job drives the
+  # BUILT server over stdio against a real deployment and demands a policy DECISION back,
+  # which is reachable only if the request body decoded AND the agent exists.
+  #
+  # It has no skip path. A missing key, an unreachable API or an empty agent list all
+  # FAIL — an unearned green here is exactly the failure this gate exists to end, and a
+  # release that cannot be verified is a release that does not go out.
+  gate:
     needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Pre-publish gate (real backend, real sandbox key)
+        run: npm run gate
+        env:
+          # Same secret the nightly live suite already uses. The gate refuses live keys.
+          SHATALE_GATE_API_KEY: ${{ secrets.SHATALE_TEST_KEY }}
+          # Optional overrides: point at another *.shatale.com deployment, or pin the agent
+          # instead of discovering it via GET /v1/agents.
+          SHATALE_GATE_API_URL: ${{ vars.SHATALE_GATE_API_URL }}
+          SHATALE_GATE_AGENT_ID: ${{ vars.SHATALE_GATE_AGENT_ID }}
+
+  publish:
+    needs: [test, gate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
