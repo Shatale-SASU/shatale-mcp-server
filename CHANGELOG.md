@@ -3,6 +3,30 @@
 All notable changes to `shatale-mcp-server` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Pre-publish release gate** (SHAT-2165) — `npm run gate` drives the built `dist/index.js`
+  over stdio against a real deployment with a real sandbox key and asserts a positive policy
+  **decision** (`approved`/`declined` + `is_sandbox` + explanation), which is reachable only
+  if the request body decoded AND the agent exists. Asserting "no error" would not do: the
+  backend returns HTTP 400 for *agent not found* exactly as for a *decode reject*, and the
+  MCP discards upstream bodies — so a naive gate would have gone green on the broken 0.5.0
+  build. Includes a build-freshness check, runtime agent discovery (no agent → loud failure,
+  never a skip) and a negative control. Wired into `publish.yml` between test and publish,
+  with no skip path. See [docs/release-gate.md](docs/release-gate.md).
+- **Wire-body fixtures** (SHAT-2165) — `tests/e2e/wire-fixtures.test.ts` captures the exact
+  outbound bodies of six tool calls into `tests/fixtures/wire/outbound-requests.json`, so a
+  renamed or re-typed field is a reviewable diff instead of a green mock. Runs in
+  `test:public`. The Go-side replay test is specified in `tests/fixtures/wire/README.md` but
+  is **not written** — it belongs in the `shatale` repo.
+
+### Fixed
+- Three key-gated tests still expected the tool surface from before three tools were
+  unadvertised (18/17 tools, `register_user_profile` callable). They were green-by-skip in
+  PR CI, which runs keyless, and would have failed the next nightly — the same
+  skipped-but-green trap this release gate exists to close.
+
 ## [0.4.0] — 2026-06-10
 
 Realign the sandbox tool surface to the routes the backend actually deploys, and
