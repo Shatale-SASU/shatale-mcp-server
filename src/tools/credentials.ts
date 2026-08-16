@@ -105,13 +105,30 @@ export function createCredentialTools(
         }
         try {
           const result = await client.requestCredentials(parsed.data) as Record<string, unknown>
-          // F-017: Mask generated_password if present in response
+          // The relay password is returned IN FULL, and the masking that used to be here
+          // (audit finding F-017) is deliberately gone. Two reasons, and the first is the
+          // one that matters.
+          //
+          // It protected nothing. get_credential_status returns the same password in
+          // cleartext one call away, into the same agent context — so the mask cost an
+          // agent a round trip and bought a false impression of safety. Review proved it
+          // end to end: this tool showed `61************M6`, the sibling returned
+          // `61jBmud4Uh79&bM6`.
+          //
+          // And it made this tool's own result unusable for its stated purpose. The
+          // description promises "a relay email and a single-use relay password ... for a
+          // merchant that requires an account" — an agent cannot register with a masked
+          // password, so the masking turned the primary call into a step that must be
+          // followed by a second call to get the real value.
+          //
+          // If the decision is that this value must NOT enter agent context, then masking
+          // one of two tools is not that decision — both would have to withhold it and the
+          // flow would need a path that uses it without revealing it. That is a product
+          // choice, not a formatting one, and it is flagged rather than assumed here.
           if (result && typeof result === 'object' && 'generated_password' in result) {
-            const pw = String(result.generated_password)
-            result.generated_password = pw.length > 4
-              ? pw.slice(0, 2) + '*'.repeat(pw.length - 4) + pw.slice(-2)
-              : '****'
-            result._password_note = 'This is a relay-only password for the merchant integration. It will expire after first use.'
+            result._password_note =
+              'Single-use relay password for the merchant integration. It is real and it ' +
+              'expires after first use — treat it as a secret in whatever you log.'
           }
           return jsonResult(result)
         } catch (err) {

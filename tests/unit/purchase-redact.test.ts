@@ -4,6 +4,7 @@
  * payment.card (purchases.go purchaseToJSON); redactPurchaseCard strips them to
  * last4 + constraints before the tool result is returned.
  */
+import { createCredentialTools } from '../../src/tools/credentials.js'
 import { describe, test, expect } from 'vitest'
 import { redactPurchaseCard, createPurchaseTools } from '../../src/tools/purchase.js'
 import type { ShataleClient } from '../../src/client.js'
@@ -88,5 +89,42 @@ describe('purchase handlers redact card credentials', () => {
   test('cancel_purchase never emits the raw PAN', async () => {
     const r = await handlers.cancel_purchase({ purchase_id: 'p_1' })
     expect(text(r)).not.toContain('4111111111114242')
+  })
+})
+
+// The relay password is returned in full, and both credential tools agree about that.
+//
+// It used to be masked in request_temporary_credentials and returned in cleartext by
+// get_credential_status one call away, into the same agent context — so the mask cost a
+// round trip and bought a false impression of safety, while making the primary tool's
+// result unusable for its stated purpose (an agent cannot register at a merchant with
+// `61************M6`). Review proved the pair end to end.
+//
+// This test exists so the two tools cannot drift apart again: whichever way the product
+// decides, they must decide it together.
+describe('credential tools agree about the relay password', () => {
+  test('request_temporary_credentials returns the password it was given', async () => {
+    const secret = '61jBmud4Uh79&bM6'
+    const client = {
+      requestCredentials: async () => ({ credential_request_id: 'cr_1', generated_password: secret }),
+      getCredentialStatus: async () => ({ credential_request_id: 'cr_1', generated_password: secret }),
+    } as never
+
+    const mod = createCredentialTools(client, { emailsEnabled: false })
+    const issued = await mod.handlers.request_temporary_credentials({
+      publisher_user_id: 'pu_1',
+      agent_id: 'ag_1',
+      merchant_domain: 'example.com',
+      purpose: 'register an account to complete a purchase',
+    })
+    const status = await mod.handlers.get_credential_status({ credential_request_id: 'cr_1' })
+
+    const issuedText = issued.content[0].text as string
+    const statusText = status.content[0].text as string
+
+    expect(issuedText).toContain(secret)
+    expect(issuedText).not.toContain('***')
+    // The point of the test: whatever one returns, so does the other.
+    expect(statusText.includes(secret)).toBe(issuedText.includes(secret))
   })
 })

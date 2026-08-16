@@ -42,7 +42,10 @@ export interface SandboxAuthInput {
   agent_id: string
   amount: number
   currency: string
-  mcc: number
+  // STRING on the wire: the backend's struct is `MCC string` and Go rejects a JSON
+  // number into a string field, so a numeric mcc 400'd before the handler ran. The tool
+  // schema accepts either spelling and normalises here.
+  mcc: string
   merchant_name: string
   card_number: string
 }

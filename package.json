@@ -8,7 +8,7 @@
     "SECURITY.md",
     "CHANGELOG.md"
   ],
-  "description": "MCP server for Shatale — AI agent payment infrastructure with 18 tools for purchases, virtual cards, merchant catalog, and policy engine",
+  "description": "MCP server for Shatale — AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (17 tools; 18 with credential emails enabled)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

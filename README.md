@@ -38,7 +38,9 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 18-tool lifecycle). Production keys (`sk_live_*`) are blocked in this MCP server by design — a local IDE/agent is not a trust boundary for live payment credentials; integrate via your backend.
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (17-tool lifecycle; 18 with `SHATALE_CREDENTIAL_EMAILS_ENABLED=true`).
+>
+> **A live key moves real money, and this document used to say the opposite.** Since v0.4 a `sk_live_*` key IS accepted — but only together with `SHATALE_MODE=live`, and the purchase and credential tools are not even registered unless `SHATALE_MONEY_GO` hashes to the deploy-time `SHATALE_MONEY_GO_SHA256`. A live key WITHOUT the mode flag refuses to start, and the mode flag without a live key refuses too. A local IDE is still not a trust boundary for live payment credentials — that is an argument for not setting those variables, not a claim that the server prevents you.
 
 ## Configure Your IDE
 
@@ -174,7 +176,7 @@ Built-in documentation available as MCP resources:
 
 ## Security
 
-- Only sandbox keys (`sk_sandbox_*`) are accepted — production keys (`sk_live_*`) are rejected
+- Sandbox keys (`sk_sandbox_*` / `sk_test_*`) run the ordinary path. A live key (`sk_live_*`) is accepted ONLY with `SHATALE_MODE=live`, and money tools require the `SHATALE_MONEY_GO` code as well — three separate things a person has to do on purpose. It is not blocked; it is gated.
 - Card credentials are encrypted (JWE) and delivered only to authorized agents
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
