@@ -9,7 +9,20 @@ const simulateAuthorizationSchema = z.object({
   agent_id: z.string().min(1, 'agent_id is required'),
   amount: z.number().int('amount must be an integer minor-unit value').nonnegative(),
   currency: z.string().min(3).max(3, 'currency must be a 3-letter ISO code'),
-  mcc: z.number().int('mcc must be an integer category code'),
+  // A four-digit ISO 18245 code, on the wire as a STRING.
+  //
+  // This was `z.number()`, and the backend's struct is `MCC string` — Go's decoder rejects
+  // a JSON number into a string field, so every call returned 400 "invalid request body"
+  // before the handler ran. The one policy-engine tool a sandbox agent can call never
+  // worked, and there was no input that could reach it: a string was refused client-side by
+  // this very schema.
+  //
+  // Exactly the failure that made 0.2.1 broken — a field's TYPE disagreeing with the Go
+  // struct — which is why both spellings are accepted here and normalised to the one the
+  // backend reads. An agent that sends 5999 or "5999" is asking the same question.
+  mcc: z
+    .union([z.number().int(), z.string().regex(/^\d{3,4}$/, 'mcc must be a 3-4 digit category code')])
+    .transform((v) => String(v)),
   merchant_name: z.string().min(1).max(200),
   card_number: z.string().min(12).max(19),
 })
@@ -49,8 +62,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
             description: '3-letter ISO currency code (e.g. EUR)',
           },
           mcc: {
-            type: 'number',
-            description: 'Merchant category code (e.g. 5691 clothing, 7995 gambling)',
+            // string, because that is what the backend decodes. A number is accepted and
+            // converted, so an agent following an older description still works.
+            type: 'string',
+            description:
+              'Merchant category code, 4 digits (e.g. "5691" clothing, "7995" gambling)',
           },
           merchant_name: {
             type: 'string',
@@ -59,8 +75,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           card_number: {
             type: 'string',
             description:
-              'Sandbox test card. 4242… → force approve, 4000…0002 → force decline, ' +
-              'neutral (4111…) → real policy decides',
+              'Sandbox test card. Exactly one of three: 4242424242424242 forces approve, ' +
+              '4000000000000002 forces decline, 4111111111111111 lets the real policy ' +
+              'decide. Any other number is refused — this endpoint never needs a real card.',
           },
         },
         required: ['agent_id', 'amount', 'currency', 'mcc', 'merchant_name', 'card_number'],

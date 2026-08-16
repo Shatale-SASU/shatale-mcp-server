@@ -74,8 +74,32 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     const body = wire!.body as Record<string, unknown>
     expect(body.agent_id).toBe('agent-1')
     expect(body.amount).toBe(15000)
-    expect(body.mcc).toBe(5691)
+    // A STRING on the wire, because the backend's struct is `MCC string` and Go rejects a
+    // JSON number into a string field. This assertion used to demand a NUMBER, so the
+    // suite certified the exact defect that made every real call return 400 — the mock
+    // accepts any body, so nothing else could have caught it. A contract test has to
+    // assert the contract the OTHER side reads, not the one this side happens to send.
+    expect(body.mcc).toBe('5691')
     expect(body.card_number).toBe('4242424242424242')
+  })
+
+  test('a string mcc is accepted too, and reaches the wire unchanged', async () => {
+    // Both spellings ask the same question. An agent following an older tool description
+    // sends a number; one reading the current schema sends a string. Neither should meet
+    // a client-side refusal, and both must arrive in the form the backend decodes.
+    const result = await client.callTool('sandbox_simulate_authorization', {
+      agent_id: 'agent-1',
+      amount: 15000,
+      currency: 'EUR',
+      mcc: '7995',
+      merchant_name: 'Mock Betting Co',
+      card_number: '4242424242424242',
+    })
+    expect(ToolResultText(result)).not.toContain('Invalid input')
+
+    const wire = mock.lastRequest('POST', '/v1/sandbox/authorizations')
+    const body = wire!.body as Record<string, unknown>
+    expect(body.mcc).toBe('7995')
   })
 
   test('request_purchase is blocked under a sandbox key (never hits /v1/purchases)', async () => {
