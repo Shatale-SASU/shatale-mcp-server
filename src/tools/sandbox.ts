@@ -5,13 +5,38 @@ import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
+/**
+ * The only card numbers this endpoint accepts, and the only ones it ever needs.
+ *
+ * 4242424242424242 forces approve, 4000000000000002 forces decline, 4111111111111111
+ * lets the real policy decide. Declared ONCE so the Zod schema and the JSON input schema
+ * cannot drift apart - that drift is what SHAT-2161 was: a description naming three
+ * cards, and a validator accepting any 12-19 digits.
+ */
+export const SANDBOX_TEST_CARDS = [
+  '4242424242424242',
+  '4000000000000002',
+  '4111111111111111',
+] as const
+
 const simulateAuthorizationSchema = z.object({
   agent_id: z.string().min(1, 'agent_id is required'),
   amount: z.number().int('amount must be an integer minor-unit value').nonnegative(),
   currency: z.string().min(3).max(3, 'currency must be a 3-letter ISO code'),
   mcc: z.number().int('mcc must be an integer category code'),
   merchant_name: z.string().min(1).max(200),
-  card_number: z.string().min(12).max(19),
+  // SHAT-2161. An ENUM of the three sandbox cards, not a length range.
+  //
+  // The description below has said "exactly one of three" since the backend was
+  // tightened, while the schema said min(12).max(19) - so any 12-19 digit string was
+  // accepted, INCLUDING a real card number somebody pastes. The API refuses it, which is
+  // the SHAT-1557 fix, but by then the digits have been through the tool call, this
+  // process's memory and the wire. By the standard SHAT-1557 was closed on - PCI scope is
+  // what a process CAN receive, not what it does afterwards - the client half was open.
+  //
+  // The enum closes it before the digits are ever typed: the host validates a tool call
+  // against the JSON schema below, so the model cannot offer a real PAN in the first place.
+  card_number: z.enum(SANDBOX_TEST_CARDS),
 })
 
 /**
@@ -58,6 +83,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           },
           card_number: {
             type: 'string',
+            // The enum is what stops a real PAN being typed at all: the host validates the
+            // tool call against this schema before it reaches us.
+            enum: [...SANDBOX_TEST_CARDS],
             description:
               'Sandbox test card. 4242… → force approve, 4000…0002 → force decline, ' +
               'neutral (4111…) → real policy decides',
