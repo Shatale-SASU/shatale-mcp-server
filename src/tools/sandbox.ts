@@ -36,8 +36,49 @@ const simulateAuthorizationSchema = z.object({
   //
   // The enum closes it before the digits are ever typed: the host validates a tool call
   // against the JSON schema below, so the model cannot offer a real PAN in the first place.
-  card_number: z.enum(SANDBOX_TEST_CARDS),
+  card_number: z.enum(SANDBOX_TEST_CARDS, {
+    // A CUSTOM message, because zod's default one echoes the rejected value:
+    // "Invalid enum value. Expected '4242…' | …, received '4929123456789012'".
+    //
+    // That turns this fix into a different leak. The handler interpolates i.message into
+    // the tool result, so a real card pasted here would no longer go to the API - it
+    // would be printed into the model's context, the conversation transcript, and
+    // anything that logs tool results. By the standard this whole ticket rests on - PCI
+    // scope is what a process CAN receive - a transcript-bound copy is arguably worse
+    // than the API-bound one, because it is more durable and harder to find later.
+    // Caught in review, after I had already written the enum.
+    //
+    // It also printed all three test cards in full, undoing the deliberate choice in the
+    // description below to abbreviate them so no complete number sits in the tool surface.
+    errorMap: () => ({
+      message:
+        'must be one of the three sandbox test cards (see this field\'s description); ' +
+        'a real card number is never needed here and is refused',
+    }),
+  }),
 })
+
+/**
+ * Removes long digit runs from a validation message before it leaves this process.
+ *
+ * The specific leak this closes is described on card_number above: zod's default enum
+ * error echoes the rejected value, and the handler interpolates that into the tool
+ * result - so a pasted card number lands in the model's context and the transcript.
+ * The errorMap on that field fixes the known case; this fixes the class.
+ *
+ * Deliberately a belt on top of the braces. A field added later with a validator that
+ * quotes its input - a regex, a literal, a refine - would reintroduce the same leak
+ * silently, and nothing about the field name would make anyone think of PCI. Twelve or
+ * more consecutive digits is a card-shaped run and nothing this API legitimately needs
+ * to see quoted back.
+ *
+ * It does NOT try to be a PAN detector: no Luhn check, no brand prefixes. A redactor
+ * that only catches valid card numbers misses the typo'd ones, and those are just as
+ * much a person's card.
+ */
+function redactLongDigitRuns(message: string): string {
+  return message.replace(/\d[\d\s-]{10,}\d/g, '[redacted]')
+}
 
 /**
  * Sandbox tool surface (SHAT-1488, Option 1).
@@ -132,7 +173,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     const parsed = simulateAuthorizationSchema.safeParse(args)
     if (!parsed.success) {
       return textResult(
-        `Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        redactLongDigitRuns(
+          `Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        ),
         true,
       )
     }

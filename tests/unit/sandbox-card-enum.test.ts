@@ -128,3 +128,54 @@ describe('the sandbox card is an enum, not a length range', () => {
     }
   })
 })
+
+// The rejection must not print what it rejected.
+//
+// Found in review, after the enum was already written: zod 3.24's default enum error is
+// "Invalid enum value. Expected '4242…' | …, received '4929123456789012'", and the
+// handler interpolates i.message into the tool result. So the first version of this fix
+// did not remove the leak, it MOVED it — a pasted card stopped going to the API and
+// started going into the model's context, the conversation transcript, and anything that
+// logs tool results. By this ticket's own standard (PCI scope is what a process CAN
+// receive) the transcript is the worse of the two: more durable, and harder to find later.
+//
+// It also printed all three test cards in full, undoing the deliberate choice in the
+// tool description to abbreviate them.
+describe('the rejection does not echo what it rejected', () => {
+  const pasted = '4929123456789012' // card-shaped, not a real card, never a fixture value
+
+  it('keeps the rejected number out of the tool result', async () => {
+    const { client, calls } = recordingClient()
+    const res = await createSandboxTools(client).handlers.sandbox_simulate_authorization(
+      validCall({ card_number: pasted }),
+    )
+
+    expect(res.isError).toBe(true)
+    expect(calls).toHaveLength(0)
+    // The assertion this test exists for.
+    expect(JSON.stringify(res.content)).not.toContain(pasted)
+  })
+
+  it('still says something a caller can act on', async () => {
+    const { client } = recordingClient()
+    const res = await createSandboxTools(client).handlers.sandbox_simulate_authorization(
+      validCall({ card_number: pasted }),
+    )
+    const text = JSON.stringify(res.content).toLowerCase()
+    // Names the field and what to do. "Invalid input" alone would satisfy the no-echo
+    // assertion above while telling the caller nothing.
+    expect(text).toContain('card_number')
+    expect(text).toContain('sandbox test card')
+  })
+
+  it('prints no long digit run at all, whatever the validator said', async () => {
+    // The belt on top of the braces. A field added later whose validator quotes its input
+    // — a regex, a literal, a refine — would reintroduce the leak silently, and nothing
+    // about the field name would make anyone think of PCI.
+    const { client } = recordingClient()
+    const res = await createSandboxTools(client).handlers.sandbox_simulate_authorization(
+      validCall({ card_number: pasted }),
+    )
+    expect(JSON.stringify(res.content)).not.toMatch(/\d[\d\s-]{10,}\d/)
+  })
+})
