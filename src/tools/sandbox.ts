@@ -34,8 +34,19 @@ const simulateAuthorizationSchema = z.object({
   // process's memory and the wire. By the standard SHAT-1557 was closed on - PCI scope is
   // what a process CAN receive, not what it does afterwards - the client half was open.
   //
-  // The enum closes it before the digits are ever typed: the host validates a tool call
-  // against the JSON schema below, so the model cannot offer a real PAN in the first place.
+  // The enum STEERS the model away from typing a real card, and the server-side check
+  // below is what actually stops one.
+  //
+  // I first wrote that the host validates a tool call against the JSON schema, so a real
+  // PAN "cannot" be offered. That is not true and review was right to press on it: the
+  // MCP spec does not require clients to validate arguments against inputSchema, and
+  // Claude Code does not enforce it before dispatch. The schema is a contract the model
+  // reads, not a gate the transport enforces.
+  //
+  // So the guaranteed stop is this Zod check, which by definition runs AFTER the digits
+  // have entered this process over the transport. The enum is still worth having - it
+  // materially reduces the chance the model types a card, and it puts the contract where
+  // a reader will find it - but it is not the thing that makes the refusal certain.
   card_number: z.enum(SANDBOX_TEST_CARDS, {
     // A CUSTOM message, because zod's default one echoes the rejected value:
     // "Invalid enum value. Expected '4242…' | …, received '4929123456789012'".
@@ -124,8 +135,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           },
           card_number: {
             type: 'string',
-            // The enum is what stops a real PAN being typed at all: the host validates the
-            // tool call against this schema before it reaches us.
+            // The enum here is steering for the model, not a transport-level gate: MCP
+            // clients are not required to validate against inputSchema. The refusal that
+            // is certain is the Zod check in the schema above.
             enum: [...SANDBOX_TEST_CARDS],
             description:
               'Sandbox test card. 4242… → force approve, 4000…0002 → force decline, ' +
