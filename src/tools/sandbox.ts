@@ -5,14 +5,91 @@ import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
 
 // F-003: Zod input validation schemas
+/**
+ * The only card numbers this endpoint accepts, and the only ones it ever needs.
+ *
+ * 4242424242424242 forces approve, 4000000000000002 forces decline, 4111111111111111
+ * lets the real policy decide. Declared ONCE so the Zod schema and the JSON input schema
+ * cannot drift apart - that drift is what SHAT-2161 was: a description naming three
+ * cards, and a validator accepting any 12-19 digits.
+ */
+export const SANDBOX_TEST_CARDS = [
+  '4242424242424242',
+  '4000000000000002',
+  '4111111111111111',
+] as const
+
 const simulateAuthorizationSchema = z.object({
   agent_id: z.string().min(1, 'agent_id is required'),
   amount: z.number().int('amount must be an integer minor-unit value').nonnegative(),
   currency: z.string().min(3).max(3, 'currency must be a 3-letter ISO code'),
   mcc: z.number().int('mcc must be an integer category code'),
   merchant_name: z.string().min(1).max(200),
-  card_number: z.string().min(12).max(19),
+  // SHAT-2161. An ENUM of the three sandbox cards, not a length range.
+  //
+  // The description below has said "exactly one of three" since the backend was
+  // tightened, while the schema said min(12).max(19) - so any 12-19 digit string was
+  // accepted, INCLUDING a real card number somebody pastes. The API refuses it, which is
+  // the SHAT-1557 fix, but by then the digits have been through the tool call, this
+  // process's memory and the wire. By the standard SHAT-1557 was closed on - PCI scope is
+  // what a process CAN receive, not what it does afterwards - the client half was open.
+  //
+  // The enum STEERS the model away from typing a real card, and the server-side check
+  // below is what actually stops one.
+  //
+  // I first wrote that the host validates a tool call against the JSON schema, so a real
+  // PAN "cannot" be offered. That is not true and review was right to press on it: the
+  // MCP spec does not require clients to validate arguments against inputSchema, and
+  // Claude Code does not enforce it before dispatch. The schema is a contract the model
+  // reads, not a gate the transport enforces.
+  //
+  // So the guaranteed stop is this Zod check, which by definition runs AFTER the digits
+  // have entered this process over the transport. The enum is still worth having - it
+  // materially reduces the chance the model types a card, and it puts the contract where
+  // a reader will find it - but it is not the thing that makes the refusal certain.
+  card_number: z.enum(SANDBOX_TEST_CARDS, {
+    // A CUSTOM message, because zod's default one echoes the rejected value:
+    // "Invalid enum value. Expected '4242…' | …, received '4929123456789012'".
+    //
+    // That turns this fix into a different leak. The handler interpolates i.message into
+    // the tool result, so a real card pasted here would no longer go to the API - it
+    // would be printed into the model's context, the conversation transcript, and
+    // anything that logs tool results. By the standard this whole ticket rests on - PCI
+    // scope is what a process CAN receive - a transcript-bound copy is arguably worse
+    // than the API-bound one, because it is more durable and harder to find later.
+    // Caught in review, after I had already written the enum.
+    //
+    // It also printed all three test cards in full, undoing the deliberate choice in the
+    // description below to abbreviate them so no complete number sits in the tool surface.
+    errorMap: () => ({
+      message:
+        'must be one of the three sandbox test cards (see this field\'s description); ' +
+        'a real card number is never needed here and is refused',
+    }),
+  }),
 })
+
+/**
+ * Removes long digit runs from a validation message before it leaves this process.
+ *
+ * The specific leak this closes is described on card_number above: zod's default enum
+ * error echoes the rejected value, and the handler interpolates that into the tool
+ * result - so a pasted card number lands in the model's context and the transcript.
+ * The errorMap on that field fixes the known case; this fixes the class.
+ *
+ * Deliberately a belt on top of the braces. A field added later with a validator that
+ * quotes its input - a regex, a literal, a refine - would reintroduce the same leak
+ * silently, and nothing about the field name would make anyone think of PCI. Twelve or
+ * more consecutive digits is a card-shaped run and nothing this API legitimately needs
+ * to see quoted back.
+ *
+ * It does NOT try to be a PAN detector: no Luhn check, no brand prefixes. A redactor
+ * that only catches valid card numbers misses the typo'd ones, and those are just as
+ * much a person's card.
+ */
+function redactLongDigitRuns(message: string): string {
+  return message.replace(/\d[\d\s-]{10,}\d/g, '[redacted]')
+}
 
 /**
  * Sandbox tool surface (SHAT-1488, Option 1).
@@ -58,6 +135,10 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
           },
           card_number: {
             type: 'string',
+            // The enum here is steering for the model, not a transport-level gate: MCP
+            // clients are not required to validate against inputSchema. The refusal that
+            // is certain is the Zod check in the schema above.
+            enum: [...SANDBOX_TEST_CARDS],
             description:
               'Sandbox test card. 4242… → force approve, 4000…0002 → force decline, ' +
               'neutral (4111…) → real policy decides',
@@ -104,7 +185,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     const parsed = simulateAuthorizationSchema.safeParse(args)
     if (!parsed.success) {
       return textResult(
-        `Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        redactLongDigitRuns(
+          `Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        ),
         true,
       )
     }
