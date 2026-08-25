@@ -20,7 +20,7 @@ import { createCheckoutTools } from './tools/checkout.js'
 import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
-import { createCommonTools } from './tools/common.js'
+import { createCommonTools, isSandboxKey } from './tools/common.js'
 import type { ToolDefinition, ToolHandler } from './types.js'
 import { textResult } from './types.js'
 
@@ -59,7 +59,7 @@ if (!ALLOWED_HOSTS.some(h => apiBaseUrl.hostname === h || apiBaseUrl.hostname.en
 const apiBase = apiBaseUrl.toString().replace(/\/$/, '')
 
 const isGuest = !apiKey
-const isSandbox = apiKey.startsWith('sk_test_') || apiKey.startsWith('sh_test_') || apiKey.startsWith('sk_sandbox_')
+const isSandbox = isSandboxKey(apiKey)
 const isLive = isLiveKey && liveIntent
 
 // Reject keys that are neither sandbox nor live. Previously such a key fell into

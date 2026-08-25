@@ -227,7 +227,12 @@ function handleSimulatePurchase(args: Record<string, unknown>) {
     },
     trace: { trace_id: traceId, steps },
     idempotency_key: idempotencyKey,
-    sandbox_equivalent_tools: ['request_purchase', 'get_purchase_status'],
+    // SHAT-1461: the sandbox equivalent is sandbox_simulate_authorization, NOT request_purchase. Under a
+    // sandbox key request_purchase is BLOCKED client-side (SHAT-1488, purchase.ts) and steers callers here —
+    // so listing it as the sandbox equivalent sent a demo user to a tool that refuses them (a false promise on
+    // the acquisition path). The sandbox mode description already says this (see explain_shatale); this line
+    // was the one place still naming the blocked tool.
+    sandbox_equivalent_tools: ['sandbox_simulate_authorization'],
     next_step: {
       label: 'Run the same flow against Shatale Sandbox APIs',
       register_url: REGISTER_URL,
@@ -365,7 +370,11 @@ ${warnings.map((w) => `- ⚠️ ${w}`).join('\n')}
 - Adjust \`single_transaction_max\` based on typical purchase sizes
 - Start with \`allowlist\` mode and add merchants as needed
 - Set \`auto_approve_below\` to a comfortable threshold for hands-off operation
-- Review and adjust after the first month of usage`)
+- Review and adjust after the first month of usage
+
+## Next step
+Apply this policy against Shatale Sandbox APIs — no code changes: add a \`sk_sandbox_*\` key and re-run.
+Register: ${REGISTER_URL}`)
 }
 
 export function createGuestTools(ctx: GuestContext): ToolModule {

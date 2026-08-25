@@ -14,7 +14,7 @@ export interface CapturedRequest {
  *
  * Lets the MCP server's authenticated/sandbox tools run in CI with no live
  * SHATALE_TEST_KEY: point the server at this server via SHATALE_API_URL
- * (127.0.0.1 is in the server's host allowlist) and a fake `sk_test_` key.
+ * (127.0.0.1 is in the server's host allowlist) and a fake `sk_sandbox_` key.
  *
  * Every request is recorded so tests can assert on the exact outbound wire
  * body (e.g. that request_purchase sends merchant_ref + integer amount_cents).

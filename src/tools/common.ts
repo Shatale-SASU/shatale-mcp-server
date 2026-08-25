@@ -2,10 +2,18 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 
+// SHAT-1460/2484: a sandbox key is EXACTLY `sk_sandbox_*`. The identity service issues `sk_sandbox_` for
+// sandbox and `sk_live_` for live — it has never issued `sk_test_` or `sh_test_`, so those were dead prefixes
+// widening acceptance for keys that do not exist. One definition here, imported by index.ts too, so the two
+// sandbox-detection sites can no longer drift (they previously listed the same prefixes in different order).
+export function isSandboxKey(apiKey: string): boolean {
+  return apiKey.startsWith('sk_sandbox_')
+}
+
 export function createCommonTools(client: ShataleClient): ToolModule {
   const apiKey = process.env.SHATALE_API_KEY ?? ''
   const isGuest = !apiKey
-  const isSandbox = apiKey.startsWith('sh_test_') || apiKey.startsWith('sk_test_') || apiKey.startsWith('sk_sandbox_')
+  const isSandbox = isSandboxKey(apiKey)
   const mode = isGuest ? 'guest' : isSandbox ? 'sandbox' : 'production'
 
   return {
