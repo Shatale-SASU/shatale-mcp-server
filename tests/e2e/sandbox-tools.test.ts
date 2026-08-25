@@ -16,14 +16,18 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists the 17 backed tools in sandbox mode (get_credential_emails gated until #361)', async () => {
+  test('lists the 15 backed tools in sandbox mode (three withheld until their backends ship)', async () => {
     const tools = await client.listTools()
-    // 17, not 18: get_credential_emails is withheld until its backend (PR #361)
-    // is deployed — kept in lockstep with mock-contract.test.ts. This file is
-    // key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count here
-    // stays green-by-skip and only breaks the first keyed run — exactly the
-    // skipped-but-green trap (#276).
-    expect(tools).toHaveLength(17)
+    // 15, not 18. Three tools are withheld because their flow cannot complete on any
+    // deployed backend — get_credential_emails (backend in PR #361, not deployed) and the
+    // register→status onboarding pair (the session id is never persisted, SHAT-1662).
+    // Kept in lockstep with mock-contract.test.ts.
+    //
+    // This file is key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count
+    // here stays green-by-skip and only breaks the first KEYED run — exactly the
+    // skipped-but-green trap (#276). It did: the count stayed at 17 when the tools were
+    // unadvertised, and the keyless CI that gates PRs never ran this file.
+    expect(tools).toHaveLength(15)
 
     // Guest tools
     expect(tools).toContain('explain_shatale')
@@ -49,9 +53,10 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('get_credential_status')
     expect(tools).not.toContain('get_credential_emails')
 
-    // Onboarding tools
-    expect(tools).toContain('register_user_profile')
-    expect(tools).toContain('get_onboarding_status')
+    // Onboarding tools stay hidden: RegisterUserProfile never persists the session id it
+    // returns, so the second step 404s forever (SHAT-1662). Behind SHATALE_ONBOARDING_ENABLED.
+    expect(tools).not.toContain('register_user_profile')
+    expect(tools).not.toContain('get_onboarding_status')
 
     // Sandbox tools (SHAT-1488: deployed routes only)
     expect(tools).toContain('sandbox_simulate_authorization')

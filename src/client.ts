@@ -256,9 +256,24 @@ export class ShataleClient {
     const qs = query ? `?q=${encodeURIComponent(query)}` : ''
     try {
       return await this.request('GET', `/v1/mcc-codes${qs}`)
-    } catch {
-      // F-008/F-011: Fallback to built-in MCC list when API returns error
-      return ShataleClient.filterBuiltInMCC(query)
+    } catch (err) {
+      // F-008/F-011: fall back to the built-in list rather than failing — this is static
+      // reference data and an agent looking up "which code is gambling" should not be
+      // blocked by a network hiccup.
+      //
+      // But it SAYS SO. The fallback used to be silent, which made every answer read as
+      // if it came from the server; review measured that /v1/mcc-codes does not exist on
+      // the deployment at all, so the fallback fires every single time and nothing said
+      // so. "Error reads as data" is the worst failure mode for a caller that cannot ask
+      // a follow-up question — so the reason travels with the answer.
+      return {
+        ...(ShataleClient.filterBuiltInMCC(query) as Record<string, unknown>),
+        _source: 'built-in',
+        _note:
+          'Served from this package\'s built-in ISO 18245 list, not from the API — the ' +
+          'lookup failed (' + (err instanceof Error ? err.message : String(err)) + '). ' +
+          'Codes are stable, but a code added server-side will not appear here.',
+      }
     }
   }
 

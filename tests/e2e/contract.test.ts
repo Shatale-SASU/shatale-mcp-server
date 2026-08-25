@@ -119,10 +119,14 @@ describeIfKey('Contract: Sandbox mode response schemas', () => {
 
   afterAll(() => client.close())
 
-  test('all 18 tool definitions are valid', async () => {
+  // 15, not 18: get_credential_emails and the register→status onboarding pair are
+  // withheld until their backends ship (see mock-contract.test.ts). This count is
+  // key-gated, so it only breaks on a KEYED run — it stayed at 18 after the tools were
+  // unadvertised because the CI that gates PRs runs keyless.
+  test('all 15 tool definitions are valid', async () => {
     const res = await client.send('tools/list')
     const tools = res.result?.tools ?? []
-    expect(tools).toHaveLength(18)
+    expect(tools).toHaveLength(15)
     for (const tool of tools) {
       const parsed = ToolDef.safeParse(tool)
       if (!parsed.success) {

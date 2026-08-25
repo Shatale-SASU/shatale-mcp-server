@@ -17,8 +17,30 @@ const registerUserProfileSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-export function createOnboardingTools(client: ShataleClient): ToolModule {
-  return {
+// SHAT-1662. These two tools are OFF unless SHATALE_ONBOARDING_ENABLED=true, and the
+// flip condition is not "the backend flag is on" — it is "Funnel B is merged AND
+// deployed". Review traced the loop at the source and it cannot close even with the
+// backend flag enabled:
+//
+//   RegisterUserProfile mints sessionID = ulid.New() and never persists it — main.go
+//   says so in as many words — then returns it as `claim_set_id`, while this tool's
+//   description promised a `session_id`. GET /v1/onboarding/sessions/{that id} 404s
+//   forever, because there is no row to find.
+//
+// So this was not flag-dark, it was unwired: two tools advertised in every client's
+// tool list, describing a two-step flow whose second step could never succeed. An
+// agent cannot ask a follow-up question — a tool that is visible is a tool it will
+// try, and a promise it will build on.
+//
+// Same shape as get_credential_emails: the gate removes the HANDLER as well as the
+// listing, because CallTool dispatches on handlers, and a merely-unlisted tool stays
+// callable by name.
+export function createOnboardingTools(
+  client: ShataleClient,
+  opts: { enabled?: boolean } = {},
+): ToolModule {
+  const enabled = opts.enabled ?? false
+  const mod: ToolModule = {
     tools: [
       {
         name: 'register_user_profile',
@@ -113,4 +135,10 @@ export function createOnboardingTools(client: ShataleClient): ToolModule {
       },
     },
   }
+
+  if (!enabled) {
+    mod.tools = []
+    mod.handlers = {}
+  }
+  return mod
 }

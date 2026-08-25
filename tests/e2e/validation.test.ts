@@ -79,14 +79,18 @@ describeIfKey('Input Validation', () => {
     expect(result.content[0].text).toContain('Invalid input')
   })
 
-  test('register_user_profile rejects invalid email', async () => {
+  // register_user_profile is unregistered by default (SHAT-1662: the register→status loop
+  // cannot close on any deployed backend), so with the flag off the honest assertion is
+  // that it is not callable at all — the gate removes the HANDLER, not just the listing.
+  // Its input validation is covered with the flag ON in mock-contract.test.ts.
+  test('register_user_profile is not callable while its backend is unwired', async () => {
     const result = await client.callTool('register_user_profile', {
       publisher_user_id: testId('user'),
       user_claims: {
         email: 'not-an-email',
       },
     })
-    expect(result.content[0].text).toContain('Invalid input')
+    expect(result.content[0].text).toContain('Unknown tool: register_user_profile')
   })
 
   test('sandbox_simulate_authorization rejects missing required fields', async () => {
