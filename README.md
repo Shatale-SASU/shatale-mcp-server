@@ -38,7 +38,7 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 18-tool lifecycle). Production keys (`sk_live_*`) run only under an explicit `SHATALE_MODE=live` operator intent — supplied without it, the server refuses to start, because a local IDE/agent is not by default a trust boundary for live payment credentials.
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 17-tool lifecycle; 18 with `SHATALE_CREDENTIAL_EMAILS_ENABLED`). Production keys (`sk_live_*`) run only under an explicit `SHATALE_MODE=live` operator intent — supplied without it, the server refuses to start, because a local IDE/agent is not by default a trust boundary for live payment credentials.
 
 ## Configure Your IDE
 
