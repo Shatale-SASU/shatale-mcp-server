@@ -1,0 +1,82 @@
+[
+  {
+    "label": "sandbox_simulate_authorization (mcc given as a string)",
+    "struct_hint": "apps/api/api/v1/sandbox.go sandboxAuthRequest",
+    "method": "POST",
+    "path": "/v1/sandbox/authorizations",
+    "body": {
+      "agent_id": "agent-1",
+      "amount": 15000,
+      "currency": "EUR",
+      "mcc": "5691",
+      "merchant_name": "Fixture Clothing Co",
+      "card_number": "4111111111111111"
+    }
+  },
+  {
+    "label": "sandbox_simulate_authorization (mcc given as a number — must still go out as a string)",
+    "struct_hint": "apps/api/api/v1/sandbox.go sandboxAuthRequest",
+    "method": "POST",
+    "path": "/v1/sandbox/authorizations",
+    "body": {
+      "agent_id": "agent-1",
+      "amount": 15000,
+      "currency": "EUR",
+      "mcc": "5691",
+      "merchant_name": "Fixture Clothing Co",
+      "card_number": "4111111111111111"
+    }
+  },
+  {
+    "label": "request_temporary_credentials",
+    "struct_hint": "apps/api/api/v1/credentials.go request struct",
+    "method": "POST",
+    "path": "/v1/credentials",
+    "body": {
+      "publisher_user_id": "pub-1",
+      "agent_id": "agent-1",
+      "merchant_domain": "namecheap.com",
+      "purpose": "domain registration",
+      "idempotency_key": "<derived-string>"
+    }
+  },
+  {
+    "label": "cancel_purchase",
+    "struct_hint": "apps/api/api/v1/purchases.go cancel request struct",
+    "method": "DELETE",
+    "path": "/v1/purchases/pur_fixture_1",
+    "body": {
+      "reason": "user changed their mind"
+    }
+  },
+  {
+    "label": "request_purchase (decimal amount → integer amount_cents, merchant → merchant_ref)",
+    "struct_hint": "apps/api/api/v1/purchases.go create request struct",
+    "method": "POST",
+    "path": "/v1/purchases",
+    "body": {
+      "publisher_user_id": "pub-1",
+      "agent_id": "agent-1",
+      "merchant_ref": "amazon.com",
+      "amount_cents": 4999,
+      "currency": "EUR",
+      "description": "Fixture purchase",
+      "idempotency_key": "<derived-string>"
+    }
+  },
+  {
+    "label": "register_user_profile",
+    "struct_hint": "apps/api/api/v1/onboarding.go register request struct",
+    "method": "POST",
+    "path": "/v1/onboarding/register",
+    "body": {
+      "publisher_user_id": "pub-1",
+      "user_claims": {
+        "email": "fixture@test.shatale.com",
+        "name": "Fixture User",
+        "country": "FR"
+      },
+      "intended_use": "purchase"
+    }
+  }
+]

@@ -38,7 +38,11 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 17-tool lifecycle; 18 with `SHATALE_CREDENTIAL_EMAILS_ENABLED`). Production keys (`sk_live_*`) run only under an explicit `SHATALE_MODE=live` operator intent — supplied without it, the server refuses to start, because a local IDE/agent is not by default a trust boundary for live payment credentials.
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (15-tool lifecycle).
+>
+> Three more tools exist in the code and are deliberately not advertised, because a tool an agent can see is a tool it will try, and it cannot ask a follow-up question when the answer is a 404: `get_credential_emails` (backend not yet deployed), and `register_user_profile` / `get_onboarding_status` (the register→status loop cannot close on any deployed backend — the session id is never persisted, so the second step 404s forever). They return under `SHATALE_CREDENTIAL_EMAILS_ENABLED` and `SHATALE_ONBOARDING_ENABLED` once their backends actually ship.
+>
+> **A live key moves real money, and this document used to say the opposite.** Since v0.4 a `sk_live_*` key IS accepted — but only together with `SHATALE_MODE=live`, and the purchase and credential tools are not even registered unless `SHATALE_MONEY_GO` hashes to the deploy-time `SHATALE_MONEY_GO_SHA256`. A live key WITHOUT the mode flag refuses to start, and the mode flag without a live key refuses too. A local IDE is still not a trust boundary for live payment credentials — that is an argument for not setting those variables, not a claim that the server prevents you.
 
 ## Configure Your IDE
 
@@ -174,10 +178,20 @@ Built-in documentation available as MCP resources:
 
 ## Security
 
-- Sandbox keys (`sk_sandbox_*`) run the demo; production keys (`sk_live_*`) are accepted only under an explicit `SHATALE_MODE=live` operator intent, and a live key supplied without it makes the server refuse to start
+- Sandbox keys (`sk_sandbox_*`) run the ordinary path. A live key (`sk_live_*`) is accepted ONLY with `SHATALE_MODE=live`, and money tools require the `SHATALE_MONEY_GO` code as well — three separate things a person has to do on purpose. It is not blocked; it is gated.
 - Card credentials are encrypted (JWE) and delivered only to authorized agents
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
+
+## Release gate
+
+Before a version is published, `npm run gate` drives the **built** server over stdio against a
+real deployment with a real sandbox key and demands a policy **decision** back — not merely the
+absence of an error, because the backend answers HTTP 400 for "agent not found" exactly as it
+answers it for a rejected body, and the MCP discards upstream bodies. This is the check that
+would have stopped 0.2.1 and 0.5.0, both of which shipped green.
+
+See [docs/release-gate.md](docs/release-gate.md).
 
 ## Privacy & telemetry
 
