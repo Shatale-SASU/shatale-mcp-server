@@ -60,6 +60,30 @@ export class ShataleClient {
     private readonly apiKey: string,
   ) {}
 
+  /**
+   * SHAT-1686. Derived credential idempotency keys, anchored to the FIRST request of a window
+   * rather than to a clock grid. See requestCredentials for why the grid had to go.
+   *
+   * Bounded: entries are pruned when they expire, and the map is capped, so a long-lived server
+   * asked for credentials by many agents cannot grow this without limit.
+   */
+  private readonly credentialKeys = new Map<string, { key: string; expiresAt: number }>()
+
+  /**
+   * How long a derived key is reused. It MIRRORS the backend's default credential lifetime
+   * (credentials/service.go: defaultTTL = 1 hour) and is deliberately not longer: reusing a key
+   * past the credential's life would replay something already expired, which is the defect the
+   * original bucket existed to avoid.
+   *
+   * /!\ THIS IS A COUPLING TO A CONSTANT IN ANOTHER REPOSITORY, and it is one-directional — nothing
+   * here notices if the backend changes it. The API takes ttl_seconds but does not RETURN the
+   * effective lifetime in a form this client asks for, and CredentialInput has no ttl_seconds
+   * field to send. Named so the next person finds the assumption instead of the symptom.
+   */
+  private static readonly DERIVED_KEY_WINDOW_MS = 60 * 60 * 1000
+
+  private static readonly MAX_CREDENTIAL_KEYS = 512
+
   async request(method: string, path: string, body?: unknown): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -117,32 +141,79 @@ export class ShataleClient {
   // ---- Credentials ----
 
   async requestCredentials(input: CredentialInput): Promise<unknown> {
-    // SHAT-1685: the backend REQUIRES idempotency_key (credentials.go:57 → 400
-    // without it), and minting a card burns real funding, so an explicit key wins
-    // and otherwise we derive one. Unlike purchases (eternal de-dup is correct),
-    // credential de-dup is (agent_id, key) FOREVER while the credential itself
-    // EXPIRES — an eternally-stable key would forever replay an expired credential
-    // and permanently block re-issuing for the same (user, agent, merchant). So the
-    // derived key carries a coarse HOURLY bucket: rapid retries within the hour
-    // de-dup (no accidental double-mint), while a later legitimate re-request gets
-    // a fresh key. (SHAT: a principled TTL-aligned window is tracked separately.)
-    const hourBucket = Math.floor(Date.now() / 3_600_000)
-    const idempotency_key =
-      input.idempotency_key ||
-      'mcp-cred-' +
-        createHash('sha256')
-          .update(
-            JSON.stringify([
-              input.publisher_user_id,
-              input.agent_id,
-              input.merchant_domain,
-              input.purpose,
-              hourBucket,
-            ]),
-          )
-          .digest('hex')
-          .slice(0, 32)
-    return this.request('POST', '/v1/credentials', { ...input, idempotency_key })
+    // SHAT-1685: the backend REQUIRES idempotency_key (credentials.go:57 -> 400 without it), so an
+    // explicit key wins and otherwise we derive one. Unlike purchases (eternal de-dup is correct),
+    // credential de-dup is (agent_id, key) FOREVER while the credential itself EXPIRES - an
+    // eternally-stable key would forever replay an expired credential and permanently block
+    // re-issuing for the same (user, agent, merchant).
+    //
+    // SHAT-1686: THE WINDOW IS ANCHORED TO THE FIRST REQUEST, NOT TO A CLOCK GRID.
+    //
+    // This used to hash a wall-clock hour bucket, `floor(now / 3_600_000)`, with the comment
+    // "rapid retries within the hour de-dup (no accidental double-mint)". That claim was false at
+    // the one place a grid can fail, and false for the retry most likely to be an accident: two
+    // calls TWO SECONDS apart, at 10:59:59 and 11:00:01, landed in different buckets and minted a
+    // second live credential. Measured before it was changed - the test that shows it is in
+    // tests/unit/credential-idempotency-window.test.ts and it failed on the old code.
+    //
+    // /!\ AND THE FIX THE TICKET PROPOSED - "a principled TTL-aligned window" - WOULD NOT HAVE
+    // FIXED IT. Aligning the grid to the credential TTL moves the boundary; it does not remove it.
+    // Any `floor(now / period)` splits two calls that straddle a multiple of `period`, however
+    // small the gap between them. The defect is the GRID, not its size, so changing the size would
+    // have closed the ticket and left the failure.
+    //
+    // An anchored window has no boundary to straddle: the first call starts the window, every
+    // repeat inside it gets the same key, and the window ends one credential-lifetime later - which
+    // is when replaying would hand back something expired.
+    //
+    // /!\ WHAT THIS STILL DOES NOT FIX, said here rather than discovered later: the memo is
+    // per-PROCESS. Two agent processes asking for the same credential still derive different keys
+    // and still double-mint, because nothing outside this process knows the first request happened.
+    // Closing that needs the backend to de-dup on (publisher_user_id, agent_id, merchant_domain)
+    // while a credential is live, or to expose a lookup for one - neither exists today.
+    if (input.idempotency_key) {
+      return this.request('POST', '/v1/credentials', { ...input, idempotency_key: input.idempotency_key })
+    }
+
+    const now = Date.now()
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify([
+          input.publisher_user_id,
+          input.agent_id,
+          input.merchant_domain,
+          input.purpose,
+        ]),
+      )
+      .digest('hex')
+
+    for (const [k, v] of this.credentialKeys) {
+      if (v.expiresAt <= now) this.credentialKeys.delete(k)
+    }
+
+    let entry = this.credentialKeys.get(fingerprint)
+    if (!entry || entry.expiresAt <= now) {
+      // The anchor. `now` appears ONCE, when the window opens, and never again for this
+      // fingerprint - that is the whole difference from a grid, where it was consulted on every
+      // call and could change the answer between two of them.
+      entry = {
+        key:
+          'mcp-cred-' +
+          createHash('sha256').update(fingerprint + ':' + now).digest('hex').slice(0, 32),
+        expiresAt: now + ShataleClient.DERIVED_KEY_WINDOW_MS,
+      }
+      // Cap before inserting. Map preserves insertion order, so the oldest goes first; every
+      // entry still live is a window someone may retry into, so this is a last resort rather than
+      // routine - at 512 distinct (user, agent, merchant, purpose) tuples inside one hour, in one
+      // process, something else is already wrong.
+      if (this.credentialKeys.size >= ShataleClient.MAX_CREDENTIAL_KEYS) {
+        const oldest = this.credentialKeys.keys().next().value
+        if (oldest !== undefined) this.credentialKeys.delete(oldest)
+      }
+      this.credentialKeys.set(fingerprint, entry)
+    }
+
+    return this.request('POST', '/v1/credentials', { ...input, idempotency_key: entry.key })
   }
 
   async getCredentialStatus(id: string): Promise<unknown> {
