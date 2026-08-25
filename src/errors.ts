@@ -42,10 +42,17 @@ export function mapHttpError(status: number, method: string, path: string): Shat
     })
   }
   if (status === 404) {
+    // A 404 on a POST that creates something is not a missing id — there is no id in
+    // the request to verify. The old advice ("pass the id returned by the create
+    // call") sent a caller hunting for its own mistake when the truth was that the
+    // route is not deployed, which is the failure it kept meaning in practice.
+    const creating = method.toUpperCase() === 'POST' && !/\/[^/]*_?id[^/]*$/i.test(path)
     return new ShataleApiError({
       code: 'not_found',
       message: `Resource not found (${method} ${path}).`,
-      suggested_fix: 'Verify the id exists — pass the id returned by the create call (purchase_id, session_id, etc.).',
+      suggested_fix: creating
+        ? 'This route is not available on the connected deployment — nothing in your request is wrong. Check SHATALE_API_URL points at the right environment, and that the feature is released there.'
+        : 'Verify the id exists — pass the id returned by the create call (purchase_id, session_id, etc.). If the id is right, the route may not be deployed on the environment SHATALE_API_URL points at.',
     })
   }
   if (status === 429) {

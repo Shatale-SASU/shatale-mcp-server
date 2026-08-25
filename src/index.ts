@@ -89,6 +89,9 @@ const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE
 // deployed. Keep the tool out of the advertised list until the backend is live so it never reads
 // as a working-but-404ing tool. Flip this once #361 is merged AND deployed. (Odin review.)
 const credentialEmailsEnabled = (process.env.SHATALE_CREDENTIAL_EMAILS_ENABLED ?? '').toLowerCase() === 'true'
+// SHAT-1662: see src/tools/onboarding.ts — the register→status loop cannot close on any
+// deployed backend, so the pair stays unadvertised until Funnel B is merged AND deployed.
+const onboardingEnabled = (process.env.SHATALE_ONBOARDING_ENABLED ?? '').toLowerCase() === 'true'
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -121,7 +124,7 @@ registerModule(createCatalogTools(client))
 // Register authenticated tools once a key is present.
 if (!isGuest) {
   // Onboarding moves no money and touches no PAN — available in demo and live.
-  registerModule(createOnboardingTools(client))
+  registerModule(createOnboardingTools(client, { enabled: onboardingEnabled }))
 
   if (isSandbox) {
     // Demo: request_purchase is registered but client-blocked (steers to the
