@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { redactPurchaseCard } from './purchase.js'
 import type { ShataleClient } from '../client.js'
 import type { ToolDefinition, ToolHandler, ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
@@ -23,7 +24,27 @@ const simulateAuthorizationSchema = z.object({
   agent_id: z.string().min(1, 'agent_id is required'),
   amount: z.number().int('amount must be an integer minor-unit value').nonnegative(),
   currency: z.string().min(3).max(3, 'currency must be a 3-letter ISO code'),
-  mcc: z.number().int('mcc must be an integer category code'),
+  // A four-digit ISO 18245 code, on the wire as a STRING.
+  //
+  // This was `z.number()`, and the backend's struct is `MCC string` — Go's decoder rejects
+  // a JSON number into a string field, so every call returned 400 "invalid request body"
+  // before the handler ran. The one policy-engine tool a sandbox agent can call never
+  // worked, and there was no input that could reach it: a string was refused client-side by
+  // this very schema.
+  //
+  // Exactly the failure that made 0.2.1 broken — a field's TYPE disagreeing with the Go
+  // struct — which is why both spellings are accepted here and normalised to the one the
+  // backend reads. An agent that sends 5999 or "5999" is asking the same question.
+  mcc: z
+    .union([
+      // Both spellings validate to the same range. The number arm used to accept any
+      // int, so mcc: -5 became "-5" on the wire and the backend, which takes any
+      // string, would have stored it — the two spellings have to agree on what is
+      // valid, not only on what type comes out.
+      z.number().int().min(100).max(9999),
+      z.string().regex(/^\d{3,4}$/, 'mcc must be a 3-4 digit category code'),
+    ])
+    .transform((v) => String(v)),
   merchant_name: z.string().min(1).max(200),
   // SHAT-2161. An ENUM of the three sandbox cards, not a length range.
   //
@@ -126,8 +147,11 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
             description: '3-letter ISO currency code (e.g. EUR)',
           },
           mcc: {
-            type: 'number',
-            description: 'Merchant category code (e.g. 5691 clothing, 7995 gambling)',
+            // string, because that is what the backend decodes. A number is accepted and
+            // converted, so an agent following an older description still works.
+            type: 'string',
+            description:
+              'Merchant category code, 4 digits (e.g. "5691" clothing, "7995" gambling)',
           },
           merchant_name: {
             type: 'string',
@@ -140,8 +164,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
             // is certain is the Zod check in the schema above.
             enum: [...SANDBOX_TEST_CARDS],
             description:
-              'Sandbox test card. 4242… → force approve, 4000…0002 → force decline, ' +
-              'neutral (4111…) → real policy decides',
+              'Sandbox test card. Exactly one of three: 4242424242424242 forces approve, ' +
+              '4000000000000002 forces decline, 4111111111111111 lets the real policy ' +
+              'decide. Any other number is refused — this endpoint never needs a real card.',
           },
         },
         required: ['agent_id', 'amount', 'currency', 'mcc', 'merchant_name', 'card_number'],
@@ -209,7 +234,13 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     const purchaseId = String(args.purchase_id ?? args.request_id ?? '')
     try {
       const result = await client.sandboxApprovePurchase(purchaseId)
-      return jsonResult(result)
+      // This returns a top-level `card` with number and cvv. It is the static 4242
+      // test card, so nothing sensitive leaks today — but "harmless because of what
+      // the backend happens to emit" is a property of the other side of the wire,
+      // and it is not ours to rely on. The invariant is that no tool result carries
+      // a number+cvv pair, without exceptions that have to be re-checked whenever
+      // the backend changes.
+      return jsonResult(redactPurchaseCard(result))
     } catch (err) {
       return errorResult(err, {
         code: 'sandbox_approve_failed',
