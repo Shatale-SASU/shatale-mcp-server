@@ -10,7 +10,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { resolve } from 'node:path'
 
 const ENTRY = resolve(import.meta.dirname, '../../dist/index.js')
-const SECRET_KEY = 'sk_test_supersecret_marker_9f8a7b6c'
+// A valid sandbox-shaped key (sk_sandbox_*) so the server starts and the hardening test runs; the value is a
+// secret marker that must never appear in stdout/stderr. (Was sk_test_*, a prefix the server no longer treats
+// as sandbox after SHAT-1460 pruned dead prefixes.)
+const SECRET_KEY = 'sk_sandbox_supersecret_marker_9f8a7b6c'
 
 interface Harness {
   proc: ChildProcess

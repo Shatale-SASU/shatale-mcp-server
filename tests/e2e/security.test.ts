@@ -63,6 +63,18 @@ describe('Security: Key Validation', () => {
     expect(code).toBe(1)
   })
 
+  // SHAT-1460 (Blocker 2): sk_test_ is a DEAD prefix — the identity service issues only sk_sandbox_ for
+  // sandbox. It must be REFUSED at startup, not silently treated as a sandbox key. This pins isSandboxKey:
+  // a mutant re-widening it to accept sk_test_ made the server start in sandbox mode and this test go red.
+  test('rejects sk_test_ keys — a dead prefix the system never issues', async () => {
+    const { stderr, code } = await spawnAndCapture({
+      SHATALE_API_KEY: 'sk_test_abc',
+      SHATALE_MODE: '',
+    })
+    expect(code).toBe(1)
+    expect(stderr).toContain('unrecognized API key')
+  })
+
   // A live key WITH explicit intent is ACCEPTED — the MCP now has a working
   // normal/prod mode (SHAT two-mode design). Without money-GO it starts in
   // onboarding-only live mode and does NOT hit the fat-finger refusal.

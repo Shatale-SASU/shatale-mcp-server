@@ -19,7 +19,7 @@ If you discover a security vulnerability, please report it responsibly:
 
 This MCP server is designed with the following security principles:
 
-- **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true: a live key without `SHATALE_MODE=live` refuses to start; that mode without a live key also refuses; and the purchase/credential tools are only registered when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. Three deliberate acts, no accidental path.
+- **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true, in three deliberate acts with no accidental path between them: a live key (`sk_live_*`) supplied WITHOUT `SHATALE_MODE=live` refuses to start; `SHATALE_MODE=live` supplied WITHOUT a live key also refuses; and the purchase/credential tools are registered only when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. A live key with the mode and no money-GO runs onboarding-only.
 - **No card data:** PAN, CVV, and card details are never exposed through MCP tools
 - **No credentials:** Email aliases and credential vault are not accessible
 - **Local transport:** Runs as a local stdio process, no network server exposed

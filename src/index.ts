@@ -20,7 +20,7 @@ import { createCheckoutTools } from './tools/checkout.js'
 import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
-import { createCommonTools } from './tools/common.js'
+import { createCommonTools, isSandboxKey } from './tools/common.js'
 import type { ToolDefinition, ToolHandler } from './types.js'
 import { textResult } from './types.js'
 
@@ -59,7 +59,7 @@ if (!ALLOWED_HOSTS.some(h => apiBaseUrl.hostname === h || apiBaseUrl.hostname.en
 const apiBase = apiBaseUrl.toString().replace(/\/$/, '')
 
 const isGuest = !apiKey
-const isSandbox = apiKey.startsWith('sk_test_') || apiKey.startsWith('sh_test_') || apiKey.startsWith('sk_sandbox_')
+const isSandbox = isSandboxKey(apiKey)
 const isLive = isLiveKey && liveIntent
 
 // Reject keys that are neither sandbox nor live. Previously such a key fell into
@@ -107,16 +107,18 @@ function registerModule(mod: { tools: ToolDefinition[]; handlers: Record<string,
 // Always register guest + common + catalog tools.
 // explain_shatale reports the live tool list, so getToolNames is lazy — it reads
 // allTools at call time, after every module below has registered.
-registerModule(
-  createGuestTools({
-    isGuest,
-    isSandbox,
-    isLive,
-    moneyEnabled: moneyGo,
-    getToolNames: () => allTools.map((t) => t.name),
-  }),
-)
-registerModule(createCommonTools(client))
+// One context object for BOTH explain_shatale and list_capabilities, so they report the same four modes and
+// the same live tool roster (SHAT-1461). getToolNames is lazy — it reads allTools at call time, after every
+// module below has registered.
+const toolContext = {
+  isGuest,
+  isSandbox,
+  isLive,
+  moneyEnabled: moneyGo,
+  getToolNames: () => allTools.map((t) => t.name),
+}
+registerModule(createGuestTools(toolContext))
+registerModule(createCommonTools(client, toolContext))
 registerModule(createCatalogTools(client))
 
 // Register authenticated tools once a key is present.
