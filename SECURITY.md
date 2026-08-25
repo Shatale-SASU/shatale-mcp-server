@@ -19,7 +19,7 @@ If you discover a security vulnerability, please report it responsibly:
 
 This MCP server is designed with the following security principles:
 
-- **Sandbox only:** Production API keys (`sh_live_*` / `sk_live_*`) are rejected at startup
+- **Explicit intent for live:** Production API keys (`sh_live_*` / `sk_live_*`) run only under `SHATALE_MODE=live`; a live key supplied without that intent is rejected at startup, so a fat-fingered live key never silently moves real money
 - **No card data:** PAN, CVV, and card details are never exposed through MCP tools
 - **No credentials:** Email aliases and credential vault are not accessible
 - **Local transport:** Runs as a local stdio process, no network server exposed
