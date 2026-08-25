@@ -65,7 +65,11 @@ describe('Guest Mode (no API key)', () => {
     const text = result.content[0].text
     expect(text).toContain('"result": "approved"')
     expect(text).toContain('demo_trace_')
-    expect(text).toContain('sandbox_equivalent_tools')
+    // SHAT-1461 (Blocker 2): assert the VALUE, not just the field name. The old
+    // toContain('sandbox_equivalent_tools') survived a mutant that reverted the value to the blocked
+    // ['request_purchase', ...]; this pins the corrected value and forbids naming the blocked tool.
+    expect(text).toMatch(/"sandbox_equivalent_tools":\s*\[\s*"sandbox_simulate_authorization"\s*\]/)
+    expect(text).not.toContain('"request_purchase"')
   })
 
   test('simulate_purchase_flow declines a blocked category (gambling)', async () => {
@@ -107,15 +111,26 @@ describe('Guest Mode (no API key)', () => {
     expect(result.content[0].text).toContain('SaaS subscriptions')
   })
 
-  test('generate_policy_template includes a validation block', async () => {
-    const result = await client.callTool('generate_policy_template', {
-      use_case: 'cloud infrastructure',
-      monthly_budget: 8000,
-    })
-    const text = result.content[0].text
-    expect(text).toContain('Validation')
-    expect(text).toContain('risk_level')
-    expect(text).toContain('recommended_controls')
+  test('generate_policy_template validation carries the CORRECT risk level and controls, not just the field names', async () => {
+    // SHAT-1462 (D): assert VALUES, not substrings of the field names. A test that only checks the text
+    // contains "risk_level" would survive a mutant that returns a constant risk_level or wrong control numbers.
+    const high = (
+      await client.callTool('generate_policy_template', { use_case: 'cloud infrastructure', monthly_budget: 8000 })
+    ).content[0].text
+    expect(high).toContain('Validation')
+    expect(high).toContain('recommended_controls')
+    expect(high).toContain('"risk_level": "high"') // budget 8000 >= 5000 → high, not just present
+    expect(high).toContain('"approval_required_above": 4000') // 8000 * 0.5
+    expect(high).toContain('"max_transaction_amount": 2000') // 8000 * 0.25
+    expect(high).toMatch(/Monthly budget \(8000\) is high/) // the high-budget warning actually fires
+
+    // A low budget must yield a DIFFERENT risk level — proves risk_level varies with input, so a
+    // constant-return mutant fails one of the two cases.
+    const low = (
+      await client.callTool('generate_policy_template', { use_case: 'general', monthly_budget: 800 })
+    ).content[0].text
+    expect(low).toContain('"risk_level": "low"')
+    expect(low).not.toContain('"risk_level": "high"')
   })
 
   test('explain_shatale reports GUEST mode and lists available tools', async () => {
@@ -126,10 +141,15 @@ describe('Guest Mode (no API key)', () => {
     expect(text).toContain('register?ref=mcp')
   })
 
-  test('list_capabilities shows guest mode', async () => {
+  test('list_capabilities shows guest mode and the FULL registered roster (router-driven)', async () => {
     const result = await client.callTool('list_capabilities')
-    expect(result.content[0].text).toContain('guest')
-    expect(result.content[0].text).toContain('explain_shatale')
+    const text = result.content[0].text
+    expect(text).toContain('GUEST')
+    expect(text).toContain('explain_shatale')
+    // SHAT-1461 (Blocker 1): the list is derived from the router, so it must include the catalog tools the
+    // old static list omitted in every mode. A regression to a hand-maintained per-mode array drops these.
+    expect(text).toContain('search_merchants')
+    expect(text).toContain('get_merchant_details')
   })
 
   test('resources are available', async () => {
