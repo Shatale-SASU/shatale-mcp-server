@@ -38,7 +38,7 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 18-tool lifecycle). Production keys (`sk_live_*`) are blocked in this MCP server by design — a local IDE/agent is not a trust boundary for live payment credentials; integrate via your backend.
+> Guest = **explore** (3 simulation tools + catalog). Sandbox = **build** (full 18-tool lifecycle). Production keys (`sk_live_*`) run only under an explicit `SHATALE_MODE=live` operator intent — supplied without it, the server refuses to start, because a local IDE/agent is not by default a trust boundary for live payment credentials.
 
 ## Configure Your IDE
 
@@ -92,7 +92,7 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `explain_shatale` | **Start here.** Reports the current mode (guest/sandbox/blocked production), the tools available to you, and the recommended first prompt |
+| `explain_shatale` | **Start here.** Reports the current mode (guest/sandbox/live), the tools available to you, and the recommended first prompt |
 | `simulate_purchase_flow` | Simulates the Shatale agent payment lifecycle in guest mode — policy check, approve/decline/requires-approval decision, virtual card step, timeline. No real API call or payment is made |
 | `generate_policy_template` | Generates **and validates** a spending policy for your use case — returns risk level, warnings, and recommended controls (never a silently unsafe policy) |
 | `list_mcc_codes` | Browse merchant category codes for policy design |
@@ -124,7 +124,7 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `request_temporary_credentials` | Get temporary virtual card credentials (PAN, CVV, exp) for a purchase |
+| `request_temporary_credentials` | Get short-lived merchant credentials — a relay email and a single-use relay password — for a merchant that requires an account. Raw card numbers (PAN/CVV) are never returned here; card data is delivered out-of-band |
 | `get_credential_status` | Check the status of issued credentials |
 
 ### Sandbox Testing
@@ -159,7 +159,7 @@ AI Agent → MCP Server → Shatale Sandbox API → issuing partner → virtual 
 2. **Shatale evaluates policy** — checks delegation scope, amount limits, MCC rules
 3. **User verifies** (if new) — opens personalized onboarding URL, confirms identity
 4. **Virtual card issued** — the issuing partner provisions a card locked to the merchant and amount
-5. **Agent receives credentials** — PAN, CVV, expiry via `request_temporary_credentials`
+5. **Agent receives merchant credentials** — a relay email and single-use relay password via `request_temporary_credentials`; raw card numbers (PAN/CVV) are never returned in-band, card data is delivered out-of-band
 6. **Agent completes purchase** — uses card at the merchant
 
 In **guest mode** none of this hits the network — `simulate_purchase_flow` walks the same steps deterministically so you can see them before registering for a sandbox key.
@@ -174,7 +174,7 @@ Built-in documentation available as MCP resources:
 
 ## Security
 
-- Only sandbox keys (`sk_sandbox_*`) are accepted — production keys (`sk_live_*`) are rejected
+- Sandbox keys (`sk_sandbox_*`) run the demo; production keys (`sk_live_*`) are accepted only under an explicit `SHATALE_MODE=live` operator intent, and a live key supplied without it makes the server refuse to start
 - Card credentials are encrypted (JWE) and delivered only to authorized agents
 - Local stdio transport — no network server exposed
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting
