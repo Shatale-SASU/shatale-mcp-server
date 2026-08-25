@@ -1,5 +1,6 @@
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
+import type { GuestContext } from './guest.js'
 import { jsonResult, textResult } from '../types.js'
 
 // SHAT-1460/2484: a sandbox key is EXACTLY `sk_sandbox_*`. The identity service issues `sk_sandbox_` for
@@ -10,11 +11,7 @@ export function isSandboxKey(apiKey: string): boolean {
   return apiKey.startsWith('sk_sandbox_')
 }
 
-export function createCommonTools(client: ShataleClient): ToolModule {
-  const apiKey = process.env.SHATALE_API_KEY ?? ''
-  const isGuest = !apiKey
-  const isSandbox = isSandboxKey(apiKey)
-  const mode = isGuest ? 'guest' : isSandbox ? 'sandbox' : 'production'
+export function createCommonTools(client: ShataleClient, ctx: GuestContext): ToolModule {
 
   return {
     tools: [
@@ -43,7 +40,7 @@ export function createCommonTools(client: ShataleClient): ToolModule {
       },
     ],
     handlers: {
-      list_capabilities: async () => handleListCapabilities(mode),
+      list_capabilities: async () => handleListCapabilities(ctx),
 
       list_mcc_codes: async (args) => {
         try {
@@ -59,59 +56,38 @@ export function createCommonTools(client: ShataleClient): ToolModule {
   }
 }
 
-function handleListCapabilities(mode: string) {
-  const guestTools = [
-    'explain_shatale -- Learn about Shatale',
-    'simulate_purchase_flow -- Walk through a purchase scenario',
-    'generate_policy_template -- Generate a spending policy',
-  ]
+// SHAT-1461: the tool list is built FROM THE ROUTER (ctx.getToolNames), never a hand-maintained per-mode
+// array. The old static lists drifted three ways at once: they used only three modes (the server has four —
+// live-money-GO and live-onboarding-only are distinct), they omitted seven registered tools (the whole
+// checkout and onboarding groups) in every mode, and they named request_purchase as callable in sandbox where
+// it is client-blocked. Deriving the list from the tools this process actually registered makes all three
+// impossible by construction — the same fix explain_shatale already uses.
+function handleListCapabilities(ctx: GuestContext) {
+  const mode = ctx.isGuest
+    ? 'GUEST'
+    : ctx.isSandbox
+      ? 'DEMO (SANDBOX)'
+      : ctx.moneyEnabled
+        ? 'LIVE (money-GO)'
+        : 'LIVE (onboarding-only)'
 
-  const commonTools = [
-    'list_capabilities -- This tool',
-    'list_mcc_codes -- Search MCC codes',
-  ]
+  const note = ctx.isGuest
+    ? 'No API key configured — explore, simulate, and generate a policy. No real call or payment. Set SHATALE_API_KEY to unlock more tools.'
+    : ctx.isSandbox
+      ? 'Sandbox key — the full API against test data, no real money. Note: request_purchase is registered but BLOCKED under a sandbox key; use sandbox_simulate_authorization instead.'
+      : ctx.moneyEnabled
+        ? 'Live key with money-GO — real production APIs; the purchase and credential tools move REAL money.'
+        : 'Live key, onboarding-only — real APIs, but money tools are disabled (they require SHATALE_MONEY_GO).'
 
-  const purchaseTools = [
-    'request_purchase -- Execute a purchase',
-    'get_purchase_status -- Check purchase status',
-    'cancel_purchase -- Cancel a pending purchase',
-  ]
+  const toolList = ctx
+    .getToolNames()
+    .map((n) => `- \`${n}\``)
+    .join('\n')
 
-  const credentialTools = [
-    'request_temporary_credentials -- Get short-lived card credentials',
-    'get_credential_status -- Check credential request status',
-  ]
+  return textResult(`# Shatale MCP Server — ${mode} mode
 
-  const sandboxTools = [
-    'sandbox_simulate_authorization -- Run the policy engine (side-effect-free: no ledger, no money)',
-    'sandbox_complete_onboarding -- Skip onboarding for a test user',
-    'sandbox_approve_purchase -- Approve a sandbox purchase pending approval',
-  ]
+${note}
 
-  let tools = [...guestTools, ...commonTools]
-  let description = ''
-
-  switch (mode) {
-    case 'guest':
-      description = 'Guest mode -- no API key configured. Set SHATALE_API_KEY to unlock more tools.'
-      break
-    case 'sandbox':
-      description =
-        'Sandbox mode -- using a sandbox API key. request_purchase is disabled here ' +
-        '(it is not sandbox-gated on the backend); use sandbox_simulate_authorization instead.'
-      tools = [...tools, ...purchaseTools, ...credentialTools, ...sandboxTools]
-      break
-    case 'production':
-      description = 'Production mode -- using live API key. Real purchases enabled.'
-      tools = [...tools, ...purchaseTools, ...credentialTools]
-      break
-  }
-
-  return textResult(`# Shatale MCP Server -- ${mode} mode
-
-${description}
-
-## Available tools
-
-${tools.map((t) => `- ${t}`).join('\n')}`)
+## Tools available in this mode
+${toolList}`)
 }

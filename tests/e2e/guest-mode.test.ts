@@ -65,7 +65,11 @@ describe('Guest Mode (no API key)', () => {
     const text = result.content[0].text
     expect(text).toContain('"result": "approved"')
     expect(text).toContain('demo_trace_')
-    expect(text).toContain('sandbox_equivalent_tools')
+    // SHAT-1461 (Blocker 2): assert the VALUE, not just the field name. The old
+    // toContain('sandbox_equivalent_tools') survived a mutant that reverted the value to the blocked
+    // ['request_purchase', ...]; this pins the corrected value and forbids naming the blocked tool.
+    expect(text).toMatch(/"sandbox_equivalent_tools":\s*\[\s*"sandbox_simulate_authorization"\s*\]/)
+    expect(text).not.toContain('"request_purchase"')
   })
 
   test('simulate_purchase_flow declines a blocked category (gambling)', async () => {
@@ -137,10 +141,15 @@ describe('Guest Mode (no API key)', () => {
     expect(text).toContain('register?ref=mcp')
   })
 
-  test('list_capabilities shows guest mode', async () => {
+  test('list_capabilities shows guest mode and the FULL registered roster (router-driven)', async () => {
     const result = await client.callTool('list_capabilities')
-    expect(result.content[0].text).toContain('guest')
-    expect(result.content[0].text).toContain('explain_shatale')
+    const text = result.content[0].text
+    expect(text).toContain('GUEST')
+    expect(text).toContain('explain_shatale')
+    // SHAT-1461 (Blocker 1): the list is derived from the router, so it must include the catalog tools the
+    // old static list omitted in every mode. A regression to a hand-maintained per-mode array drops these.
+    expect(text).toContain('search_merchants')
+    expect(text).toContain('get_merchant_details')
   })
 
   test('resources are available', async () => {

@@ -104,16 +104,18 @@ function registerModule(mod: { tools: ToolDefinition[]; handlers: Record<string,
 // Always register guest + common + catalog tools.
 // explain_shatale reports the live tool list, so getToolNames is lazy — it reads
 // allTools at call time, after every module below has registered.
-registerModule(
-  createGuestTools({
-    isGuest,
-    isSandbox,
-    isLive,
-    moneyEnabled: moneyGo,
-    getToolNames: () => allTools.map((t) => t.name),
-  }),
-)
-registerModule(createCommonTools(client))
+// One context object for BOTH explain_shatale and list_capabilities, so they report the same four modes and
+// the same live tool roster (SHAT-1461). getToolNames is lazy — it reads allTools at call time, after every
+// module below has registered.
+const toolContext = {
+  isGuest,
+  isSandbox,
+  isLive,
+  moneyEnabled: moneyGo,
+  getToolNames: () => allTools.map((t) => t.name),
+}
+registerModule(createGuestTools(toolContext))
+registerModule(createCommonTools(client, toolContext))
 registerModule(createCatalogTools(client))
 
 // Register authenticated tools once a key is present.

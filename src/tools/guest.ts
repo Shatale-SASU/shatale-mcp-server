@@ -230,8 +230,8 @@ function handleSimulatePurchase(args: Record<string, unknown>) {
     // SHAT-1461: the sandbox equivalent is sandbox_simulate_authorization, NOT request_purchase. Under a
     // sandbox key request_purchase is BLOCKED client-side (SHAT-1488, purchase.ts) and steers callers here —
     // so listing it as the sandbox equivalent sent a demo user to a tool that refuses them (a false promise on
-    // the acquisition path). The sandbox mode description already says this (see explain_shatale); this line
-    // was the one place still naming the blocked tool.
+    // the acquisition path). The sandbox mode description already says this (see explain_shatale, and
+    // list_capabilities, which now derives its list from the router).
     sandbox_equivalent_tools: ['sandbox_simulate_authorization'],
     next_step: {
       label: 'Run the same flow against Shatale Sandbox APIs',
@@ -373,7 +373,7 @@ ${warnings.map((w) => `- ⚠️ ${w}`).join('\n')}
 - Review and adjust after the first month of usage
 
 ## Next step
-Apply this policy against Shatale Sandbox APIs — no code changes: add a \`sk_sandbox_*\` key and re-run.
+Exercise this policy in Sandbox via \`sandbox_simulate_authorization\` — no code changes: add a \`sk_sandbox_*\` key and re-run.
 Register: ${REGISTER_URL}`)
 }
 
