@@ -50,6 +50,61 @@
     }
   },
   {
+    "label": "search_merchants (query parameter NAMES are the contract for a read)",
+    "struct_hint": "apps/api/api/v1/merchants.go catalog handler query params",
+    "method": "GET",
+    "path": "/v1/merchants/catalog",
+    "query": {
+      "q": "nike",
+      "country": "FR"
+    }
+  },
+  {
+    "label": "get_merchant_details (id is URL-encoded into ONE path segment)",
+    "struct_hint": "apps/api/api/v1/merchants.go catalog detail route",
+    "method": "GET",
+    "path": "/v1/merchants/catalog/mrc%20fixture%2F1"
+  },
+  {
+    "label": "list_mcc_codes",
+    "struct_hint": "apps/api/api/v1/mcc_codes.go ServeMCCCodes query params",
+    "method": "GET",
+    "path": "/v1/mcc-codes",
+    "query": {
+      "q": "gambling"
+    }
+  },
+  {
+    "label": "get_purchase_status",
+    "struct_hint": "apps/api/api/v1/purchases.go get route",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_2"
+  },
+  {
+    "label": "get_credential_status",
+    "struct_hint": "apps/api/api/v1/credentials.go status route",
+    "method": "GET",
+    "path": "/v1/credentials/cred_fixture_1"
+  },
+  {
+    "label": "sandbox_complete_onboarding (a WRITE with no body — the path IS the request)",
+    "struct_hint": "apps/api/api/v1/sandbox.go complete-onboarding route",
+    "method": "POST",
+    "path": "/v1/sandbox/users/usr_fixture_1/onboarding"
+  },
+  {
+    "label": "sandbox_approve_purchase (a WRITE with no body — the path IS the request)",
+    "struct_hint": "apps/api/api/v1/sandbox.go approve route",
+    "method": "POST",
+    "path": "/v1/sandbox/purchases/pur_fixture_5/approve"
+  },
+  {
+    "label": "get_credential_emails",
+    "struct_hint": "apps/api/api/v1/credentials.go emails route",
+    "method": "GET",
+    "path": "/v1/credentials/cred_fixture_2/emails"
+  },
+  {
     "label": "request_purchase (decimal amount → integer amount_cents, merchant → merchant_ref)",
     "struct_hint": "apps/api/api/v1/purchases.go create request struct",
     "method": "POST",
@@ -65,6 +120,18 @@
     }
   },
   {
+    "label": "get_checkout_cardholder (LIVE + money-GO only; shares one route with get_checkout_customer)",
+    "struct_hint": "apps/api/api/v1/purchases.go checkout-identity route",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_3/checkout-identity"
+  },
+  {
+    "label": "get_checkout_customer (LIVE + money-GO only; same route, different half of the response)",
+    "struct_hint": "apps/api/api/v1/purchases.go checkout-identity route",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_4/checkout-identity"
+  },
+  {
     "label": "register_user_profile",
     "struct_hint": "apps/api/api/v1/onboarding.go register request struct",
     "method": "POST",
@@ -78,5 +145,11 @@
       },
       "intended_use": "purchase"
     }
+  },
+  {
+    "label": "get_onboarding_status",
+    "struct_hint": "apps/api/api/v1/onboarding.go session status route",
+    "method": "GET",
+    "path": "/v1/onboarding/sessions/sess_fixture_1"
   }
 ]
