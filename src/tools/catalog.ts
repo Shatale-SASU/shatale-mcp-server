@@ -2,6 +2,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult } from '../types.js'
 import { errorResult } from '../errors.js'
+import { requireId } from '../validate.js'
 
 export function createCatalogTools(client: ShataleClient): ToolModule {
   return {
@@ -55,8 +56,10 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
       },
 
       get_merchant_details: async (args) => {
+        const merchantId = requireId(args, 'merchant_id')
+        if (!merchantId.ok) return merchantId.result
         try {
-          const result = await client.request('GET', `/v1/merchants/catalog/${encodeURIComponent(String(args.merchant_id))}`)
+          const result = await client.request('GET', `/v1/merchants/catalog/${encodeURIComponent(merchantId.value)}`)
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
