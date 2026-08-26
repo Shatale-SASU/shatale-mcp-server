@@ -1,15 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ToolDefinition } from '../../src/types.js'
-import { createGuestTools } from '../../src/tools/guest.js'
-import { createCommonTools } from '../../src/tools/common.js'
-import { createCatalogTools } from '../../src/tools/catalog.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
-import { createPurchaseTools } from '../../src/tools/purchase.js'
-import { createCredentialTools } from '../../src/tools/credentials.js'
-import { createCheckoutTools } from '../../src/tools/checkout.js'
-import { createSandboxTools } from '../../src/tools/sandbox.js'
+import { rosterFromRuntime } from '../harness/toolRoster.js'
 
 // SHAT-2527. tests/tool-coverage.md is hand-maintained, and it has been wrong in both directions:
 // first 17 rows against 20 tools while reporting 100%, then three rows added and marked "not
@@ -51,36 +43,8 @@ const rosterFromText = (): string[] => {
   return [...new Set(names)].sort()
 }
 
-/**
- * Derivation 2: what the modules produce when called.
- *
- * Every factory, with every flag ON, because no single MODE registers all of them — guest is 7,
- * sandbox 15, live-with-money 14. The matrix documents the whole surface, so the union is the right
- * comparison. The client is never used: only declarations are read, and nothing here makes a
- * request.
- */
-const rosterFromRuntime = (): string[] => {
-  const client = {} as never
-  const ctx = {
-    isGuest: false,
-    isSandbox: true,
-    isLive: false,
-    moneyEnabled: true,
-    getToolNames: () => [] as string[],
-  }
-  const modules = [
-    createGuestTools(ctx),
-    createCommonTools(client, ctx),
-    createCatalogTools(client),
-    createOnboardingTools(client, { enabled: true }),
-    createPurchaseTools(client, { isSandbox: true }),
-    createCredentialTools(client, { emailsEnabled: true }),
-    createCheckoutTools(client),
-    createSandboxTools(client),
-  ]
-  const names = modules.flatMap((m) => (m.tools as ToolDefinition[]).map((t) => t.name))
-  return [...new Set(names)].sort()
-}
+// Derivation 2 — what the modules produce when called — lives in tests/harness/toolRoster.ts,
+// because the storefront gate needs the same roster and a second copy is how the first goes stale.
 
 const matrixRows = (): string[] => {
   const md = readFileSync(resolve(ROOT, 'tests/tool-coverage.md'), 'utf8')
