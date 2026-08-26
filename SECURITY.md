@@ -42,7 +42,18 @@ This MCP server is designed with the following security principles:
   change to BOTH tools plus a flow that uses the password without revealing it — not a formatting
   one. What is NOT accessible is the card vault: see the PAN/CVV bullet above.
 - **Local transport:** Runs as a local stdio process, no network server exposed
-- **Host allowlist:** Outbound calls are restricted to `*.shatale.com` and localhost
+- **Host allowlist:** Outbound calls are restricted to `*.shatale.com` and localhost, over
+  `https://` (loopback excepted, for the test harness and local development). A lookalike domain
+  such as `evilshatale.com` is refused — the suffix carries the leading dot.
+- **A live key goes to the canonical host.** `*.shatale.com` is a wide rule, and what passes it
+  receives `Authorization: Bearer` — so a dangling CNAME or a taken-over subdomain of our own
+  zone would be handed a live key and every purchase body after it. In live mode
+  (`sk_live_*` + `SHATALE_MODE=live`) the host must be `api.shatale.com` unless
+  `SHATALE_ALLOW_NONSTANDARD_LIVE_HOST=true` says otherwise, so that widening is something
+  somebody typed rather than a default nobody noticed. Guest and sandbox are unaffected.
+- **`SHATALE_API_URL` is the variable that decides all of the above**, and until SHAT-2558 no
+  document mentioned it at all. It redirects every outbound call, and the API key travels with
+  them. Leave it unset unless you know why you are changing it.
 - **Input validation:** Tool inputs are validated (zod) before any API call — both the request
   BODIES (purchases, onboarding, credentials, sandbox authorization) and every ID that becomes a
   URL path segment. The second half is new: until SHAT-2526 the id-taking handlers interpolated
