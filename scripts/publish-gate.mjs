@@ -50,10 +50,18 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const ENTRY = join(ROOT, 'dist', 'index.js')
 
-// The one deployment the existing live suite already targets (ci-sandbox.yml / nightly.yml
-// run with SHATALE_TEST_KEY and no SHATALE_API_URL, i.e. the default prod base). Overridable
-// so the gate can be pointed at staging the day a staging-issued sandbox key exists.
-const DEFAULT_API_URL = 'https://api.shatale.com'
+// ⚠️ THERE IS NO DEFAULT TARGET ANY MORE, AND THAT IS THE POINT.
+//
+// This used to read `SHATALE_GATE_API_URL || 'https://api.shatale.com'`. The workflow passes that
+// variable from `vars.SHATALE_GATE_API_URL`, which was NEVER SET — so every run of this gate silently
+// aimed at PRODUCTION while its caller believed the target was configurable. The release process
+// requires two legs, staging then prod; only the second had ever run, and nothing said so.
+//
+// An unset variable did not fail. It produced a DIFFERENT SUBJECT under the same green — which is
+// the failure this gate was written to prevent, appearing inside the gate itself.
+//
+// So the target must now be STATED by the caller and is PRINTED before anything is certified. A
+// green that does not name what it certified is worth what the last one was worth.
 
 const NEUTRAL_TEST_CARD = '4111111111111111' // lets the REAL policy decide (not the forced-approve 4242)
 
@@ -95,7 +103,16 @@ function keyFingerprint(key) {
 // ── 1. Environment ────────────────────────────────────────────────────────────
 
 const apiKey = process.env.SHATALE_GATE_API_KEY || process.env.SHATALE_TEST_KEY || ''
-const apiUrl = (process.env.SHATALE_GATE_API_URL || DEFAULT_API_URL).replace(/\/+$/, '')
+const rawApiUrl = (process.env.SHATALE_GATE_API_URL || '').trim()
+if (!rawApiUrl) {
+  abort(
+    'SHATALE_GATE_API_URL is not set.',
+    'The gate no longer guesses a target. It used to default to production, so a run that meant to ' +
+      'certify staging certified prod instead and reported the same green. State the deployment ' +
+      'explicitly — the workflow passes it per trigger.',
+  )
+}
+const apiUrl = rawApiUrl.replace(/\/+$/, '')
 const explicitAgentId = process.env.SHATALE_GATE_AGENT_ID || ''
 
 if (!apiKey) {
@@ -126,6 +143,12 @@ try {
 if (!(apiHost.endsWith('.shatale.com') || apiHost === 'shatale.com')) {
   abort(`Refusing to send a real API key to ${apiHost}.`, 'Only *.shatale.com targets are allowed.')
 }
+
+// ⚠️ SAY WHAT IS BEING CERTIFIED, BEFORE CERTIFYING IT. The previous version printed no target at
+// all, so its output was identical whether it had reached staging or production — and it had always
+// reached production. A reader of a green run could not tell, and did not.
+console.error(`\n─── gate target: ${apiUrl}`)
+console.error(`─── key: ${keyFingerprint(apiKey)}\n`)
 
 // ── 2. The build under test must BE the build ─────────────────────────────────
 //
