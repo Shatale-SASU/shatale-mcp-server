@@ -161,14 +161,27 @@ describe('Guest Mode (no API key)', () => {
     expect(uris).toContain('shatale://guides/verticals')
   })
 
+  // Renamed with their contents (SHAT-2604): shopping-agent and travel-agent told the model to
+  // CREATE AN AGENT, set a per-transaction limit and block categories, and no tool in any mode does
+  // any of those. They now draft a policy and simulate against it, which is what the tools do.
   test('prompts are available', async () => {
     const prompts = await client.listPrompts()
     expect(prompts.length).toBeGreaterThan(0)
     const names = prompts.map((p: any) => p.name)
-    expect(names).toContain('shopping-agent')
-    expect(names).toContain('travel-agent')
+    expect(names).toContain('shopping-policy')
+    expect(names).toContain('travel-policy')
     expect(names).toContain('policy-designer')
-    expect(names).toContain('test-my-setup')
+  })
+
+  // ⚠️ AND THE GUEST DOES NOT SEE A PROMPT IT CANNOT CARRY OUT. exercise-the-policy-engine drives
+  // sandbox_simulate_authorization, which guest mode does not register; offering it here would not
+  // fail, it would make the model improvise. This file runs WITHOUT a key, so it is the right place
+  // to assert the absence.
+  test('a prompt needing sandbox tools is not offered to a guest', async () => {
+    const names = (await client.listPrompts()).map((p: any) => p.name)
+    // Positive control: the listing is populated, so a missing name means something.
+    expect(names).toContain('policy-designer')
+    expect(names).not.toContain('exercise-the-policy-engine')
   })
 
   test('calling unknown tool returns error', async () => {
