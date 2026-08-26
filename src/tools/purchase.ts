@@ -22,73 +22,11 @@ const requestPurchaseSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-/**
- * Defense-in-depth PCI guard. The backend's purchase response embeds the raw
- * pool-card PAN + CVV under `payment.card` when a card is issued (apps/api
- * purchases.go purchaseToJSON). That raw card MUST NOT flow into the LLM
- * reasoning context / MCP-host logs / chat history — it belongs only in the
- * out-of-band checkout executor via the dedicated reveal path. Strip it here so
- * the tool result carries last4 + constraints, never the full number/cvv.
- * (Backend ticket B-1/SHAT will also stop emitting it; this stays as belt-and-braces.)
- */
-// Strip PAN and CVV from anything a tool is about to hand back.
-//
-// This used to reach exactly one shape — `payment.card` — while guest.ts told readers
-// a raw PAN is "NEVER returned". Review's call was to widen the redactor rather than
-// narrow the copy, and that is the right side to move: the copy is the promise a
-// reader acts on, and narrowing a PCI claim to match the code optimises the wrong
-// half. A caller who believes the promise and finds a PAN has been misled by us; a
-// caller who believes it and finds nothing has lost nothing.
-//
-// So this walks the whole result and enforces one invariant everywhere: NO TOOL
-// RESULT CARRIES A NUMBER+CVV PAIR. Today's backend emits only the static 4242 test
-// card, so nothing here is a live leak — which is precisely why it is cheap to make
-// the guarantee true before it needs to be.
-//
-// The walk is depth-limited and cycle-safe: a redactor that hangs on a self-
-// referential response would take the tool down with it.
-export function redactPurchaseCard(result: unknown): unknown {
-  return scrub(result, 0, new WeakSet())
-}
-
-const CARD_NOTE =
-  'Raw PAN/CVV are withheld from the agent context (PCI). Retrieve the card out-of-band ' +
-  'via the checkout executor, not from this response. For the checkout form\'s identity fields, ' +
-  'use get_checkout_cardholder (cardholder/billing) and get_checkout_customer (buyer).'
-
-// A node is card-ish if it carries a PAN-shaped field. Keyed on the field, not on the
-// parent's name, because the parent is what kept changing — `card`, `issued_card`,
-// a bare array element — while the sensitive field itself never did.
-function isCardish(o: Record<string, unknown>): boolean {
-  return typeof o.number === 'string' || typeof o.card_number === 'string' || 'cvv' in o || 'cvc' in o
-}
-
-function scrub(node: unknown, depth: number, seen: WeakSet<object>): unknown {
-  if (depth > 12 || !node || typeof node !== 'object') return node
-  if (seen.has(node as object)) return node
-  seen.add(node as object)
-
-  if (Array.isArray(node)) return node.map((v) => scrub(v, depth + 1, seen))
-
-  const o = node as Record<string, unknown>
-  const out: Record<string, unknown> = {}
-  for (const k of Object.keys(o)) out[k] = scrub(o[k], depth + 1, seen)
-
-  if (isCardish(o)) {
-    const pan = typeof o.number === 'string' ? o.number : typeof o.card_number === 'string' ? o.card_number : undefined
-    if (pan) {
-      // last4 is derived before the delete — an agent still needs to tell two cards
-      // apart, and taking that away would push it to ask for the PAN some other way.
-      out.last4 = pan.slice(-4)
-      delete out.number
-      delete out.card_number
-    }
-    delete out.cvv
-    delete out.cvc
-    out._note = CARD_NOTE
-  }
-  return out
-}
+// redactPurchaseCard moved to src/redact.ts and is now applied inside ShataleClient.request, so the
+// guarantee is the client's rather than four call sites'. Re-exported here because the tests and
+// tools that import it from this path are about the FUNCTION, and moving a file should not be the
+// thing that breaks them.
+export { redactPurchaseCard } from '../redact.js'
 
 export interface PurchaseToolOptions {
   /**
@@ -228,7 +166,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             idempotency_key: input.idempotency_key,
           })
           // PCI: never surface raw PAN/CVV into the agent context.
-          return jsonResult(redactPurchaseCard(result))
+          return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_failed',
@@ -246,7 +184,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           // PCI: GET /v1/purchases/{id} advances the state machine and can itself
           // issue a card (legacy issueCard path returns the raw PAN inline), so
           // redact here too — never surface a raw PAN/CVV into the agent context.
-          return jsonResult(redactPurchaseCard(result))
+          return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_status_failed',
@@ -265,7 +203,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             args.reason ? String(args.reason) : undefined,
           )
           // Belt-and-braces: cancel's response also carries the payment block.
-          return jsonResult(redactPurchaseCard(result))
+          return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
             code: 'purchase_cancel_failed',
