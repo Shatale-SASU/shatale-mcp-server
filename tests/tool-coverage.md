@@ -12,10 +12,22 @@ Last updated: 2026-08-26 (SHAT-2527)
 > feature flags), 7 (live onboarding-only) or 14 (live + money-GO). "17" was never a count of
 > anything the server does.
 >
-> **A hand-written list silently excludes everything added after it.** The same shape put four
-> deterministic test files outside the only suite that gates a pull request (SHAT-1325). Treat the
-> percentages below as illustration, not as a measurement; the roster of record is
-> `grep -h "name: '" src/tools/*.ts`.
+> **A hand-written list silently excludes everything added after it.** Treat the percentages below
+> as illustration, not as a measurement; the roster of record is `grep -h "name: '" src/tools/*.ts`,
+> and tests/tool-coverage.test.ts now fails if this table and that roster disagree.
+>
+> 🔴 **AND THE CORRECTION WAS MADE THE SAME WAY AS THE DEFECT (2026-08-27).** The three missing rows
+> were added and marked "not covered here" — by hand, without looking. All three are covered, by
+> five to eight files each: `get_checkout_cardholder` and `get_checkout_customer` in
+> checkout-tools, mock-contract, wire-fixtures and no-tool-result-carries-a-card;
+> `get_credential_emails` in those plus contract, sandbox-tools and
+> ids-never-reach-the-api-unvalidated. A hand-maintained document was repaired by hand, and it went
+> wrong in the opposite direction — first claiming 100% of a short list, then claiming a gap that
+> did not exist. Both readings mislead; only the second also hides work already done.
+>
+> ⚠️ The SHAT-1325 line above is removed because it no longer holds: `test` and `test:public` are
+> both `vitest run`, and vitest.config includes `tests/**/*.test.ts`, so no deterministic file sits
+> outside the gating suite. A note about a fixed thing reads as a live warning.
 
 | # | Tool | Happy Path | Validation | Contract | Security | File |
 |---|------|:---:|:---:|:---:|:---:|------|
@@ -36,16 +48,16 @@ Last updated: 2026-08-26 (SHAT-2527)
 | 15 | `sandbox_simulate_authorization` | ✅ | ✅ | ✅ | - | mock-contract, sandbox-tools, validation, happy-path |
 | 16 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
 | 17 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
-| 18 | `get_checkout_cardholder` | - | - | - | - | **no row until 2026-08-26; not covered here** |
-| 19 | `get_checkout_customer` | - | - | - | - | **no row until 2026-08-26; not covered here** |
-| 20 | `get_credential_emails` | - | - | - | - | **no row until 2026-08-26; not covered here** |
+| 18 | `get_checkout_cardholder` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
+| 19 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
+| 20 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` is **blocked when a sandbox key is set** (would create real ledger/outbox) — use `sandbox_simulate_authorization` instead.
 
 ## Coverage Summary
 
 - **Tools defined in code**: 20
-- **Happy path**: 17/20 — the three added rows above have none
+- **Happy path**: 20/20
 - **Input validation**: 3/20 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 24 cases), which this table predates.
