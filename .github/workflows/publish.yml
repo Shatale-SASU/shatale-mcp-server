@@ -9,6 +9,24 @@ on:
         description: "Dry run (don't actually publish)"
         type: boolean
         default: true
+      # ⚠️ A CHOICE, NOT A URL, AND AN INPUT, NOT A REPOSITORY VARIABLE.
+      #
+      # This used to come from vars.SHATALE_GATE_API_URL, which was never set — so the gate silently
+      # fell back to production while its caller believed the target was configurable. Sergey's
+      # release order is staging THEN prod; only the second leg had ever run, and nothing said so.
+      #
+      # A repository variable is the wrong shape for this even when set: it survives the run that
+      # needed it, so the NEXT person's dispatch lands somewhere they did not choose and are not
+      # shown. An input has to be answered every time, and the answer is recorded on the run.
+      #
+      # A choice rather than free text because the two deployments take DIFFERENT keys — sandbox keys
+      # are issued per deployment, so a prod key does not authenticate against staging (publish-gate
+      # says so in as many words). Typing a URL would leave the key selection to guesswork.
+      target:
+        description: "Deployment the pre-publish gate must certify"
+        type: choice
+        options: [staging, prod]
+        default: staging
 
 jobs:
   test:
@@ -49,11 +67,25 @@ jobs:
       - name: Pre-publish gate (real backend, real sandbox key)
         run: npm run gate
         env:
-          # Same secret the nightly live suite already uses. The gate refuses live keys.
-          SHATALE_GATE_API_KEY: ${{ secrets.SHATALE_TEST_KEY }}
-          # Optional overrides: point at another *.shatale.com deployment, or pin the agent
-          # instead of discovering it via GET /v1/agents.
-          SHATALE_GATE_API_URL: ${{ vars.SHATALE_GATE_API_URL }}
+          # ⚠️ TARGET AND KEY ARE CHOSEN TOGETHER, AND BOTH ARE VISIBLE HERE.
+          #
+          # A release publishes what production runs, so the release trigger certifies PROD — stated
+          # literally rather than inherited from a default, because the previous default is exactly
+          # what let a staging-intended run certify prod in silence.
+          #
+          # Sandbox keys are issued PER DEPLOYMENT (publish-gate.mjs says so): a prod-issued key does
+          # not authenticate against staging. So the key follows the target, and SHATALE_TEST_KEY —
+          # the prod key the nightly suite already uses — is never overwritten to reach staging.
+          # Overwriting it would trade one leg of Sergey's order for the other.
+          SHATALE_GATE_API_URL: >-
+            ${{ (github.event_name == 'release' || inputs.target == 'prod')
+                && 'https://api.shatale.com'
+                || 'https://api-staging.shatale.com' }}
+          SHATALE_GATE_API_KEY: >-
+            ${{ (github.event_name == 'release' || inputs.target == 'prod')
+                && secrets.SHATALE_TEST_KEY
+                || secrets.SHATALE_STAGING_TEST_KEY }}
+          # Optional: pin the agent instead of discovering it via GET /v1/agents.
           SHATALE_GATE_AGENT_ID: ${{ vars.SHATALE_GATE_AGENT_ID }}
 
   publish:
