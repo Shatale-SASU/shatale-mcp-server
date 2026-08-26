@@ -36,13 +36,28 @@ describe('Security: Key Validation', () => {
   // A live key WITHOUT explicit SHATALE_MODE=live intent must fail fast (fat-finger
   // guard) — the security property is unchanged from the old blanket reject; only the
   // message differs now that a legitimate intent-gated live path exists.
-  test('rejects sh_live_ keys without SHATALE_MODE=live', async () => {
-    const { stderr, code } = await spawnAndCapture({
-      SHATALE_API_KEY: 'sh_live_TESTING_ONLY_NOT_REAL',
-      SHATALE_MODE: '',
-    })
-    expect(stderr).toContain('without SHATALE_MODE=live')
-    expect(code).toBe(1)
+  // ⚠️ SHAT-2557 — `sh_live_` IS NOT A KEY PREFIX ANY MORE, AND THIS TEST NOW ASSERTS THE HARM
+  // RATHER THAN THE MESSAGE.
+  //
+  // It used to expect the words "without SHATALE_MODE=live", which meant the key had been
+  // recognised AS LIVE and then refused for lacking intent. That recognition was the defect: the
+  // backend has never issued `sh_live_` (identity mints only sk_live_ and sk_sandbox_), so with
+  // SHATALE_MODE=live SET, the same key walked past the unrecognized-key guard and STARTED the
+  // server in live mode — measured, "live(onboarding-only) mode, 7 tools".
+  //
+  // So the property worth pinning is not which sentence is printed. It is that a key with this
+  // prefix cannot run the server, with or without the intent flag. Asserting the sentence would
+  // have kept this test green through the fix while the fix changed the reason — and it is the
+  // reason that closed the hole.
+  test('a sh_live_ key cannot start the server, with or without SHATALE_MODE=live', async () => {
+    for (const mode of ['', 'live']) {
+      const { stderr, code } = await spawnAndCapture({
+        SHATALE_API_KEY: 'sh_live_TESTING_ONLY_NOT_REAL',
+        SHATALE_MODE: mode,
+      })
+      expect(code, `SHATALE_MODE=${JSON.stringify(mode)} let a non-existent prefix run the server`).toBe(1)
+      expect(stderr).toMatch(/unrecognized API key|requires a live key/i)
+    }
   })
 
   test('rejects sk_live_ keys without SHATALE_MODE=live', async () => {
