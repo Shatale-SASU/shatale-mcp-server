@@ -8,7 +8,10 @@ on:
 jobs:
   public-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Raised from 5: the README gate boots the built server in six modes, and its negative
+    # controls boot it once per planted defect. Measured locally at ~2.6 min for the three
+    # steps together; 5 would have left the margin to chance on a slower runner.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +26,18 @@ jobs:
         env:
           SHATALE_API_KEY: ""
           CI: "true"
+
+      # SHAT-2527. `npx tsc` above produced dist/; both steps drive that BUILT server over
+      # stdio with prefix-shaped stub keys and SHATALE_API_URL pinned to a dead loopback
+      # port, so neither reaches a real host and neither needs a key.
+      - name: README must match the tools the server actually advertises
+        run: npm run gate:readme
+
+      # The controls are not optional decoration. The step above going green proves the gate
+      # RUNS; only a planted defect proves it DISCRIMINATES. Dropping this step leaves a gate
+      # nobody can tell apart from a `true`.
+      - name: and the gate must still discriminate (negative controls)
+        run: npm run gate:readme:controls
 
       - name: Upload server logs on failure
         if: failure()
