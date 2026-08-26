@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError } from './errors.js'
+import { mapHttpError, extractRequestId } from './errors.js'
 
 /**
  * SHAT-1682: derive a STABLE idempotency key from the purchase's identifying
@@ -115,7 +115,30 @@ export class ShataleClient {
       if (!res.ok) {
         // F-006 / SHAT-1463: never leak raw backend bodies — map the status to a
         // structured {code, message, suggested_fix} error instead.
-        throw mapHttpError(res.status, method, path)
+        //
+        // /!\ ONE FIELD IS READ OUT OF THAT BODY, BY NAME, AND NOTHING ELSE: request_id.
+        //
+        // This used to discard the body unread, and the comment above described that as the leak
+        // guard. It is not — the guard is that no upstream MESSAGE reaches the agent, and that holds
+        // exactly as before. What was lost with the body was the one field the backend puts there to
+        // make a failure traceable: writeErrorCtx sends `request_id` on every error, and on a
+        // REDACTED 5xx it mints a correlation id specifically so the client can be told nothing while
+        // the real detail stays findable in the server log. Throwing that away meant a person
+        // debugging a 500 had a fixed sentence and no way to find the record behind it.
+        //
+        // extractRequestId reads that one key and drops the rest of the body unread, refusing
+        // anything that is not a short plain string — so a hostile or malformed body cannot use this
+        // field as a channel. A pointer to a record is not the record.
+        //
+        // The read cannot itself become a failure: a body that is empty, truncated or not JSON makes
+        // this undefined, and the error is thrown exactly as it was before.
+        let requestId: string | undefined
+        try {
+          requestId = extractRequestId(await res.json())
+        } catch {
+          requestId = undefined
+        }
+        throw mapHttpError(res.status, method, path, requestId)
       }
 
       return res.json()
