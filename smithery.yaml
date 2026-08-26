@@ -5,12 +5,15 @@ description: |
   Create agents, issue virtual cards, set spending policies, and simulate transactions — all from your IDE.
 
   Features:
-  - Guest mode (no signup): demo scenarios, MCC codes, code snippets
-  - Sandbox mode (free API key): create agents, simulate payments, test policies
+  - Guest mode (no signup): simulated purchase flow, policy templates, merchant/MCC catalog
+  - Sandbox mode (free API key): the full lifecycle against sandbox data — onboarding,
+    authorization simulation, approval, credentials, status and audit
   - Policy engine: spend limits, MCC blocking, balance checks
   - Works with Claude Desktop, Cursor, Windsurf, Claude Code
 
-  Sandbox only — no real money, no card data exposed.
+  No card number or CVV is ever returned into the agent's context. Live mode exists and moves
+  real money, behind three separate deliberate acts (a live key, SHATALE_MODE=live, and a
+  SHA-256-matched SHATALE_MONEY_GO); with a sandbox key none of it is reachable.
 
 icon: "https://shatale.com/favicon.svg"
 sourceUrl: "https://github.com/solskiysb/shatale-mcp-server"

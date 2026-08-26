@@ -96,7 +96,7 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `explain_shatale` | **Start here.** Reports the current mode (guest/sandbox/live), the tools available to you, and the recommended first prompt |
+| `explain_shatale` | **Start here.** Reports the current mode — guest / demo(sandbox) / live(onboarding-only) / live+money-GO — the tools available to you, and the recommended first prompt. There are FOUR modes, not three: a live key with `SHATALE_MODE=live` but no matching `SHATALE_MONEY_GO` runs onboarding-only, with the money tools unregistered |
 | `simulate_purchase_flow` | Simulates the Shatale agent payment lifecycle in guest mode — policy check, approve/decline/requires-approval decision, virtual card step, timeline. No real API call or payment is made |
 | `generate_policy_template` | Generates **and validates** a spending policy for your use case — returns risk level, warnings, and recommended controls (never a silently unsafe policy) |
 | `list_mcc_codes` | Browse merchant category codes for policy design |
