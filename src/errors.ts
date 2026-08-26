@@ -3,38 +3,75 @@ import { jsonResult, type ToolCallResult } from './types.js'
 /**
  * SHAT-1463: structured error envelope surfaced to the calling agent.
  *
- * Every tool error is reported as `{ error: { code, message, suggested_fix } }`
- * so the LLM gets a stable machine-readable `code` plus an actionable
- * `suggested_fix` instead of an opaque prose string. Raw upstream bodies are
- * never echoed — messages are fixed, leak-safe text (see client.ts, which does
- * not read the error body).
+ * Every tool error is reported as `{ error: { code, message, suggested_fix, request_id? } }`
+ * so the LLM gets a stable machine-readable `code` plus an actionable `suggested_fix` instead of an
+ * opaque prose string. Raw upstream bodies are never echoed — the messages are fixed, leak-safe text.
+ *
+ * /!\ AND `request_id` IS THE HANDLE BACK TO THE RECORD OF THIS CALL, which is the whole of
+ * SHAT-1468 and the thing 1469/1470 are the same subject as.
+ *
+ * The backend has always sent it: `writeErrorCtx` (apps/api/api/v1/authorizations.go) puts
+ * `request_id` in every error body, and on a REDACTED 5xx it mints a correlation id specifically so
+ * the message the client sees can be stripped while the real detail stays findable in the server log
+ * (`logRedactedError`). client.ts threw the whole body away, so the one field that existed to make a
+ * failure traceable never left the process.
+ *
+ * /!\ AND READING IT DOES NOT WEAKEN THE REDACTION, WHICH IS THE OBJECTION TO ANSWER. The rule is
+ * "upstream error DETAIL never reaches the agent", and it is kept by extracting exactly one field by
+ * name and discarding the rest of the body unread — never `error`, never `detail`, never a message.
+ * An id is a pointer to a record; the detail stays where only a person with access can read it.
+ * Widening this whitelist re-opens the leak that `publicErrorMessage` exists to close.
  */
 export interface StructuredError {
   code: string
   message: string
   suggested_fix: string
+  /** The server-side correlation id for THIS call, when the backend sent one. */
+  request_id?: string
 }
 
 export class ShataleApiError extends Error {
   readonly code: string
   readonly suggested_fix: string
+  readonly request_id?: string
 
   constructor(err: StructuredError) {
     super(err.message)
     this.name = 'ShataleApiError'
     this.code = err.code
     this.suggested_fix = err.suggested_fix
+    this.request_id = err.request_id
   }
 
   toStructured(): StructuredError {
-    return { code: this.code, message: this.message, suggested_fix: this.suggested_fix }
+    const out: StructuredError = { code: this.code, message: this.message, suggested_fix: this.suggested_fix }
+    if (this.request_id) out.request_id = this.request_id
+    return out
   }
 }
 
+/**
+ * Pull ONLY the correlation id out of an upstream error body.
+ *
+ * A whitelist of one field, by name. Everything else in that body is upstream detail and must not
+ * be read, let alone forwarded — see the note above. Returns undefined for anything that is not a
+ * plain non-empty string, so a hostile or malformed body cannot smuggle an object or a novel through
+ * this field.
+ */
+export function extractRequestId(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const id = (body as Record<string, unknown>).request_id
+  if (typeof id !== 'string') return undefined
+  const trimmed = id.trim()
+  if (!trimmed || trimmed.length > 128) return undefined
+  return trimmed
+}
+
 /** Map an HTTP status into a structured, leak-safe error. */
-export function mapHttpError(status: number, method: string, path: string): ShataleApiError {
+export function mapHttpError(status: number, method: string, path: string, requestId?: string): ShataleApiError {
+  const withId = (e: StructuredError) => new ShataleApiError(requestId ? { ...e, request_id: requestId } : e)
   if (status === 401 || status === 403) {
-    return new ShataleApiError({
+    return withId({
       code: 'auth_failed',
       message: 'Authentication failed.',
       suggested_fix:
@@ -47,7 +84,7 @@ export function mapHttpError(status: number, method: string, path: string): Shat
     // call") sent a caller hunting for its own mistake when the truth was that the
     // route is not deployed, which is the failure it kept meaning in practice.
     const creating = method.toUpperCase() === 'POST' && !/\/[^/]*_?id[^/]*$/i.test(path)
-    return new ShataleApiError({
+    return withId({
       code: 'not_found',
       message: `Resource not found (${method} ${path}).`,
       suggested_fix: creating
@@ -56,20 +93,20 @@ export function mapHttpError(status: number, method: string, path: string): Shat
     })
   }
   if (status === 429) {
-    return new ShataleApiError({
+    return withId({
       code: 'rate_limited',
       message: 'Rate limit exceeded.',
       suggested_fix: 'Wait a few seconds before retrying. Avoid tight polling loops on get_*_status.',
     })
   }
   if (status >= 500) {
-    return new ShataleApiError({
+    return withId({
       code: 'upstream_error',
       message: `Shatale API server error (HTTP ${status}).`,
       suggested_fix: 'This is a transient server-side issue. Retry shortly; if it persists, contact support@shatale.com.',
     })
   }
-  return new ShataleApiError({
+  return withId({
     code: 'api_error',
     message: `API request failed (HTTP ${status}).`,
     suggested_fix: 'Check your API key and request parameters, then retry.',
