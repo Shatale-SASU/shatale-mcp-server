@@ -67,14 +67,20 @@ to hold a live key.
 
 ```bash
 npm run build
-SHATALE_GATE_API_KEY=sk_sandbox_… npm run gate
+SHATALE_GATE_API_KEY=sk_sandbox_… SHATALE_GATE_API_URL=https://api.shatale.com npm run gate
 ```
 
 | Variable | Required | Meaning |
 |---|---|---|
-| `SHATALE_GATE_API_KEY` | yes (falls back to `SHATALE_TEST_KEY`) | Sandbox key. `sk_live_*` is refused. |
-| `SHATALE_GATE_API_URL` | no | Target deployment. Default `https://api.shatale.com`; any `*.shatale.com` host is accepted. |
+| `SHATALE_GATE_API_KEY` | yes (falls back to `SHATALE_TEST_KEY`) | Sandbox key. Only `sk_sandbox_*` is accepted. |
+| `SHATALE_GATE_API_URL` | **yes** | Target deployment. **No default** — the gate refuses to guess and prints the target it is about to verify. `*.shatale.com` and the bare apex are accepted. |
 | `SHATALE_GATE_AGENT_ID` | no | Pin the agent instead of discovering it. Verified with `GET /v1/agents/{id}` before use. |
+
+<!-- This table said SHATALE_GATE_API_URL was optional with a default of https://api.shatale.com.
+     That stopped being true when the gate was changed to name its target out loud, precisely
+     because a silent default meant a "staging" run had been verifying PRODUCTION. The command
+     documented above without it now ABORTS. Corrected 2026-08-26 (SHAT-2527) — a runbook that
+     aborts on its own first line is read as a broken tool rather than as an out-of-date document. -->
 
 ### On staging
 
@@ -93,8 +99,14 @@ API key), then set both `SHATALE_GATE_API_KEY` and
 cannot be verified does not go out. It has **no skip path**: a missing secret, an unreachable
 API or an empty agent list all fail the job.
 
-It reads the existing `SHATALE_TEST_KEY` repo secret. Optional repo *variables*
-`SHATALE_GATE_API_URL` / `SHATALE_GATE_AGENT_ID` override target and agent.
+Target and key are chosen **together**, per trigger: `publish.yml` takes a `target` input
+(`staging` | `prod`), derives the URL from it, and reads `SHATALE_STAGING_TEST_KEY` for staging or
+`SHATALE_TEST_KEY` for prod. Only `SHATALE_GATE_AGENT_ID` remains a repo *variable*.
+
+<!-- This paragraph said the gate reads SHATALE_TEST_KEY and that an optional repo variable
+     overrides the target. Both halves are stale, and the pairing is the point: a key and a URL set
+     from two independent places is how a sandbox key for one deployment gets pointed at another and
+     answers 401 — or worse, authenticates. SHATALE_STAGING_TEST_KEY was undocumented entirely. -->
 
 ## The hermetic complement
 
