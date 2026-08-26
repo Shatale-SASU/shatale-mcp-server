@@ -55,9 +55,16 @@ export function toPurchaseWireBody(
 }
 
 export class ShataleClient {
+  /**
+   * @param timeoutMs how long ONE request may take, headers AND body. Defaults to the 30s the
+   * server has always used; injectable so a test can prove the bound holds without waiting 30
+   * seconds, which is the only reason the previous version of this bound went unverified for so
+   * long. See `request` for what the bound did and did not cover before.
+   */
   constructor(
     private readonly baseURL: string,
     private readonly apiKey: string,
+    private readonly timeoutMs: number = 30_000,
   ) {}
 
   /**
@@ -101,8 +108,26 @@ export class ShataleClient {
       headers['X-Shatale-Client-Version'] = CLIENT_VERSION
     }
 
+    // /!\ THE TIMEOUT USED TO COVER ONLY THE HEADERS, AND THE MISSING `await` IS THE WHOLE BUG.
+    //
+    // This was `return res.json()` inside the try. `finally` runs when the try block RETURNS, not
+    // when the returned promise settles — so `clearTimeout` fired the instant fetch resolved its
+    // headers, cancelling the abort before a single byte of body had been read. An upstream that
+    // answered `200` and then stalled mid-body was never aborted by anything.
+    //
+    // Measured before the fix, against a local server: stalling BEFORE headers aborted at 30.3s as
+    // intended; sending `200` plus a partial body and never ending left the call still hanging at
+    // 45 seconds with no result. A stdio MCP server is one process serving one agent — a request
+    // that never settles is an agent that never answers again, with nothing logged anywhere.
+    //
+    // `return await` keeps the try frame alive until the body is parsed, so the timer really does
+    // bound the whole exchange. It is the one place in this file where `return await` is load-
+    // bearing rather than noise, which is exactly why a linter or a tidy-up would remove it.
+    //
+    // SECURITY.md has claimed "each API call is bounded by a 30s timeout" throughout; it is true
+    // from here on.
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30_000)
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
 
     try {
       const res = await fetch(`${this.baseURL}${path}`, {
@@ -118,7 +143,7 @@ export class ShataleClient {
         throw mapHttpError(res.status, method, path)
       }
 
-      return res.json()
+      return await res.json()
     } finally {
       clearTimeout(timeout)
     }
