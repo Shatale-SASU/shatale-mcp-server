@@ -43,7 +43,14 @@ This MCP server is designed with the following security principles:
   one. What is NOT accessible is the card vault: see the PAN/CVV bullet above.
 - **Local transport:** Runs as a local stdio process, no network server exposed
 - **Host allowlist:** Outbound calls are restricted to `*.shatale.com` and localhost
-- **Input validation:** Sensitive tool inputs (purchases, onboarding, credentials, sandbox) are validated (zod) before any API call
+- **Input validation:** Tool inputs are validated (zod) before any API call — both the request
+  BODIES (purchases, onboarding, credentials, sandbox authorization) and every ID that becomes a
+  URL path segment. The second half is new: until SHAT-2526 the id-taking handlers interpolated
+  `String(args.purchase_id)` straight into the path, so a missing argument was sent upstream as
+  the literal `"undefined"` and an empty one collapsed the path — measured, including
+  `POST /v1/sandbox/purchases//approve`, an empty segment on a write route. This bullet claimed
+  the whole property while only half of it held; a refusal now happens here, and names the
+  argument at fault rather than letting the backend answer for a mistake made in this process.
 - **Error redaction:** Upstream API error detail is not forwarded to the LLM
 - **Request timeout:** Each API call is bounded by a 30s timeout so a stalled backend cannot hang the agent
 - **Sandbox tools include two writes.** This bullet used to say "only safe, non-destructive
