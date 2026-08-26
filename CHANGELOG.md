@@ -37,9 +37,12 @@ strengthen the guest/no-key demo. This is a **breaking change** to the public to
   authorization via `POST /v1/sandbox/authorizations`. Side-effect-free (no ledger, no
   money, no card issued). Returns approve/decline plus an explanation. Test cards: `4242…`
   forces approve, `4000…0002` forces decline, neutral cards let the real policy decide.
-- Mode-aware `explain_shatale` (SHAT-1460) — reports live mode (GUEST / SANDBOX / blocked
-  PRODUCTION), the tools available in this session, the recommended first prompt, and a
-  sandbox-unlock CTA.
+- Mode-aware `explain_shatale` (SHAT-1460) — reports live mode, the tools available in this
+  session, the recommended first prompt, and a sandbox-unlock CTA. (Historical note: this entry
+  originally said "GUEST / SANDBOX / blocked PRODUCTION". "Blocked PRODUCTION" stopped existing in
+  0.4, when live keys became gated rather than rejected, and the server now reports FOUR modes:
+  guest, demo(sandbox), live(onboarding-only), live+money-GO. Annotated rather than rewritten — a
+  changelog entry records what shipped then, and correcting it silently would lose that.)
 - `generate_policy_template` now returns a `validation` block (SHAT-1462) — `risk_level`,
   `warnings`, `recommended_controls`; never returns a silently unsafe policy.
 - Structured error envelope across tools (SHAT-1463) and gated client attribution headers
