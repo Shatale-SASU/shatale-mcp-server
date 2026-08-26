@@ -23,7 +23,18 @@ This MCP server is designed with the following security principles:
 - **No card data:** PAN, CVV, and card details are never exposed through MCP tools
 - **No credentials:** Email aliases and credential vault are not accessible
 - **Local transport:** Runs as a local stdio process, no network server exposed
-- **Host allowlist:** Outbound calls are restricted to `*.shatale.com` and localhost
+- **Host allowlist:** Outbound calls are restricted to `*.shatale.com` and localhost, over
+  `https://` (loopback excepted, for the test harness and local development). A lookalike domain
+  such as `evilshatale.com` is refused — the suffix carries the leading dot.
+- **A live key goes to the canonical host.** `*.shatale.com` is a wide rule, and what passes it
+  receives `Authorization: Bearer` — so a dangling CNAME or a taken-over subdomain of our own
+  zone would be handed a live key and every purchase body after it. In live mode
+  (`sk_live_*` + `SHATALE_MODE=live`) the host must be `api.shatale.com` unless
+  `SHATALE_ALLOW_NONSTANDARD_LIVE_HOST=true` says otherwise, so that widening is something
+  somebody typed rather than a default nobody noticed. Guest and sandbox are unaffected.
+- **`SHATALE_API_URL` is the variable that decides all of the above**, and until SHAT-2558 no
+  document mentioned it at all. It redirects every outbound call, and the API key travels with
+  them. Leave it unset unless you know why you are changing it.
 - **Input validation:** Sensitive tool inputs (purchases, onboarding, credentials, sandbox) are validated (zod) before any API call
 - **Error redaction:** Upstream API error detail is not forwarded to the LLM
 - **Request timeout:** Each API call is bounded by a 30s timeout so a stalled backend cannot hang the agent
