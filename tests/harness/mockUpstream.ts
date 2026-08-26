@@ -95,6 +95,15 @@ export class MockUpstream {
     if (method === 'POST' && path === '/v1/purchases') {
       return ok({ purchase_id: 'pur_mock_1', status: 'pending' })
     }
+    // Ordered BEFORE the generic /v1/purchases/ read: that branch's startsWith would swallow
+    // this path and answer with a purchase-shaped body, so a checkout fixture would pin a route
+    // the tool never actually distinguishes.
+    if (method === 'GET' && /\/v1\/purchases\/[^/]+\/checkout-identity$/.test(path)) {
+      return ok({
+        billing_identity: { name: 'Shatale SASU', address_line1: '1 Rue Fixture', country: 'FR' },
+        merchant_customer_identity: { name: 'Fixture User', email: 'fixture@test.shatale.com' },
+      })
+    }
     if (method === 'GET' && path.startsWith('/v1/purchases/')) {
       return ok({ purchase_id: path.split('/').pop(), status: 'pending' })
     }
