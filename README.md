@@ -4,7 +4,11 @@ MCP server for [Shatale](https://shatale.com) — AI-native payment infrastructu
 
 ## 60-second demo, no API key required
 
-See the whole agent payment lifecycle before you sign up. **Guest mode makes no real API call and no payment.**
+See the whole agent payment lifecycle before you sign up. **Guest mode makes no payment and
+touches no account of yours.** The simulation and policy tools run fully offline; the merchant
+and MCC catalog is fetched from the public API without a key. (This line used to say "no real API
+call" — measured against a request recorder, guest mode issues three: two catalog reads and an
+MCC lookup, all unauthenticated, with no `Authorization` and no attribution headers.)
 
 **1. Run it:**
 

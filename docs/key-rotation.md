@@ -17,7 +17,7 @@ Rotate the sandbox API key used for E2E tests quarterly to limit exposure.
 2. **Update GitHub Secret:**
    ```bash
    gh secret set SHATALE_TEST_KEY --body "sk_sandbox_NEW_KEY_HERE" \
-     --repo solskiysb/shatale-mcp-server
+     --repo Shatale-SASU/shatale-mcp-server
    ```
 
 3. **Update local env:**
