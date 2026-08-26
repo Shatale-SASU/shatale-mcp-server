@@ -33,7 +33,27 @@ const apiKey = process.env.SHATALE_API_KEY ?? ''
 // intent (`SHATALE_MODE=live`). A bare live key without that intent fails fast:
 // a local IDE/agent is not, by default, a trust boundary for live payments, and
 // a fat-fingered live key must never silently move real money.
-const isLiveKey = apiKey.startsWith('sk_live_') || apiKey.startsWith('sh_live_')
+// ⚠️ SHAT-2557 — `sh_live_` USED TO BE ACCEPTED HERE, AND IT UNDID THE FIX 33 LINES BELOW.
+//
+// The backend has never issued that prefix: identity/service.go mints exactly `sk_live_` and
+// `sk_sandbox_`, nothing else. So the second disjunct admitted a key that cannot exist — harmless in
+// isolation, and not in place.
+//
+// The guard at "unrecognized API key" refuses anything that is neither guest, sandbox nor live, and
+// its comment says it exists because such keys "previously fell into a phantom 'production' mode
+// that could never authenticate". But `sh_live_anything` satisfied isLive, so it walked straight
+// past that guard into live mode — measured, not reasoned: with SHATALE_MODE=live the server
+// STARTED and reported "live(onboarding-only) mode, 7 tools". The phantom mode the guard was written
+// to remove was recreated by a line above it.
+//
+// ⚠️ AND THE ERROR MESSAGE WAS ALREADY RIGHT while the code was wrong: it says "a live key
+// (sk_live_) was supplied", naming one prefix. The code accepted two. When the text and the code
+// disagree about the SAME set, the text is the one somebody read and believed.
+//
+// This is the second half of a pair. SHAT-1460/2484 narrowed the SANDBOX side to exactly
+// `sk_sandbox_` and left the live side widened — the side where a key, if one ever existed, carries
+// money.
+const isLiveKey = apiKey.startsWith('sk_live_')
 const liveIntent = process.env.SHATALE_MODE === 'live'
 
 if (isLiveKey && !liveIntent) {

@@ -127,7 +127,11 @@ if (apiKey.startsWith('sk_live_') || apiKey.startsWith('sh_live_')) {
     'Use a sandbox key (sk_sandbox_*). The sandbox authorization route is read-only; the live surface is not.',
   )
 }
-if (!/^(sk_sandbox_|sk_test_|sh_test_)/.test(apiKey)) {
+// ⚠️ SHAT-2557, the same pair one file over. `sk_test_` and `sh_test_` are prefixes the backend has
+// never issued — identity/service.go mints only `sk_live_` and `sk_sandbox_`. Admitting them here
+// widened what a RELEASE GATE will hold, for keys that do not exist. Narrowing cannot reject a real
+// key; it can only stop this gate certifying a release while holding something nobody can explain.
+if (!/^sk_sandbox_/.test(apiKey)) {
   abort(
     `Unrecognized API key prefix (${keyFingerprint(apiKey)}).`,
     'The sandbox policy route is mounted behind SandboxOnly() and 403s anything that is not a sandbox key.',
