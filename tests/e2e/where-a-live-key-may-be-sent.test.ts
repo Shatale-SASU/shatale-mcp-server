@@ -27,8 +27,12 @@
 import { describe, test, expect } from 'vitest'
 import { spawn } from 'child_process'
 import { resolve } from 'path'
+import { requireBuiltServer } from '../harness/mcpClient.js'
 
 const ENTRY = resolve(import.meta.dirname, '../../dist/index.js')
+// Same precondition as the shared harness, and for the same reason: without the build every case
+// below fails identically, controls included, and eight red look like eight defects.
+requireBuiltServer(ENTRY)
 
 function spawnAndCapture(env: Record<string, string>): Promise<{ stderr: string; code: number | null }> {
   return new Promise((done) => {
