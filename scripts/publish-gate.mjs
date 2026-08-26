@@ -336,6 +336,26 @@ function resultText(result) {
  * THE assertion. A positive decision is only reachable past a successful decode AND a
  * real agent — which is why the gate demands one instead of demanding the absence of an
  * error. On the broken 0.5.0 build this returns false for every input.
+ *
+ * /!\ AND HERE IS EXACTLY WHAT IT DOES AND DOES NOT PROVE, because the banner used to
+ * claim more than this.
+ *
+ * PROVED: the built server encoded the request, the deployment decoded it (mcc as a
+ * STRING — the 0.5.0/0.2.1 regression this gate exists for), the agent was resolved and
+ * belongs to the key's publisher, and the authorization chain returned a DECISION with
+ * the documented shape.
+ *
+ * NOT PROVED: that the policy engine, the ledger limits or the fraud scorer ran. The
+ * simulator short-circuits before all of them when the agent has no sandbox delegation
+ * (auth/dryrun.go SimulateForAgent returns a decline at `preset == nil`, before
+ * Authorize is called) — and production currently holds ZERO sandbox delegations, so
+ * that is the branch this gate meets today. A DECLINE is a legitimate answer here and
+ * the gate accepts it, deliberately: demanding `approved` would make the gate depend on
+ * somebody's spend limits.
+ *
+ * That distinction is why the reason code is printed below rather than folded into a
+ * word. "Declined because there is no delegation" and "declined by a spend limit" are
+ * different worlds, and only one of them means the chain ran.
  */
 function assertDecision(label, result, expectedAgentId) {
   const text = resultText(result)
@@ -355,6 +375,14 @@ function assertDecision(label, result, expectedAgentId) {
     typeof payload.authorization_id === 'string' &&
     payload.authorization_id.startsWith('sandbox_') &&
     payload.agent_id === expectedAgentId
+  // Printed on SUCCESS too, not only on failure. A gate that names its target and then
+  // hides which branch answered has moved the ambiguity one step, not removed it.
+  if (ok) {
+    const reason = payload.explanation?.reason_code ?? payload.explanation?.decision ?? 'none'
+    const message = String(payload.explanation?.message ?? '').slice(0, 120)
+    log(`    decision=${payload.decision}  reason_code=${reason}`)
+    if (message) log(`    explanation: ${message}`)
+  }
   return check(
     ok,
     label,
@@ -488,7 +516,19 @@ async function main() {
     process.exit(1)
   }
   log('╔══════════════════════════════════════════════════════════════════════╗')
-  log('║  GATE GREEN — the built server got a real policy decision back.      ║')
+  // /!\ THIS LINE USED TO READ "got a real policy decision back", AND THAT PROMISED THE
+  // PARTICIPATION OF THE POLICY ENGINE.
+  //
+  // Measured: with zero sandbox delegations in production the chain short-circuits at
+  // "no active delegation for this agent" BEFORE policy, ledger or fraud — so a decision
+  // came back, and no policy decided it. The gate's assertion was always sound (neutral
+  // test card, approved-or-declined accepted); only this sentence was wider than the
+  // measurement. That is the shape this gate exists to catch, appearing in its own
+  // summary line.
+  //
+  // It now says what it proved. The reason code is printed above so the reader can see
+  // WHICH branch answered instead of taking the word GREEN for it.
+  log('║  GATE GREEN — the built server reached a decision on a real deploy.  ║')
   log('╚══════════════════════════════════════════════════════════════════════╝')
   log('')
 }
