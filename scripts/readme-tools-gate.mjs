@@ -31,10 +31,9 @@
 //                                                 # prompt tool and refuse "Unknown tool"
 //   --readme <path>  --entry <path>               # override inputs (used by the controls)
 
-import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { MODES, speak, measureRoster, GO_CODE, GO_SHA } from './lib/serverRoster.mjs'
 import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -56,70 +55,20 @@ const ENTRY = argOf('--entry', path.join(REPO, 'dist/index.js'))
 //
 // The money-GO code is invented HERE and hashed HERE: the gate proves the money-gated
 // surface without any real code and without any live key ever existing in this process.
-const GO_CODE = 'gate-local-money-go-not-a-real-code'
-const GO_SHA = createHash('sha256').update(GO_CODE, 'utf8').digest('hex')
 
-// Stub keys: prefix-shaped, never authenticated. tools/list needs no valid key, and
-// SHATALE_API_URL is pinned to a dead loopback port so no probe can reach any real host.
-const MODES = [
-  ['guest', 'guest (no key)', {}],
-  ['sandbox', 'sandbox', { SHATALE_API_KEY: 'sk_sandbox_gate_stub' }],
-  ['sandbox+flags', 'sandbox + flags', { SHATALE_API_KEY: 'sk_sandbox_gate_stub', SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' }],
-  ['live', 'live, no money-GO', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live' }],
-  ['live+money', 'live + money-GO', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA }],
-  ['live+money+flags', 'live + money-GO + flags', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA, SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' }],
-]
-
-const BASE_ENV = { PATH: process.env.PATH, HOME: process.env.HOME, SHATALE_API_URL: 'http://127.0.0.1:9' }
-
-function speak(extraEnv, calls = []) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [ENTRY], { env: { ...BASE_ENV, ...extraEnv }, stdio: ['pipe', 'pipe', 'pipe'] })
-    let out = '', err = ''
-    child.stdout.on('data', (d) => { out += d })
-    child.stderr.on('data', (d) => { err += d })
-    const send = (o) => child.stdin.write(JSON.stringify(o) + '\n')
-    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'readme-gate', version: '0' } } })
-    send({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
-    send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
-    calls.forEach((c, i) => send({ jsonrpc: '2.0', id: 100 + i, method: 'tools/call', params: { name: c, arguments: {} } }))
-    setTimeout(() => {
-      child.stdin.end(); child.kill()
-      const frames = out.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
-      const byId = new Map(frames.map((f) => [f.id, f]))
-      const listed = byId.get(2)?.result?.tools ?? null
-      resolve({
-        exit: child.exitCode,
-        stderr: err.trim(),
-        tools: listed?.map((t) => t.name) ?? null,
-        descriptions: listed ? new Map(listed.map((t) => [t.name, t.description ?? ''])) : null,
-        calls: calls.map((c, i) => [c, byId.get(100 + i)?.result?.content?.[0]?.text ?? null]),
-      })
-    }, calls.length ? 3500 : 1200)
-  })
-}
+// MODES and `speak` moved to scripts/lib/serverRoster.mjs — the coverage gate needs the same
+// measurement, and a second copy is how the first goes stale. That is what happened: the coverage
+// gate grew its own roster from source text and eight hardcoded factories, and the two agreed while
+// both missing a tool declared outside src/tools (SHAT-2527).
 
 // ── Measure ─────────────────────────────────────────────────────────────────
 const failures = []
 const fail = (msg) => failures.push(msg)
 
-const advertised = new Map()
-const describes = new Map()
-for (const [id, , env] of MODES) {
-  const r = await speak(env)
-  if (!r.tools) {
-    fail(`mode "${id}": the server advertised no tool list (exit ${r.exit}). stderr: ${r.stderr || '(empty)'}`)
-    advertised.set(id, [])
-  } else {
-    advertised.set(id, r.tools)
-    for (const [n, d] of r.descriptions) if (!describes.has(n)) describes.set(n, d)
-  }
-}
+const { advertised, describes, union, failures: rosterFailures } = await measureRoster(ENTRY)
+rosterFailures.forEach(fail)
 if (failures.length) { report(); process.exit(1) }
 
-// Union in registration order: iterate modes in order, append each unseen tool as listed.
-const union = []
-for (const [id] of MODES) for (const t of advertised.get(id)) if (!union.includes(t)) union.push(t)
 const unionSet = new Set(union)
 
 // ── Render the generated region from the measurement ────────────────────────
@@ -316,7 +265,7 @@ if (!promptSection) {
   if (EXEC) {
     for (const [mode, tools] of toExec) {
       const env = MODES.find(([id]) => id === mode)[2]
-      const r = await speak(env, tools)
+      const r = await speak(ENTRY, env, tools)
       for (const [tool, text] of r.calls) {
         if (text === null) fail(`--exec: \`${tool}\` in "${mode}" returned no frame at all.`)
         else if (/unknown tool/i.test(text)) fail(`--exec: \`${tool}\` in "${mode}" is listed but answers "${text.trim()}".`)
