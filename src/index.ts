@@ -337,50 +337,73 @@ Budget: 2,000 EUR/month per employee. Block gambling, ATM, money transfer.`,
 }
 
 // ── Prompts ────────────────────────────────────────────────────────────
+//
+// ⚠️ THESE SOLD A PRODUCT THIS SERVER DOES NOT HAVE — SHAT-2604.
+//
+// They told the model, in the imperative: "Create a shopping agent with a monthly budget of 1000
+// EUR. Block gambling, alcohol, and tobacco categories. Set per-transaction limit to 500 EUR."
+// NOTHING HERE CREATES AN AGENT, STORES A POLICY OR BLOCKS A CATEGORY. The union of every tool over
+// every mode is 20, and not one of them does any of it: generate_policy_template returns text and
+// makes no request at all.
+//
+// The cost lands on the model, which is the worst place for it. Handed an instruction it cannot
+// carry out, it improvises — inventing an agent id, or reporting a limit it never set — and the
+// person watching sees a setup that does not exist. The same wording had already been removed from
+// smithery.yaml and the README; the surface an MCP client actually reads kept it.
+//
+// ⚠️ AND THEY WERE NOT MODE-FILTERED, while the tools always have been. A guest with seven tools was
+// offered a prompt whose instructions need the sandbox simulator. `modes` fixes that: a prompt is
+// offered only where the tools behind it exist.
 const prompts = [
   {
-    name: 'shopping-agent',
-    description: 'Create a shopping agent with budget and category restrictions',
+    name: 'shopping-policy',
+    description: 'Draft a spending policy for shopping and try it against simulated purchases',
     arguments: [{ name: 'budget', description: 'Monthly budget in EUR (default: 1000)', required: false }],
+    modes: 'any' as const,
   },
   {
-    name: 'travel-agent',
-    description: 'Create a travel booking agent for hotels and flights',
+    name: 'travel-policy',
+    description: 'Draft a spending policy for travel and try it against simulated bookings',
     arguments: [{ name: 'budget', description: 'Monthly budget in EUR (default: 5000)', required: false }],
+    modes: 'any' as const,
   },
   {
     name: 'policy-designer',
-    description: 'Design a spending policy for an AI agent',
+    description: 'Design a spending policy for an AI agent, then check it against simulated purchases',
     arguments: [{ name: 'use_case', description: 'What the agent will be used for', required: true }],
+    modes: 'any' as const,
   },
   {
-    name: 'test-my-setup',
-    description: 'Test an existing agent setup with various transaction scenarios',
-    arguments: [{ name: 'agent_id', description: 'Agent ID to test', required: false }],
+    name: 'exercise-the-policy-engine',
+    description: 'Run several authorizations through the real policy engine and read each decision',
+    // agent_id is REQUIRED because sandbox_simulate_authorization requires it and cannot invent one.
+    // Optional here meant the model was invited to make one up.
+    arguments: [{ name: 'agent_id', description: 'The agent whose policy to exercise', required: true }],
+    modes: 'sandbox' as const,
   },
 ]
 
 function getPromptMessages(name: string, args: Record<string, string | undefined>) {
   switch (name) {
-    case 'shopping-agent':
+    case 'shopping-policy':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Create a shopping agent with a monthly budget of ${args.budget ?? '1000'} EUR. Block gambling, alcohol, and tobacco categories. Set per-transaction limit to 500 EUR. Then simulate buying sneakers for 150 EUR at Nike Store to test the setup.` },
+        content: { type: 'text' as const, text: `Draft a spending policy for shopping with a monthly budget of ${args.budget ?? '1000'} EUR, a 500 EUR per-transaction limit, and gambling, alcohol and tobacco blocked. Use generate_policy_template, which also validates it and names the risks. Then run simulate_purchase_flow for sneakers at 150 EUR from Nike Store and read the verdict. Note what this does and does not do: it produces a policy DOCUMENT and a simulated decision. It does not create an agent or store a policy anywhere — no tool here can.` },
       }]
-    case 'travel-agent':
+    case 'travel-policy':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Create a travel agent with budget ${args.budget ?? '5000'} EUR. Allow only airlines (MCC 4511), hotels (MCC 7011), car rental (MCC 7512), and travel agencies (MCC 4722). Set per-transaction limit to 2000 EUR. Simulate booking a flight for 350 EUR on British Airways.` },
+        content: { type: 'text' as const, text: `Draft a spending policy for travel with a budget of ${args.budget ?? '5000'} EUR and a 2000 EUR per-transaction limit, allowing airlines (MCC 4511), hotels (MCC 7011), car rental (MCC 7512) and travel agencies (MCC 4722). Use generate_policy_template. Then run simulate_purchase_flow for a 350 EUR British Airways booking and read the verdict. This produces a policy document and a simulated decision; it does not create an agent or store a policy.` },
       }]
     case 'policy-designer':
       return [{
         role: 'user' as const,
         content: { type: 'text' as const, text: `I need to design a spending policy for an AI agent that will be used for: ${args.use_case ?? 'general'}. Help me choose: 1) Monthly budget limit 2) Per-transaction limit 3) Which MCC categories to allow or block 4) Minimum balance reserve. Then test the policy with 5 different simulated transactions to verify it works correctly.` },
       }]
-    case 'test-my-setup':
+    case 'exercise-the-policy-engine':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Run a comprehensive test of my Shatale setup${args.agent_id ? ` for agent ${args.agent_id}` : ''}. Simulate these transactions: 1) Normal 100 EUR retail purchase 2) Large 2000 EUR electronics purchase 3) 50 EUR at a gambling site 4) 30 EUR at a restaurant 5) 500 EUR airline ticket. Explain each result.` },
+        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money.` },
       }]
     default:
       return []
@@ -429,7 +452,11 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
 // Register prompts handlers (F-002)
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
-  return { prompts }
+  // ⚠️ FILTERED LIKE THE TOOLS ARE, AND FOR THE SAME REASON. A prompt is an instruction the model
+  // will try to carry out; offering one whose tools are absent in this mode does not fail, it makes
+  // the model improvise. Guest has seven tools and no simulator, so a prompt needing
+  // sandbox_simulate_authorization is not offered there.
+  return { prompts: prompts.filter((p) => p.modes === 'any' || (p.modes === 'sandbox' && isSandbox)) }
 })
 
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
