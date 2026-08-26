@@ -111,11 +111,19 @@ describe('Security: Key Validation', () => {
     expect(code).toBe(1)
   })
 
+  // ⚠️ A BARE `not.toContain` IS SATISFIED BY ANY CRASH — SHAT-2527. With no build, all three of
+  // these reported SUCCESS against a server that did not exist: MODULE_NOT_FOUND contains neither
+  // phrase. A run where the process died proves nothing about what it permits.
+  //
+  // The positive half is that the server STARTED, and starting is observed by its NOT exiting: a
+  // healthy server waits on stdio until the harness kills it, so `code` is null. An exit code of
+  // any value means it refused, whatever the reason.
   test('accepts empty key (guest mode)', async () => {
-    const { stderr } = await spawnAndCapture({
+    const { stderr, code } = await spawnAndCapture({
       SHATALE_API_KEY: '',
     })
     expect(stderr).not.toContain('without SHATALE_MODE=live')
+    expect(code).toBeNull()
   })
 })
 
@@ -130,20 +138,24 @@ describe('Security: URL Whitelisting', () => {
     expect(code).toBe(1)
   })
 
+  // Same pair as above: the absence of a refusal, AND the evidence that there was something to
+  // refuse it. See the note beside 'accepts empty key'.
   test('allows *.shatale.com URLs', async () => {
-    const { stderr } = await spawnAndCapture({
+    const { stderr, code } = await spawnAndCapture({
       SHATALE_API_URL: 'https://staging.shatale.com',
       SHATALE_API_KEY: '',
     })
     expect(stderr).not.toContain('Untrusted API URL')
+    expect(code).toBeNull()
   })
 
   test('allows localhost URLs', async () => {
-    const { stderr } = await spawnAndCapture({
+    const { stderr, code } = await spawnAndCapture({
       SHATALE_API_URL: 'http://localhost:3000',
       SHATALE_API_KEY: '',
     })
     expect(stderr).not.toContain('Untrusted API URL')
+    expect(code).toBeNull()
   })
 
   test('rejects URL with shatale.com as subdomain of attacker', async () => {
