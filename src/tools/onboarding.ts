@@ -3,6 +3,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
+import { requireId } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const registerUserProfileSchema = z.object({
@@ -122,8 +123,10 @@ export function createOnboardingTools(
       },
 
       get_onboarding_status: async (args) => {
+        const sessionId = requireId(args, 'session_id')
+        if (!sessionId.ok) return sessionId.result
         try {
-          const result = await client.getOnboardingStatus(String(args.session_id))
+          const result = await client.getOnboardingStatus(sessionId.value)
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
