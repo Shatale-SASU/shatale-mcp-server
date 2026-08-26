@@ -202,7 +202,7 @@ After signup, your sandbox API key (\`sk_sandbox_...\`) is on the dashboard. Cop
 ### 3. Connect MCP Server
 \`\`\`bash
 export SHATALE_API_KEY=sk_sandbox_your_key_here
-npx @shatale/mcp-server
+npx shatale-mcp-server
 \`\`\`
 
 ### 4. Try It
@@ -220,7 +220,7 @@ Ask your AI assistant:
 ## Links
 - Documentation: https://shatale.com/mcp
 - API Reference: https://shatale.com/mcp
-- GitHub: https://github.com/shatale/mcp-server`,
+- GitHub: https://github.com/Shatale-SASU/shatale-mcp-server`,
 
   'shatale://guides/policies': `# Shatale Policy Engine Guide
 

@@ -59,8 +59,9 @@ function handleExplainShatale(ctx: GuestContext) {
 
   const modeBlock = ctx.isGuest
     ? `## You are in GUEST mode (no API key)
-This is a self-serve, interactive demo of the agent payment lifecycle. **No real API
-call or payment is made.** You can:
+This is a self-serve, interactive demo of the agent payment lifecycle. **No payment is
+made and no account of yours is touched.** The simulation and policy tools run entirely
+offline; the merchant and MCC catalog is read from the public API, unauthenticated. You can:
 - Explore capabilities and merchant/MCC catalog
 - Simulate the full purchase flow (approved / declined / requires-approval)
 - Generate and validate a spending policy template
@@ -69,9 +70,9 @@ call or payment is made.** You can:
 > ${recommendedPrompt}
 
 ### Unlock the same flow in Sandbox
-No code changes required. Add a sandbox key and re-run the same prompt:
+No code changes required. Set a sandbox key in the environment and re-run the same prompt:
 \`\`\`bash
-npx shatale-mcp-server --env SHATALE_API_KEY=sk_sandbox_xxx
+SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 \`\`\`
 Free sandbox key, no card required: ${REGISTER_URL}`
     : ctx.isSandbox
