@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { spawn, ChildProcess } from 'child_process'
 import { resolve } from 'path'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -14,6 +15,7 @@ export class McpTestClient {
   constructor(env: Record<string, string> = {}, testName = 'default') {
     this.testName = testName
     const entryPoint = resolve(import.meta.dirname, '../../dist/index.js')
+    requireBuiltServer(entryPoint)
     this.proc = spawn('node', [entryPoint], {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -149,4 +151,25 @@ export class McpTestClient {
     }
     this.proc.kill()
   }
+}
+
+/**
+ * ⚠️ A SUITE THAT CANNOT RUN MUST SAY SO, NOT FAIL AS IF IT HAD MEASURED — SHAT-2527.
+ *
+ * These tests drive the BUILT server, so without dist/ every spawn dies and the suites report
+ * failures. That is what they did: 21 red across three files, including three cases labelled
+ * CONTROL — and a run where the controls fail proves nothing in either direction, because the
+ * instrument has not confirmed its own health.
+ *
+ * `npm test` now builds first, so the ordinary path cannot reach this. It exists for the path that
+ * bypasses the script — `npx vitest run …`, which is what a person reaches for when re-running one
+ * file, and how this was met in the first place.
+ */
+export function requireBuiltServer(entryPoint: string): void {
+  if (existsSync(entryPoint)) return
+  throw new Error(
+    `the built server is missing at ${entryPoint}. These tests drive the compiled output, not the ` +
+      `sources, so nothing here has been measured. Run \`npm run build\` (or \`npm test\`, which ` +
+      `builds first). This is a missing precondition, not a failing assertion.`,
+  )
 }

@@ -20,10 +20,12 @@
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "pretest": "tsc",
     "test": "vitest run",
     "gate": "node scripts/publish-gate.mjs",
     "gate:readme": "node scripts/readme-tools-gate.mjs",
     "gate:readme:controls": "node scripts/readme-tools-gate.controls.mjs && node scripts/readme-tools-gate.exec-control.mjs",
+    "pretest:public": "tsc",
     "test:public": "vitest run",
     "test:watch": "vitest"
   },
