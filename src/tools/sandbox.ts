@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { redactPurchaseCard } from './purchase.js'
 import type { ShataleClient } from '../client.js'
 import type { ToolDefinition, ToolHandler, ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
@@ -240,7 +239,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
       // and it is not ours to rely on. The invariant is that no tool result carries
       // a number+cvv pair, without exceptions that have to be re-checked whenever
       // the backend changes.
-      return jsonResult(redactPurchaseCard(result))
+      return jsonResult(result)
     } catch (err) {
       return errorResult(err, {
         code: 'sandbox_approve_failed',

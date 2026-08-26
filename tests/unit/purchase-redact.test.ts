@@ -6,7 +6,7 @@
  */
 import { createCredentialTools } from '../../src/tools/credentials.js'
 import { describe, test, expect } from 'vitest'
-import { redactPurchaseCard, createPurchaseTools } from '../../src/tools/purchase.js'
+import { redactPurchaseCard } from '../../src/tools/purchase.js'
 import type { ShataleClient } from '../../src/client.js'
 
 const withCard = {
@@ -59,38 +59,20 @@ describe('redactPurchaseCard', () => {
   })
 })
 
-// Every purchase handler that can surface a card must apply the redaction —
-// not just request_purchase. get_purchase_status is the important one:
-// GET /v1/purchases/{id} advances the state machine and can mint a card.
-describe('purchase handlers redact card credentials', () => {
-  const stubClient = {
-    requestPurchase: async () => structuredClone(withCard),
-    getPurchaseStatus: async () => structuredClone(withCard),
-    cancelPurchase: async () => structuredClone(withCard),
-  } as unknown as ShataleClient
-
-  const { handlers } = createPurchaseTools(stubClient, { isSandbox: false })
-  const text = (r: any) => r.content[0].text as string
-
-  test('request_purchase never emits the raw PAN', async () => {
-    const r = await handlers.request_purchase({
-      publisher_user_id: 'u', agent_id: 'a', merchant: 'm', amount: 2.5, currency: 'EUR', description: 'd',
-    })
-    expect(text(r)).not.toContain('4111111111114242')
-    expect(text(r)).toContain('4242')
-  })
-
-  test('get_purchase_status never emits the raw PAN', async () => {
-    const r = await handlers.get_purchase_status({ purchase_id: 'p_1' })
-    expect(text(r)).not.toContain('4111111111114242')
-    expect(text(r)).not.toContain('"cvv"')
-  })
-
-  test('cancel_purchase never emits the raw PAN', async () => {
-    const r = await handlers.cancel_purchase({ purchase_id: 'p_1' })
-    expect(text(r)).not.toContain('4111111111114242')
-  })
-})
+// /!\ THESE THREE TESTS USED A STUB CLIENT, AND THAT IS WHY THEY HAD TO CHANGE.
+//
+// They handed each handler a fake `ShataleClient` and asserted the handler stripped the PAN. That
+// measured the HANDLER, which is no longer the layer responsible: the scrub now runs inside
+// ShataleClient.request, so every response is clean before any handler sees it (see src/redact.ts
+// for why it moved). A stub client makes a test blind to exactly the layer it replaces — the same
+// shape that let a missing `.WithAuthSimulator(...)` pass 109 green packages, because the route's
+// own tests injected a fake simulator.
+//
+// So the question moved with the responsibility: not "does this handler scrub?" but "can a PAN
+// reach a tool result at all?". That is asserted in
+// tests/unit/no-tool-result-carries-a-card.test.ts, which drives every tool through the REAL client
+// against an upstream that puts a PAN and a CVV in every response — including the tools that never
+// had a scrub call and could not have been covered here.
 
 // The relay password is returned in full, and both credential tools agree about that.
 //

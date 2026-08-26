@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError } from './errors.js'
+import { redactPurchaseCard } from './redact.js'
 
 /**
  * SHAT-1682: derive a STABLE idempotency key from the purchase's identifying
@@ -118,7 +119,21 @@ export class ShataleClient {
         throw mapHttpError(res.status, method, path)
       }
 
-      return res.json()
+      // /!\ THE PCI SCRUB IS APPLIED HERE, ON EVERY RESPONSE, AND THAT IS THE WHOLE CHANGE.
+      //
+      // It used to be called at four tool call sites, while its own comment claimed the global form:
+      // "NO TOOL RESULT CARRIES A NUMBER+CVV PAIR". True of the function; false of the server. Every
+      // other tool returned the upstream body unfiltered, and a tool written tomorrow got nothing.
+      //
+      // One door. A new tool cannot miss it by not knowing it exists, and its absence is visible in
+      // one place instead of by auditing every handler. Nothing legitimate is lost: no tool needs a
+      // PAN in its RESULT — card_number is an INPUT to sandbox_simulate_authorization — and last4 is
+      // derived before the deletion so an agent can still tell two cards apart.
+      //
+      // NOTE: awaiting the body here also makes the abort timer cover the read. That is the subject
+      // of a separate change (the timeout covered headers only); both touch this line, so whichever
+      // lands second will conflict here and the resolution is to keep BOTH the await and the scrub.
+      return redactPurchaseCard(await res.json())
     } finally {
       clearTimeout(timeout)
     }
