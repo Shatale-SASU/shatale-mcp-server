@@ -4,6 +4,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolDefinition, ToolHandler, ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
+import { requireId, requireFirstId } from '../validate.js'
 
 // F-003: Zod input validation schemas
 /**
@@ -231,7 +232,9 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
   }
 
   const approvePurchase: ToolHandler = async (args) => {
-    const purchaseId = String(args.purchase_id ?? args.request_id ?? '')
+    const chosen = requireFirstId(args, ['purchase_id', 'request_id'])
+    if (!chosen.ok) return chosen.result
+    const purchaseId = chosen.value
     try {
       const result = await client.sandboxApprovePurchase(purchaseId)
       // This returns a top-level `card` with number and cvv. It is the static 4242
@@ -254,8 +257,10 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     sandbox_simulate_authorization: simulateAuthorization,
 
     sandbox_complete_onboarding: async (args) => {
+      const userId = requireId(args, 'user_id')
+      if (!userId.ok) return userId.result
       try {
-        const result = await client.sandboxCompleteOnboarding(String(args.user_id))
+        const result = await client.sandboxCompleteOnboarding(userId.value)
         return jsonResult(result)
       } catch (err) {
         return errorResult(err, {
