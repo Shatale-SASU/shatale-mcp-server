@@ -13,7 +13,7 @@ description: |
   Sandbox only — no real money, no card data exposed.
 
 icon: "https://shatale.com/favicon.svg"
-sourceUrl: "https://github.com/solskiysb/shatale-mcp-server"
+sourceUrl: "https://github.com/Shatale-SASU/shatale-mcp-server"
 homepage: "https://shatale.com/mcp"
 
 startCommand:
@@ -28,7 +28,7 @@ startCommand:
   commandFunction: |
     (config) => ({
       command: "npx",
-      args: ["@shatale/mcp-server"],
+      args: ["shatale-mcp-server"],
       env: config.SHATALE_API_KEY ? { SHATALE_API_KEY: config.SHATALE_API_KEY } : {}
     })
 
