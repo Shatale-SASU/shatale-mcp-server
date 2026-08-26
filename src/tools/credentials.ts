@@ -3,6 +3,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
+import { requireId } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const requestCredentialsSchema = z.object({
@@ -141,8 +142,10 @@ export function createCredentialTools(
       },
 
       get_credential_status: async (args) => {
+        const credId = requireId(args, 'credential_request_id')
+        if (!credId.ok) return credId.result
         try {
-          const result = await client.getCredentialStatus(String(args.credential_request_id))
+          const result = await client.getCredentialStatus(credId.value)
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, {
@@ -154,8 +157,10 @@ export function createCredentialTools(
       },
 
       get_credential_emails: async (args) => {
+        const emailsId = requireId(args, 'credential_request_id')
+        if (!emailsId.ok) return emailsId.result
         try {
-          const result = await client.getCredentialEmails(String(args.credential_request_id)) as Record<string, unknown>
+          const result = await client.getCredentialEmails(emailsId.value) as Record<string, unknown>
           // Repeat the untrusted-content warning IN the payload, adjacent to the email bodies —
           // a note next to the hostile content survives the model's attention far better than a
           // tool description. (Server-side OTP extraction is the real fix: SHAT-1742.)

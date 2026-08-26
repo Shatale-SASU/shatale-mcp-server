@@ -3,6 +3,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
+import { requireId } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
@@ -238,8 +239,10 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       },
 
       get_purchase_status: async (args) => {
+        const id = requireId(args, 'purchase_id')
+        if (!id.ok) return id.result
         try {
-          const result = await client.getPurchaseStatus(String(args.purchase_id))
+          const result = await client.getPurchaseStatus(id.value)
           // PCI: GET /v1/purchases/{id} advances the state machine and can itself
           // issue a card (legacy issueCard path returns the raw PAN inline), so
           // redact here too — never surface a raw PAN/CVV into the agent context.
@@ -254,9 +257,11 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       },
 
       cancel_purchase: async (args) => {
+        const id = requireId(args, 'purchase_id')
+        if (!id.ok) return id.result
         try {
           const result = await client.cancelPurchase(
-            String(args.purchase_id),
+            id.value,
             args.reason ? String(args.reason) : undefined,
           )
           // Belt-and-braces: cancel's response also carries the payment block.
