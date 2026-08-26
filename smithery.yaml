@@ -2,7 +2,8 @@ name: shatale
 title: "Shatale — AI Agent Payments (Sandbox)"
 description: |
   Give your AI agents the ability to spend money within delegated budgets and policy controls.
-  Create agents, issue virtual cards, set spending policies, and simulate transactions — all from your IDE.
+  Request purchases, generate and validate spending policies, and simulate authorisations — all from
+  your IDE.
 
   Features:
   - Guest mode (no signup): simulated purchase flow, policy templates, merchant/MCC catalog
