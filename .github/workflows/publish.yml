@@ -1,32 +1,44 @@
 name: "Publish to npm (Trusted Publishing)"
 
+# ⚠️ DO NOT RENAME THIS FILE. npm's Trusted Publisher registration binds to
+# repository + workflow PATH (.github/workflows/publish.yml). A rename revokes OIDC.
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Dry run (don't actually publish)"
-        type: boolean
-        default: true
-      # ⚠️ A CHOICE, NOT A URL, AND AN INPUT, NOT A REPOSITORY VARIABLE.
+      # ⚠️ THE `dry_run` BOOLEAN IS GONE, AND ITS ABSENCE IS THE FIX.
       #
-      # This used to come from vars.SHATALE_GATE_API_URL, which was never set — so the gate silently
-      # fell back to production while its caller believed the target was configurable. Sergey's
-      # release order is staging THEN prod; only the second leg had ever run, and nothing said so.
+      # It was read as a STRING in two steps with two different spellings of the same
+      # intent (`== 'true'` to enter the dry run, `!= 'true'` to enter the real one), so
+      # "publish" was the DEFAULT branch of the second: any value that was not literally
+      # 'true' — including null on a trigger nobody had added yet — reached the registry.
+      # On 2026-08-07 a dispatch with dry_run=false published 0.5.0 from refs/heads/main
+      # while the tag check sat skipped one step above (run 31164342506, npm provenance
+      # records event_name=workflow_dispatch).
       #
-      # A repository variable is the wrong shape for this even when set: it survives the run that
-      # needed it, so the NEXT person's dispatch lands somewhere they did not choose and are not
-      # shown. An input has to be answered every time, and the answer is recorded on the run.
-      #
-      # A choice rather than free text because the two deployments take DIFFERENT keys — sandbox keys
-      # are issued per deployment, so a prod key does not authenticate against staging (publish-gate
-      # says so in as many words). Typing a URL would leave the key selection to guesswork.
+      # What replaces it is not a safer boolean. It is the removal of a boolean: the only
+      # field that authorises a publish IS the tag to publish, so "publish without checking
+      # the tag" has no spelling in this file.
+      publish_tag:
+        description: >-
+          Tag to publish, e.g. v0.5.3. LEAVE EMPTY to only test + gate + dry-run.
+          A tag that exists and whose package.json matches it is the ONLY route to npm.
+        type: string
+        default: ""
+      # Only consulted for runs that are NOT publishing. A run that names a tag certifies
+      # production, and this input cannot override that — see the `identity` job.
       target:
-        description: "Deployment the pre-publish gate must certify"
+        description: "Deployment the pre-publish gate must certify (untagged runs only)"
         type: choice
         options: [staging, prod]
         default: staging
+
+# Two publishes of the same package must not race.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -43,6 +55,71 @@ jobs:
       - name: Run public tests
         run: npm run test:public
 
+  # ── THE PRECONDITION ────────────────────────────────────────────────────────
+  #
+  # This job is the only place in the workflow that decides WHAT would be published and
+  # WHERE the gate aims. Both answers come out of one shell block, so they cannot disagree,
+  # and the publish job cannot exist without the answer.
+  #
+  # The old shape put the tag check INSIDE the publish job as a step carrying
+  # `if: github.event_name == 'release'`. A step with a condition is a step that can be
+  # skipped, and it was — every workflow_dispatch run in this repository's history shows
+  # `Verify version matches tag → skipped`. Enumerating which events must run it is exactly
+  # the mechanism that failed; a `needs:` edge cannot be skipped by adding a trigger.
+  identity:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      gate_target: ${{ steps.resolve.outputs.gate_target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags are the subject of this job; a shallow clone has none
+      - id: resolve
+        env:
+          # One expression, both triggers. On `release` the tag is the event's own tag and
+          # the caller cannot substitute another; on dispatch it is whatever was typed.
+          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish_tag }}
+          CHOSEN_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TAG}" ]; then
+            # No tag named. This run cannot publish — not because a condition forbids it,
+            # but because the publish job has nothing to check out.
+            echo "No tag named. This run verifies only: test + gate + npm publish --dry-run."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "gate_target=${CHOSEN_TARGET:-staging}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse -q --verify "refs/tags/${TAG}^{commit}" >/dev/null; then
+            echo "::error::tag ${TAG} does not exist in this repository. \
+          npm 0.5.1 was published on 2026-08-16 with no tag at all; this is the check that says no."
+            exit 1
+          fi
+
+          PKG=$(git show "refs/tags/${TAG}:package.json" \
+                | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          if [ "${TAG#v}" != "${PKG}" ]; then
+            echo "::error::package.json at ${TAG} is ${PKG}; the tag says ${TAG#v}"
+            exit 1
+          fi
+
+          # ⚠️ A TAGGED RUN CERTIFIES PRODUCTION, AND `target` CANNOT SAY OTHERWISE.
+          # The public registry serves one artifact to everyone, so "gated against staging,
+          # published to npm" is not a combination anybody should be able to select. Deriving
+          # both from the same variable is what makes it unselectable rather than forbidden.
+          if [ -n "${CHOSEN_TARGET}" ] && [ "${CHOSEN_TARGET}" != "prod" ]; then
+            echo "::notice::target=${CHOSEN_TARGET} ignored: a tagged run certifies production."
+          fi
+
+          echo "Publishing ${TAG} (package.json ${PKG}); gate will certify production."
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "gate_target=prod" >> "$GITHUB_OUTPUT"
+
   # SHAT-2165. The suite above cannot catch a type divergence against the Go backend —
   # it shipped the same numeric-`mcc` defect in 0.2.1 and again in 0.5.0, green both
   # times, because the mock upstream is this side of the contract. This job drives the
@@ -53,11 +130,15 @@ jobs:
   # FAIL — an unearned green here is exactly the failure this gate exists to end, and a
   # release that cannot be verified is a release that does not go out.
   gate:
-    needs: test
+    needs: [test, identity]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Gate the code that would ship. On a tagged run that is the tag, not the branch:
+          # npm 0.5.0 was built from bd9a1e2 on main while the tag v0.5.0 pointed at 7e57bf5.
+          ref: ${{ needs.identity.outputs.tag && format('refs/tags/{0}', needs.identity.outputs.tag) || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -67,29 +148,58 @@ jobs:
       - name: Pre-publish gate (real backend, real sandbox key)
         run: npm run gate
         env:
-          # ⚠️ TARGET AND KEY ARE CHOSEN TOGETHER, AND BOTH ARE VISIBLE HERE.
-          #
-          # A release publishes what production runs, so the release trigger certifies PROD — stated
-          # literally rather than inherited from a default, because the previous default is exactly
-          # what let a staging-intended run certify prod in silence.
-          #
-          # Sandbox keys are issued PER DEPLOYMENT (publish-gate.mjs says so): a prod-issued key does
-          # not authenticate against staging. So the key follows the target, and SHATALE_TEST_KEY —
-          # the prod key the nightly suite already uses — is never overwritten to reach staging.
-          # Overwriting it would trade one leg of Sergey's order for the other.
+          # The target is no longer re-derived here from the event; it is READ from the one
+          # job that decided it. Two places deriving the same fact is how they drift.
           SHATALE_GATE_API_URL: >-
-            ${{ (github.event_name == 'release' || inputs.target == 'prod')
+            ${{ needs.identity.outputs.gate_target == 'prod'
                 && 'https://api.shatale.com'
                 || 'https://api-staging.shatale.com' }}
+          # Sandbox keys are issued PER DEPLOYMENT (publish-gate.mjs says so): a prod-issued
+          # key does not authenticate against staging. Secrets cannot be job outputs, so the
+          # key is selected here — but off the SAME single output above, not off a second
+          # reading of the event.
           SHATALE_GATE_API_KEY: >-
-            ${{ (github.event_name == 'release' || inputs.target == 'prod')
+            ${{ needs.identity.outputs.gate_target == 'prod'
                 && secrets.SHATALE_TEST_KEY
                 || secrets.SHATALE_STAGING_TEST_KEY }}
           # Optional: pin the agent instead of discovering it via GET /v1/agents.
           SHATALE_GATE_AGENT_ID: ${{ vars.SHATALE_GATE_AGENT_ID }}
 
+  # Packaging verification for every run, tagged or not. `--dry-run` is the only npm
+  # command in this job and no input turns it into a publish.
+  verify-package:
+    needs: [test, gate, identity]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.tag && format('refs/tags/{0}', needs.identity.outputs.tag) || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npx tsc
+      - run: npm publish --dry-run
+
+  # ── THE ONLY JOB THAT CAN REACH THE REGISTRY ────────────────────────────────
+  #
+  # Note what is NOT here: no `if:` on any step. The single condition is on the JOB, and it
+  # is not a restatement of the rule — it is the presence of a value that only the identity
+  # job can produce, and only by comparing a real tag to package.json. There is no event
+  # type, no input and no future trigger that yields a non-empty tag without that comparison.
+  #
+  # Second layer: the checkout ref IS the tag. Force this job to run with an empty tag and it
+  # dies at `refs/tags/` before npm is installed, let alone contacted.
+  #
+  # ⚠️ ASK SERGEY: adding `environment: npm-publish` here would let GitHub require a human
+  # approval and restrict the deployment ref to tags. Left out because the environment must
+  # exist in repo settings first, and creating it is his call.
   publish:
-    needs: [test, gate]
+    needs: [test, gate, identity, verify-package]
+    if: needs.identity.outputs.tag != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -97,6 +207,8 @@ jobs:
       id-token: write  # Required for npm trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.identity.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -108,36 +220,20 @@ jobs:
       - run: npm ci
       - run: npx tsc
 
-      - name: Verify version matches tag
-        if: github.event_name == 'release'
-        run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::package.json version ($PKG_VERSION) doesn't match tag ($TAG_VERSION)"
-            exit 1
-          fi
-          echo "Version: $PKG_VERSION"
-
-      - name: Publish (dry run)
-        if: github.event.inputs.dry_run == 'true'
-        run: npm publish --dry-run
-
       # Authenticates via OIDC trusted publishing (no NPM_TOKEN). Registered at
       # npmjs.com → shatale-mcp-server → Trusted Publisher (repo + publish.yml).
       - name: Publish to npm
-        if: github.event.inputs.dry_run != 'true' || github.event_name == 'release'
         run: npm publish --provenance --access public
 
       - name: Notify on Telegram
-        if: success() && github.event_name == 'release'
+        if: success()
         run: |
-          VERSION=$(node -p "require('./package.json').version")
           curl -sf -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="HTML" \
-            -d text="[i] MCP Server v${VERSION} published to npm" \
+            -d text="[i] MCP Server ${TAG} published to npm" \
             >/dev/null 2>&1 || true
         env:
+          TAG: ${{ needs.identity.outputs.tag }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
