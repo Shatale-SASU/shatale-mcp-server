@@ -108,6 +108,41 @@ Target and key are chosen **together**, per trigger: `publish.yml` takes a `targ
      from two independent places is how a sandbox key for one deployment gets pointed at another and
      answers 401 — or worse, authenticates. SHATALE_STAGING_TEST_KEY was undocumented entirely. -->
 
+## What a green gate proves, and what it does not
+
+**Proved:** the built server encoded the request, the deployment decoded it (`mcc` as a
+STRING — the regression this gate exists for), the agent resolved and belongs to the
+key's publisher, and the chain returned a decision with the documented shape.
+
+**Not proved:** that the policy engine, the ledger limits or the fraud scorer ran.
+`SimulateForAgent` returns a decline at `preset == nil` — before `Authorize` is called —
+when the agent has no sandbox delegation, and production currently holds **zero** sandbox
+delegations. So that is the branch the gate meets today.
+
+A DECLINE is a legitimate answer and the gate accepts it deliberately: demanding
+`approved` would make the gate depend on somebody's spend limits. The `reason_code` is
+printed on success for exactly this reason — *"declined because there is no delegation"*
+and *"declined by a spend limit"* are different worlds, and only one means the chain ran.
+
+⚠️ **And the gate sends the NEUTRAL test card (`4111…`) on purpose.** Omitting
+`card_number` makes the API substitute the force-approve `4242`, which overrides a
+decline to `approved` with a `[SANDBOX OVERRIDE]` prefix. A gate that omitted the field
+would go green on a chain that refused — SHAT-2566.
+
+## Running it locally: rebuild first
+
+⚠️ **Three tests spawn the BUILT server from `dist/`, so a stale `dist/` makes the suite
+look red for no reason.** `ci-public.yml` runs `npx tsc` before the suite, so CI is
+honest; locally nothing does it for you.
+
+```sh
+npx tsc && npm run test:public
+```
+
+Cost of learning this the other way: one full run read as a broken branch. The failures
+name the host/scheme tests (`where-a-live-key-may-be-sent`), which look like a genuine
+security regression and are not.
+
 ## The hermetic complement
 
 `tests/e2e/wire-fixtures.test.ts` captures the exact bodies the built server puts on the wire
