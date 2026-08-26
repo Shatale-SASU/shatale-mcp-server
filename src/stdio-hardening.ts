@@ -26,7 +26,9 @@ import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
  * monkey-patching of the SDK's internal ReadBuffer / processReadBuffer, which would
  * be fragile against the SDK version range.
  *
- * Ported from the monorepo @shatale/mcp-server copy (SHAT-1447 canonicalization)
+ * Ported from the monorepo packages/shatale-mcp copy (SHAT-1447 canonicalization). That copy was a
+ * two-file stub that called itself `@shatale/mcp-server`, a name npm has never had; it was deleted
+ * in SHAT-2549/2550. This file is the surviving, real implementation.
  * so the canonical standalone gains the runtime hardening it lacked.
  */
 
