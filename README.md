@@ -1,6 +1,6 @@
 # Shatale MCP Server
 
-MCP server for [Shatale](https://shatale.com) — AI-native payment infrastructure. Give your AI agents the ability to make purchases, issue virtual cards, and manage spending within delegated budgets and policy controls.
+MCP server for [Shatale](https://shatale.com) — AI-native payment infrastructure. Give your AI agents the ability to request purchases within delegated budgets and policy controls, and to check what happened to them.
 
 ## 60-second demo, no API key required
 
