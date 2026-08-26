@@ -69,13 +69,88 @@ if (liveIntent && apiKey && !isLiveKey) {
   process.exit(1)
 }
 
-// F-005: Whitelist API URL
-const ALLOWED_HOSTS = ['api.shatale.com', 'localhost', '127.0.0.1']
-const apiBaseUrl = new URL(process.env.SHATALE_API_URL ?? 'https://api.shatale.com')
-if (!ALLOWED_HOSTS.some(h => apiBaseUrl.hostname === h || apiBaseUrl.hostname.endsWith('.shatale.com'))) {
-  console.error(`ERROR: Untrusted API URL: ${apiBaseUrl.hostname}. Only *.shatale.com and localhost are allowed.`)
+// F-005 / SHAT-2558: where SHATALE_API_URL may point, and what may be sent there.
+//
+// ⚠️ WHAT THIS CHECK GUARDS IS NOT "A URL". IT IS THE API KEY. client.ts attaches
+// `Authorization: Bearer ${apiKey}` to whatever host survives this block, unconditionally. So every
+// line below is really about one question: who ends up holding a live key.
+//
+// ⚠️ THE OLD EXPRESSION READ LIKE AN ALLOWLIST AND WAS NOT ONE:
+//
+//     ALLOWED_HOSTS.some(h => hostname === h || hostname.endsWith('.shatale.com'))
+//
+// The second disjunct never mentions `h`. It is a constant inside the callback, so it was simply
+// OR-ed onto the whole test and evaluated once per array element — the three named hosts only ever
+// contributed exact matches, and the real rule was the wildcard. A reader checking "is this host
+// allowed" reads the array and gets the wrong answer.
+//
+// ⚠️ AND ONE WORRY DOES NOT REPRODUCE, WHICH IS WORTH RECORDING SO NOBODY RE-RAISES IT: a LOOKALIKE
+// domain is refused. The suffix carries the leading dot, so `evilshatale.com`.endsWith('.shatale.com')
+// is false. Measured: SHATALE_API_URL=https://evilshatale.com exits 1.
+//
+// What IS true is narrower and still serious: ANY subdomain of shatale.com receives the key. A
+// dangling CNAME on a marketing subdomain, or one third-party service with a takeover, is enough to
+// be handed `Bearer sk_live_*` and every purchase body that follows.
+const SHATALE_SUFFIX = '.shatale.com'
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '::1']
+const CANONICAL_API_HOST = 'api.shatale.com'
+
+const apiBaseUrl = new URL(process.env.SHATALE_API_URL ?? `https://${CANONICAL_API_HOST}`)
+const host = apiBaseUrl.hostname
+const isLoopback = LOOPBACK_HOSTS.includes(host)
+const isShataleHost = host === CANONICAL_API_HOST || host.endsWith(SHATALE_SUFFIX)
+
+if (!isLoopback && !isShataleHost) {
+  console.error(
+    `ERROR: Untrusted API URL: ${host}. Only ${CANONICAL_API_HOST}, *${SHATALE_SUFFIX} and ` +
+      `localhost are allowed — this process would otherwise send your API key there.`,
+  )
   process.exit(1)
 }
+
+// ⚠️ THE SCHEME WAS NEVER CHECKED, AND NOTHING DOCUMENTED THAT. `new URL()` accepts any protocol,
+// so SHATALE_API_URL=http://api.shatale.com started normally and sent `Bearer sk_live_*` in
+// cleartext — measured against a local recorder. Nothing legitimate needs it: the API is HTTPS, and
+// a plaintext bearer token is not a trade-off anyone would choose on purpose.
+//
+// Loopback is exempt because the test harness serves http://127.0.0.1 and a packet that never
+// leaves the machine is not the subject of this rule.
+if (!isLoopback && apiBaseUrl.protocol !== 'https:') {
+  console.error(
+    `ERROR: SHATALE_API_URL uses ${apiBaseUrl.protocol}//. Refusing to send an API key in cleartext ` +
+      `— use https:// (loopback is exempt for local development).`,
+  )
+  process.exit(1)
+}
+
+// ⚠️ AND IN LIVE MODE THE WILDCARD IS NOT ENOUGH, because the thing at stake changes.
+//
+// A sandbox key reaching an unexpected subdomain is a test credential in the wrong place. A LIVE key
+// is money and a person's card. Live mode is already a deliberate act — a `sk_live_` key AND
+// `SHATALE_MODE=live` — and this makes the third element of that act deliberate too: a live key
+// goes to the canonical host unless somebody says otherwise in as many words.
+//
+// The pattern is this codebase's own (SHATALE_MONEY_GO, ALLOW_DEV_CRYPTO_FALLBACK in the API): the
+// absence of a variable must not widen a permission, and a widening must be a thing someone TYPED.
+//
+// It refuses nothing anyone does today: guest and sandbox keep the wildcard untouched, so pointing
+// a sandbox key at sandbox.api.shatale.com or at the test harness is unaffected.
+if (isLiveKey && liveIntent && host !== CANONICAL_API_HOST && !isLoopback) {
+  if (process.env.SHATALE_ALLOW_NONSTANDARD_LIVE_HOST !== 'true') {
+    console.error(
+      `ERROR: a LIVE key would be sent to ${host}, which is not ${CANONICAL_API_HOST}.\n` +
+        `Any subdomain of shatale.com passes the host allowlist, and a dangling CNAME or a taken-over ` +
+        `subdomain is enough to receive Bearer sk_live_* and every purchase body after it.\n` +
+        `If this host is genuinely intended, set SHATALE_ALLOW_NONSTANDARD_LIVE_HOST=true — so that ` +
+        `it is a decision somebody made rather than a default nobody noticed.`,
+    )
+    process.exit(1)
+  }
+  console.error(
+    `WARNING: sending a LIVE key to ${host} (SHATALE_ALLOW_NONSTANDARD_LIVE_HOST=true).`,
+  )
+}
+
 const apiBase = apiBaseUrl.toString().replace(/\/$/, '')
 
 const isGuest = !apiKey
