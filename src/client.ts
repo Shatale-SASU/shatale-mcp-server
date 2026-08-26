@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError, extractRequestId } from './errors.js'
+import { redactPurchaseCard } from './redact.js'
 
 /**
  * SHAT-1682: derive a STABLE idempotency key from the purchase's identifying
@@ -166,7 +167,28 @@ export class ShataleClient {
         throw mapHttpError(res.status, method, path, requestId)
       }
 
-      return await res.json()
+      // /!\ THE PCI SCRUB IS APPLIED HERE, ON EVERY RESPONSE, AND THAT IS THE WHOLE CHANGE.
+      //
+      // It used to be called at four tool call sites, while its own comment claimed the global form:
+      // "NO TOOL RESULT CARRIES A NUMBER+CVV PAIR". True of the function; false of the server. Every
+      // other tool returned the upstream body unfiltered, and a tool written tomorrow got nothing.
+      //
+      // One door. A new tool cannot miss it by not knowing it exists, and its absence is visible in
+      // one place instead of by auditing every handler. Nothing legitimate is lost: no tool needs a
+      // PAN in its RESULT — card_number is an INPUT to sandbox_simulate_authorization — and last4 is
+      // derived before the deletion so an agent can still tell two cards apart.
+      //
+      // /!\ THE `await` IS NOT THIS CHANGE'S, AND BOTH HALVES OF THIS LINE ARE LOAD-BEARING.
+      //
+      // `await` belongs to the request-timeout fix: without it `finally` clears the abort timer the
+      // moment the try block RETURNS a promise, so the timeout covered the headers and not the body,
+      // and an upstream that stalled mid-body hung the agent for ever. `redactPurchaseCard` is this
+      // change: the PCI scrub applied once, here, instead of at four tool call sites.
+      //
+      // They arrived as separate pull requests and conflicted on exactly this line, as predicted and
+      // rehearsed before either was merged. Taking either side alone compiles, passes most of the
+      // suite, and silently restores one of the two defects. Keep both.
+      return redactPurchaseCard(await res.json())
     } finally {
       clearTimeout(timeout)
     }
