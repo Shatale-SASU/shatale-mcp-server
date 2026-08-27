@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 
 /**
@@ -376,13 +376,19 @@ export class ShataleClient {
   // ---- Common ----
 
   async listMCCCodes(query?: string): Promise<unknown> {
+    // /!\ THIS LINE IS OUTSIDE THE try ON PURPOSE, AND IT IS THE ONLY WAY THIS METHOD THROWS.
+    // encodeURIComponent raises URIError on an unpaired surrogate, and that is a fact about the
+    // caller's string, not about the API — so it must NOT be answered with the built-in list and a
+    // "the lookup failed" note, which would blame the deployment for a bad query. The tool layer
+    // refuses it by name (MALFORMED_QUERY). Moving this inside the try would silently convert a
+    // malformed query into a confident, wrong answer.
     const qs = query ? `?q=${encodeURIComponent(query)}` : ''
     try {
       // `qs` is a filter, not an address: the route is constant and carries no id. The old
       // heuristic (any non-POST → "verify the id") told a caller to check an id this call
       // does not have.
       return await this.request('GET', `/v1/mcc-codes${qs}`, undefined, 'fixed')
-    } catch (err) {
+    } catch {
       // F-008/F-011: fall back to the built-in list rather than failing — this is static
       // reference data and an agent looking up "which code is gambling" should not be
       // blocked by a network hiccup.
@@ -392,13 +398,18 @@ export class ShataleClient {
       // the deployment at all, so the fallback fires every single time and nothing said
       // so. "Error reads as data" is the worst failure mode for a caller that cannot ask
       // a follow-up question — so the reason travels with the answer.
+      //
+      // ⚠️ THE REASON, NOT THE EXCEPTION. The caught error is not even bound here any more, and
+      // that is deliberate: this used to interpolate `err.message` into `_note`, which handed the
+      // agent whatever text fetch happened to throw — measured against the published 1.0.2, an
+      // API URL carrying a password put that password into a result with `isError` unset. Every
+      // other failure in this package goes through `errorResult`, which echoes nothing by
+      // construction; this path bypassed that guard purely by being a success. The note keeps the
+      // FACT and drops the prose — see BUILT_IN_MCC_NOTE in errors.ts.
       return {
         ...(ShataleClient.filterBuiltInMCC(query) as Record<string, unknown>),
         _source: 'built-in',
-        _note:
-          'Served from this package\'s built-in ISO 18245 list, not from the API — the ' +
-          'lookup failed (' + (err instanceof Error ? err.message : String(err)) + '). ' +
-          'Codes are stable, but a code added server-side will not appear here.',
+        _note: BUILT_IN_MCC_NOTE,
       }
     }
   }

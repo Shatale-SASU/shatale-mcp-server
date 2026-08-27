@@ -2,6 +2,23 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import type { GuestContext } from './guest.js'
 import { jsonResult, textResult } from '../types.js'
+import { errorResult, refusal, MALFORMED_QUERY } from '../errors.js'
+
+/**
+ * Can this string be put on a URL at all?
+ *
+ * Asked by CALLING the very function that would throw, rather than by restating its rule as a
+ * surrogate-pair regex. A hand-written predicate and `encodeURIComponent` would be two definitions
+ * of the same thing, free to drift, and the one that decides the outcome is the one in client.ts.
+ */
+function isUrlEncodable(s: string): boolean {
+  try {
+    encodeURIComponent(s)
+    return true
+  } catch {
+    return false
+  }
+}
 
 // SHAT-1460/2484: a sandbox key is EXACTLY `sk_sandbox_*`. The identity service issues `sk_sandbox_` for
 // sandbox and `sk_live_` for live — it has never issued `sk_test_` or `sh_test_`, so those were dead prefixes
@@ -42,14 +59,25 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
     handlers: {
       list_capabilities: async () => handleListCapabilities(ctx),
 
+      // ⚠️ THIS CATCH USED TO PRINT THE EXCEPTION VERBATIM — `API error: ${err.message}` — AND IT
+      // WAS BELIEVED UNREACHABLE BECAUSE listMCCCodes SWALLOWS ITS OWN FAILURES. IT IS NOT.
+      //
+      // Measured, not reasoned: `list_mcc_codes({ query: "\uD800" })` against a healthy client
+      // answered `API error: URI malformed`. listMCCCodes builds its query string BEFORE opening
+      // its try, so `encodeURIComponent` throws past the fallback and lands here. "No caller can
+      // reach it" was a property of one line's position inside another file — the kind of claim
+      // that stops being true when someone tidies an unrelated line.
+      //
+      // So this no longer echoes anything, and it does not lean on unreachability either. The one
+      // cause we can actually name is refused by name; anything else goes through `errorResult`
+      // like every other tool in this package.
       list_mcc_codes: async (args) => {
+        const query = args.query ? String(args.query) : undefined
+        if (query !== undefined && !isUrlEncodable(query)) return refusal(MALFORMED_QUERY)
         try {
-          const result = await client.listMCCCodes(
-            args.query ? String(args.query) : undefined,
-          )
-          return jsonResult(result)
+          return jsonResult(await client.listMCCCodes(query))
         } catch (err) {
-          return textResult(`API error: ${err instanceof Error ? err.message : String(err)}`, true)
+          return errorResult(err, 'mcc_lookup_failed')
         }
       },
     },

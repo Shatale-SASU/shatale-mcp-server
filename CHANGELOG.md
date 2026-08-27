@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A note attached to a SUCCESS no longer carries the caught exception's own text. When
+  `/v1/mcc-codes` cannot be reached, `list_mcc_codes` serves the package's built-in ISO 18245 list
+  and says so — and it used to say so by interpolating the exception's message into `_note`, on a
+  result with `isError` unset. Measured against the published 1.0.2 with `SHATALE_API_URL` pointed
+  at a URL containing credentials, the password reached the agent's context inside a result flagged
+  as success. Everything in `src/errors.ts` exists to keep raw caught detail away from the agent;
+  this path walked past that guard purely by not being an error. The note now states the fact — the
+  lookup failed, this is the packaged list, a code added server-side will not appear — and none of
+  the exception. The fallback itself is unchanged: a stale-but-correct MCC list beats a failed call.
+- The second raw echo, `API error: ${err.message}` in the `list_mcc_codes` handler, is gone too. It
+  had been read as unreachable, since `listMCCCodes` swallows its own failures; it is not.
+  `encodeURIComponent` runs before that try block, so a query containing an unpaired surrogate
+  throws past the fallback and reached the echo — measured: `API error: URI malformed`. A query that
+  cannot be put on a URL is now refused by name, and anything else goes through `errorResult` like
+  every other tool. The refusal deliberately does not point at `SHATALE_API_URL`: our own encode
+  call threw before a byte was sent, so nothing about the deployment is implicated.
+
 ## [1.0.2] — 2026-08-27
 
 Five fixes that all share one shape: a text that outran, or misread, the code it describes.

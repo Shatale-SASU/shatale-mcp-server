@@ -240,6 +240,59 @@ export const UNKNOWN_CAUSE = {
     'not the call.',
 } as const
 
+/**
+ * ⚠️ THE ONE TEXT FOR "THE LOOKUP FAILED AND WE SERVED THE BUILT-IN LIST INSTEAD" — AND IT LIVES
+ * HERE, IN THE ERROR-TEXT MODULE, BECAUSE THE LEAK IT CLOSES CAME IN THROUGH A *SUCCESS*.
+ *
+ * Everything else in this file guards the error branch: `errorResult` echoes nothing by
+ * construction, and the tools were swept once already to make sure they all go through it. The MCC
+ * fallback walked straight past that guard by not being an error. `listMCCCodes` catches its own
+ * failure, serves the built-in ISO 18245 list, and — measured against the published 1.0.2 — pasted
+ * the caught exception's own message into the `_note` of a result with `isError` unset:
+ *
+ *   "_note": "... the lookup failed (Request cannot be constructed from a URL that includes
+ *             credentials: http://user:<password>@127.0.0.1:9/v1/mcc-codes). ..."
+ *
+ * A URL in SHATALE_API_URL with a password in it therefore reached the agent's context, the
+ * transcript, and anything that logs tool results — flagged as success, so nothing downstream had
+ * any reason to treat it as sensitive. The API key itself is a header, not part of the URL, so it
+ * was not in that string; but "which secrets does an exception happen to carry today" is not a
+ * safety property, and it is not one this package controls. The exception's text is not ours: it
+ * comes from fetch, from the DNS resolver, from whatever throws next release.
+ *
+ * ⚠️ AND THE NOTE ITSELF IS NOT THE PROBLEM — DELETING IT WOULD BE A SECOND DEFECT. The fallback
+ * used to be SILENT, which made a built-in answer read as if the server had said it. What the agent
+ * needs is the FACT (the lookup failed, this is the packaged list, it can be stale), and the fact
+ * fits in a fixed sentence. What it has no use for is the exception's prose.
+ *
+ * Exported so the test pins THIS text rather than restating a paraphrase of it, the way
+ * {@link UNKNOWN_CAUSE} is.
+ */
+export const BUILT_IN_MCC_NOTE =
+  'Served from this package\'s built-in ISO 18245 list, not from the API — the lookup failed. ' +
+  'Codes are stable, but a code added server-side will not appear here, and the reason for the ' +
+  'failure is not reported to the agent. If this matters, check that SHATALE_API_URL is reachable ' +
+  'and that /v1/mcc-codes is deployed there; the server-side log has the detail.'
+
+/**
+ * The refusal for a `query` this process cannot put on a URL at all.
+ *
+ * ⚠️ NAMED, RATHER THAN SWEPT INTO {@link UNKNOWN_CAUSE}, BECAUSE THE CAUSE REALLY IS KNOWN HERE.
+ * `encodeURIComponent` throws `URIError` on an unpaired surrogate, and it is OUR call that throws,
+ * before any request is attempted — so nothing about the deployment is implicated. Answering this
+ * with the unknown-cause text would send an agent to check whether the API is reachable when the
+ * only thing wrong is the string it passed, which is the same misdiagnosis SHAT-2678 removed from
+ * the other direction.
+ */
+export const MALFORMED_QUERY = {
+  code: 'invalid_query',
+  message: 'The search query is not valid text and cannot be placed in a URL.',
+  suggested_fix:
+    'Pass a plain text query (e.g. "gambling", "airline"). The string contained an unpaired ' +
+    'surrogate — usually a truncated emoji or a sliced multi-byte character. Omit `query` to get ' +
+    'the full list.',
+} as const
+
 /** The same, for the one non-answer we CAN name: our own timeout fired. */
 export const TIMED_OUT = {
   // Not "the request was sent": one AbortController is armed before fetch, so it also covers DNS and
