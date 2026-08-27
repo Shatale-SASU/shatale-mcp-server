@@ -142,11 +142,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           }
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'credentials_failed',
-            message: 'Could not issue temporary credentials.',
-            suggested_fix: 'Confirm the user is onboarded and the merchant_domain is valid, then retry.',
-          })
+          return errorResult(err, 'credentials_failed')
         }
       },
 
@@ -157,11 +153,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           const result = await client.getCredentialStatus(credId.value)
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'credential_status_failed',
-            message: 'Could not fetch the credential status.',
-            suggested_fix: 'Use the credential_request_id returned by request_temporary_credentials.',
-          })
+          return errorResult(err, 'credential_status_failed')
         }
       },
 
@@ -178,11 +170,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
             ...result,
           })
         } catch (err) {
-          return errorResult(err, {
-            code: 'credential_emails_failed',
-            message: 'Could not fetch emails for this credential.',
-            suggested_fix: 'Use the credential_request_id from request_temporary_credentials, and poll again — the merchant email may not have arrived yet.',
-          })
+          return errorResult(err, 'credential_emails_failed')
         }
       },
     },

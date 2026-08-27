@@ -114,11 +114,7 @@ export function createOnboardingTools(
           })
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'registration_failed',
-            message: 'Could not register the user profile.',
-            suggested_fix: 'Confirm user_claims.email is a valid email, then retry.',
-          })
+          return errorResult(err, 'registration_failed')
         }
       },
 
@@ -129,11 +125,7 @@ export function createOnboardingTools(
           const result = await client.getOnboardingStatus(sessionId.value)
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'onboarding_status_failed',
-            message: 'Could not fetch the onboarding status.',
-            suggested_fix: 'Use the session_id returned by register_user_profile or request_purchase.',
-          })
+          return errorResult(err, 'onboarding_status_failed')
         }
       },
     },

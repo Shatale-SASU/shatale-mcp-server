@@ -114,12 +114,63 @@ export function mapHttpError(status: number, method: string, path: string, reque
 }
 
 /**
- * Convert any caught error into a structured, leak-safe tool error result.
- * Known {@link ShataleApiError}s pass through their structured shape; anything
- * else (network failure, abort, unexpected throw) maps to `fallback` so we
- * never surface raw stack traces, file paths, or driver errors to the agent.
+ * A refusal the CLIENT itself decided, where the cause is known and the advice is earned.
+ *
+ * Kept separate from {@link errorResult} on purpose. Both used to be the same call, and the shared
+ * shape is what hid the defect below: one path knows why it failed, the other does not, and only
+ * one of them may name a cause.
  */
-export function errorResult(err: unknown, fallback: StructuredError): ToolCallResult {
-  const structured = err instanceof ShataleApiError ? err.toStructured() : fallback
+export function refusal(structured: StructuredError): ToolCallResult {
   return jsonResult({ error: structured }, true)
+}
+
+/**
+ * The ONE text for "the call failed and nothing is known about why".
+ *
+ * Exported so a test can assert that every tool produces exactly this, rather than each tool being
+ * trusted to write a neutral sentence of its own. Fourteen private sentences is how the class came
+ * about; one shared sentence is what keeps it gone.
+ */
+export const UNKNOWN_CAUSE = {
+  message: 'The request did not complete, and no reply came back to say why.',
+  suggested_fix:
+    'No reply arrived, so nothing in the request has been judged. Retry, and if it keeps failing, ' +
+    'look at whether the API endpoint (SHATALE_API_URL) can be reached from here — the deployment, ' +
+    'not the call.',
+} as const
+
+/** The same, for the one non-answer we CAN name: our own timeout fired. */
+export const TIMED_OUT = {
+  // Not "the request was sent": one AbortController is armed before fetch, so it also covers DNS and
+  // connect. An abort from a host that never accepted a connection means nothing was sent at all.
+  message: 'No reply arrived before the timeout.',
+  suggested_fix: UNKNOWN_CAUSE.suggested_fix,
+} as const
+
+/**
+ * Convert a CAUGHT error into a structured, leak-safe tool error result.
+ *
+ * ⚠️ THE SECOND ARGUMENT IS A CODE, NOT A DIAGNOSIS, AND THAT IS THE WHOLE POINT. Found while
+ * verifying SHAT-2611 against the published package; it has no ticket id of its own yet.
+ *
+ * This used to take a whole `fallback: StructuredError`, and every tool wrote one as a sentence
+ * about WHY the call failed: "Confirm the merchant, amount, and user details are valid, then
+ * retry." But this branch is reached precisely when the error is NOT a ShataleApiError — when the
+ * server never answered at all. Measured against the published package with an unreachable API: a
+ * connection refused came back advising the caller to check the merchant and the amount. An agent
+ * follows that: it edits a perfectly good request and retries into a void, and the one fact that
+ * would end the loop — nobody is listening — is the fact the message replaced.
+ *
+ * A fallback is stated exactly where the cause is unknown, so it must not name a cause. Input
+ * advice belongs to the branch where the SERVER rejected the input, which is `mapHttpError` — a
+ * distinction this file already drew once, for the 404 that kept meaning "not deployed".
+ *
+ * Nothing from the caught error is echoed: a raw message can carry a URL, a path or a driver
+ * string, and the agent has no use for it.
+ */
+export function errorResult(err: unknown, code: string): ToolCallResult {
+  if (err instanceof ShataleApiError) return jsonResult({ error: err.toStructured() }, true)
+
+  const timedOut = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')
+  return jsonResult({ error: { code, ...(timedOut ? TIMED_OUT : UNKNOWN_CAUSE) } }, true)
 }

@@ -220,13 +220,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
       const result = await client.sandboxSimulateAuthorization(parsed.data)
       return jsonResult(result)
     } catch (err) {
-      return errorResult(err, {
-        code: 'sandbox_simulate_failed',
-        message: 'Could not run the sandbox authorization.',
-        suggested_fix:
-          'Ensure you are using a sandbox key (sk_sandbox_*) and that agent_id is an agent ' +
-          'owned by the key\'s publisher.',
-      })
+      return errorResult(err, 'sandbox_simulate_failed')
     }
   }
 
@@ -244,11 +238,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
       // the backend changes.
       return jsonResult(result)
     } catch (err) {
-      return errorResult(err, {
-        code: 'sandbox_approve_failed',
-        message: 'Could not approve the sandbox purchase.',
-        suggested_fix: 'Pass a purchase_id for a sandbox purchase that is pending approval.',
-      })
+      return errorResult(err, 'sandbox_approve_failed')
     }
   }
 
@@ -262,11 +252,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
         const result = await client.sandboxCompleteOnboarding(userId.value)
         return jsonResult(result)
       } catch (err) {
-        return errorResult(err, {
-          code: 'sandbox_onboarding_failed',
-          message: 'Could not complete sandbox onboarding.',
-          suggested_fix: 'Pass the user_id of a sandbox user that is awaiting onboarding.',
-        })
+        return errorResult(err, 'sandbox_onboarding_failed')
       }
     },
 

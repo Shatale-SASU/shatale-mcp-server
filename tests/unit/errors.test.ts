@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { ShataleApiError, mapHttpError, errorResult } from '../../src/errors.js'
+import { ShataleApiError, mapHttpError, errorResult, UNKNOWN_CAUSE, TIMED_OUT } from '../../src/errors.js'
 
 describe('SHAT-1463 structured errors: mapHttpError', () => {
   test('401/403 → auth_failed', () => {
@@ -46,18 +46,25 @@ describe('SHAT-1463 structured errors: errorResult', () => {
     expect(parsed.error).toHaveProperty('suggested_fix')
   })
 
-  test('unknown error → fallback, never leaks raw message', () => {
+  // The second argument is now a CODE, not a whole error: an unknown cause may not carry a
+  // diagnosis, and the caller no longer gets to write one. The leak guarantee this
+  // test was written for is unchanged and still the point.
+  test('unknown error → neutral text, never leaks raw message', () => {
     const raw = new Error('pq: relation "users" does not exist at /Users/secret/path')
-    const res = errorResult(raw, {
-      code: 'purchase_failed',
-      message: 'Could not complete the purchase request.',
-      suggested_fix: 'retry',
-    })
+    const res = errorResult(raw, 'purchase_failed')
     expect(res.isError).toBe(true)
     const text = res.content[0].text
     expect(text).not.toContain('/Users/')
     expect(text).not.toContain('relation')
     const parsed = JSON.parse(text)
     expect(parsed.error.code).toBe('purchase_failed')
+    expect(parsed.error.message).toBe(UNKNOWN_CAUSE.message)
+  })
+
+  test('a timeout is the one non-answer we can name, and says so differently', () => {
+    const aborted = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    const parsed = JSON.parse(errorResult(aborted, 'purchase_failed').content[0].text)
+    expect(parsed.error.message).toBe(TIMED_OUT.message)
+    expect(parsed.error.message).not.toBe(UNKNOWN_CAUSE.message)
   })
 })
