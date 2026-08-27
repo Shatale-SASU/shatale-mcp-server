@@ -73,8 +73,15 @@ control('(a) onboarding claimed available in sandbox',
   { red: true, mustName: ['register_user_profile', 'is available in "sandbox"'] })
 
 // (a2) the mirror of (a): a real tool marked unavailable where it IS registered.
+//
+// ⚠️ THE LITERAL IS DELIBERATE AND IT HAS ALREADY EARNED ITS KEEP. When SHAT-2674 opened the
+// checkout reads in the sandbox, this row changed from `— — — — yes` to `— yes yes — yes`, the
+// replace stopped matching, and the control REFUSED rather than passing on a plant that never
+// happened. That refusal is the control working: a canary whose plant silently misses is a green
+// run that proves nothing. Update the literal when the row changes — do not loosen it to a pattern
+// that always matches.
 control('(a2) get_checkout_cardholder marked unavailable in live+money',
-  GOOD.replace(/^\| `get_checkout_cardholder` \| — \| — \| — \| — \| yes \|/m, '| `get_checkout_cardholder` | — | — | — | — | — |'),
+  GOOD.replace(/^\| `get_checkout_cardholder` \| — \| yes \| yes \| — \| yes \|/m, '| `get_checkout_cardholder` | — | yes | yes | — | — |'),
   { red: true, mustName: ['get_checkout_cardholder', 'live+money'] })
 
 // (c2) the tool stays in the matrix but loses its description.

@@ -38,9 +38,9 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 17 backed tools; the two unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 19 backed tools; the two unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
-    // 17, and every one missing is missing on purpose — a tool we advertise is a
+    // 19, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
@@ -58,26 +58,47 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // 16 → 17 is `sandbox_create_user` (SHAT-2698), which is the opposite kind of move: a tool
     // ADDED against a route the backend already serves. The two withheld ones above are unchanged.
     //
+    // ⚠️ 17 → 19 is the two checkout-identity tools (SHAT-2674), and it is the SAME kind of move as
+    // get_credential_emails: a reason expired, the rule did not change. They were withheld because
+    // "the backend rejects sandbox keys"; the backend does not. Measured against api.shatale.com
+    // with the key the deployed Concierge uses — a fresh sandbox user, a purchase at 2500 minor
+    // units reaching payment_ready, then GET /v1/purchases/{id}/checkout-identity answering 200
+    // with billing_identity and merchant_customer_identity.
+    //
     // ⚠️ AND THIS COMMENT SAID "16" FOR A RELEASE WHILE THE ASSERTION THREE LINES DOWN SAID 17.
     // Whoever bumped the number bumped the title and the expectation and not the prose between
     // them, which is the same shape as every defect this file's neighbours were written for: the
     // count is measured, the explanation of the count is not, and a reader checking WHY the number
     // is what it is gets last release's answer. Bump all three or none.
-    expect(res.result?.tools ?? []).toHaveLength(17)
+    expect(res.result?.tools ?? []).toHaveLength(19)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).toContain('get_credential_emails')
     expect(names).not.toContain('register_user_profile')
     expect(names).not.toContain('get_onboarding_status')
   })
 
-  // The live-only checkout-identity tools must NOT be listed in sandbox — the backend rejects sandbox
-  // keys on /v1/purchases, so exposing them here would only 403. Assert their absence by INTENT, not
-  // just by the count above.
-  test('checkout-identity tools are NOT exposed in sandbox mode', async () => {
+  // ⚠️ THIS TEST ASSERTED THE OPPOSITE, FOR A REASON THAT WAS WRONG TWICE OVER (SHAT-2674).
+  //
+  // It said: "the backend rejects sandbox keys on /v1/purchases, so exposing them here would only
+  // 403". Both halves fail. The backend does not reject sandbox keys on checkout-identity — the
+  // route sits in the ordinary purchases group behind RequireAPIKeyScope alone, with no SandboxOnly
+  // and no live-only middleware (main.go:5448) — and the sandbox refusal on /v1/purchases that the
+  // sentence leaned on was itself removed in SHAT-2611. It also named the wrong route: these tools
+  // call /v1/purchases/{id}/checkout-identity, not /v1/purchases.
+  //
+  // What the environment does is ISOLATE, not reject: a sandbox key can never read a LIVE purchase's
+  // customer (purchases.go). The negative control that settles it — the same route on a purchase
+  // still in onboarding_required answers JSON 404 "checkout identity not available", a refusal by
+  // BUSINESS STATE. The server distinguishes "there is no identity yet" from "you may not have it",
+  // and never refuses on the key.
+  //
+  // Asserted by INTENT rather than left to the count above, for the same reason the old test gave:
+  // a count moves for many reasons and says nothing about which tool moved.
+  test('checkout-identity tools ARE exposed in sandbox mode', async () => {
     const res = await client.send('tools/list')
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
-    expect(names).not.toContain('get_checkout_cardholder')
-    expect(names).not.toContain('get_checkout_customer')
+    expect(names).toContain('get_checkout_cardholder')
+    expect(names).toContain('get_checkout_customer')
   })
 
   test('sandbox_simulate_authorization hits the side-effect-free policy engine', async () => {
