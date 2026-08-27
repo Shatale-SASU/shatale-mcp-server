@@ -229,13 +229,30 @@ if (!isGuest) {
     registerModule(createPurchaseTools(client, { isSandbox: true }))
     registerModule(createCredentialTools(client))
     registerModule(createSandboxTools(client))
+    // ⚠️ SHAT-2674: THE REASON THIS USED TO BE LIVE-ONLY WAS A PROPERTY THE BACKEND DOES NOT HAVE.
+    //
+    // The comment said "checkout identity is on the live money path (backend rejects sandbox keys)".
+    // Measured 2026-08-27 against api.shatale.com, with the key the deployed Concierge uses:
+    //
+    //   POST /v1/sandbox/users                     -> 201   (fresh user provisioned)
+    //   POST /v1/purchases  amount_cents 2500      -> payment_ready
+    //   GET  /v1/purchases/{id}/checkout-identity  -> 200, billing_identity +
+    //                                                 merchant_customer_identity
+    //
+    // Negative control, the same route on a purchase still in onboarding_required: JSON 404
+    // "checkout identity not available" — a refusal by BUSINESS STATE, not by key. The server
+    // distinguishes "there is no identity yet" from "you may not have it", and it never refuses
+    // on the key. What the environment does is ISOLATE (purchases.go: a sandbox key can never read
+    // a LIVE purchase's customer), which is not the same as reject.
+    //
+    // The route is mounted in the ordinary purchases group behind RequireAPIKeyScope only — no
+    // SandboxOnly, no live-only middleware (main.go:5448).
+    registerModule(createCheckoutTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
     // live mode is onboarding-only (can drive registration, cannot move money).
     registerModule(createPurchaseTools(client, { isSandbox: false }))
     registerModule(createCredentialTools(client))
-    // Checkout identity is on the live money path (backend rejects sandbox keys) — register it only
-    // here, alongside the real purchase flow.
     registerModule(createCheckoutTools(client))
   }
 }
