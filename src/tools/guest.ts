@@ -79,7 +79,9 @@ Free sandbox key, no card required: ${REGISTER_URL}`
       ? `## You are in DEMO (SANDBOX) mode (\`sk_sandbox_*\` key)
 Real integration dev-mode against Shatale Sandbox APIs with test data — no real money.
 Onboarding, sandbox authorization simulation, approval, credential issuance, status and audit are live.
-request_purchase is disabled here (use sandbox_simulate_authorization instead).`
+request_purchase works here and creates a real sandbox purchase: the environment is stamped from
+your key, so you exercise the same contract an outsider uses without moving real money. Use
+sandbox_simulate_authorization when you want to test a POLICY decision alone, with no purchase.`
       : ctx.moneyEnabled
         ? `## You are in LIVE mode with money-GO (\`sk_live_*\` + SHATALE_MODE=live + SHATALE_MONEY_GO)
 Real production APIs. Onboarding, request_purchase and credentials move REAL money.

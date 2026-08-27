@@ -30,11 +30,17 @@ export { redactPurchaseCard } from '../redact.js'
 
 export interface PurchaseToolOptions {
   /**
-   * SHAT-1488 safety guard. `POST /v1/purchases` is NOT sandbox-gated on the
-   * backend (apps/api/main.go), so a `sk_sandbox_*` key can otherwise reach a
-   * live, side-effectful path (real ledger/outbox). When the active key is a
-   * sandbox key we block `request_purchase` client-side and steer callers to
-   * the side-effect-free `sandbox_simulate_authorization` instead.
+   * Whether the active key is a sandbox key. NOT USED FOR A REFUSAL — SHAT-2611.
+   *
+   * This doc used to be the SHAT-1488 safety guard: "`POST /v1/purchases` is NOT sandbox-gated on
+   * the backend, so a `sk_sandbox_*` key can otherwise reach a live, side-effectful path — we block
+   * `request_purchase` client-side". SHAT-2373 changed that property of the backend. The endpoint
+   * serves sandbox keys deliberately, the environment is stamped by the SERVER from the key, and
+   * the money-movers resolve to sandbox implementations.
+   *
+   * The field stays only because both call sites pass it and a future decision may legitimately
+   * want to know the mode. If nothing claims it, it should go: a plausible unused seam is an
+   * invitation to re-wire the refusal it used to carry.
    */
   isSandbox: boolean
 }
@@ -135,24 +141,30 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         if (!parsed.success) {
           return textResult(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`, true)
         }
-        // SHAT-1488 safety guard. /v1/purchases is NOT sandbox-gated on the
-        // backend, so a sk_sandbox_* key could otherwise reach a live,
-        // side-effectful path (real ledger/outbox). Refuse the call here —
-        // placed right before the network call so it can never escape the
-        // client under a sandbox key — and steer callers to the
-        // side-effect-free sandbox_simulate_authorization.
-        if (options.isSandbox) {
-          return errorResult(new Error('sandbox_key_purchase_blocked'), {
-            code: 'sandbox_key_purchase_blocked',
-            message:
-              'request_purchase creates real purchase state (ledger/outbox) and is ' +
-              'unavailable with sandbox keys.',
-            suggested_fix:
-              'Use sandbox_simulate_authorization to exercise the policy engine without side ' +
-              'effects, or run with a live key (sk_live_) plus SHATALE_MODE=live and SHATALE_MONEY_GO ' +
-              'in an environment cleared for real purchases.',
-          })
-        }
+        // ⚠️ THE REFUSAL THAT USED TO LIVE HERE OUTLIVED THE SERVER IT CITED — SHAT-2611.
+        //
+        // It said, in as many words: "SHAT-1488 safety guard. /v1/purchases is NOT sandbox-gated on
+        // the backend, so a sk_sandbox_* key could otherwise reach a live, side-effectful path (real
+        // ledger/outbox)." That was TRUE when it was written, and it was recorded as a PROPERTY OF
+        // THE SERVER rather than as a measurement with a date.
+        //
+        // SHAT-2373 changed exactly that property, and said why in the API's own guard: "/v1/purchases
+        // now serves sandbox keys DELIBERATELY — a sandbox key creating and cancelling a purchase
+        // through the SAME public contract an outsider uses IS the product (a privileged
+        // /v1/sandbox/purchases bypass is exactly what the ticket forbids)." The environment is
+        // stamped from the KEY, never the body; every money-mover takes its implementation from the
+        // environment resolver, so no real money moves and no real card is issued; and both
+        // properties are guarded (TestEveryMoneyMoverTakesItsImplFromTheResolver, and the
+        // cross-environment scoping guard).
+        //
+        // So the client was refusing on the strength of a sentence about a server that no longer
+        // behaves that way — and refusing the one call a publisher has to make first.
+        //
+        // ⚠️ AND ITS ADVICE POINTED THE WRONG WAY, WHICH IS THE PART WORTH REMEMBERING. The refusal
+        // suggested "run with a live key (sk_live_) plus SHATALE_MODE=live and SHATALE_MONEY_GO". It
+        // pushed a caller toward REAL MONEY to escape a sandbox that had been safe by construction
+        // for months. A protection whose escape hatch is more dangerous than the thing it protects
+        // against is worse than no protection: it is read as guidance.
         try {
           const input = parsed.data
           const result = await client.requestPurchase({

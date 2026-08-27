@@ -6,10 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## [1.0.0] — unreleased
+## [Unreleased]
 
-No code change. `dist/` in the 1.0.0 tarball is byte-identical to `dist/` in the published
-0.5.2. Upgrading from 0.5.2 changes the documentation and the packaging, not the server.
+### Changed
+
+- `request_purchase` is no longer refused under a sandbox key. The refusal cited a property of the
+  backend — "`/v1/purchases` is NOT sandbox-gated, so a `sk_sandbox_*` key can reach a live,
+  side-effectful path" — and SHAT-2373 changed exactly that property while this client went on
+  citing it. The endpoint now serves sandbox keys deliberately: the environment is stamped from the
+  key, never from the request body, and the money-movers resolve to sandbox implementations. A
+  sandbox key using the same public contract an outsider uses is the product; a privileged
+  `/v1/sandbox/purchases` bypass is what the ticket forbids. (SHAT-2611)
+- The two sentences the server SAYS about it were corrected with the code. `explain_shatale` and
+  `list_capabilities` told a sandbox caller that `request_purchase` was "disabled"/"BLOCKED"; an
+  agent that reads that does not call the tool, so the refusal survived its own removal in prose.
+  Both are now pinned by a test. (SHAT-2611)
+- The refusal's suggested fix pointed at real money — "run with a live key (`sk_live_`) plus
+  `SHATALE_MODE=live` and `SHATALE_MONEY_GO`" — as the way out of a sandbox that was safe by
+  construction. That advice is gone and is asserted absent. (SHAT-2611)
+
+## [1.0.0] — 2026-08-27
+
+No code change **relative to 0.5.2**: `dist/` in the 1.0.0 tarball is byte-identical to `dist/` in
+the published 0.5.2, so upgrading from 0.5.2 changes the documentation and the packaging, not the
+server. That is a statement about this release, not about the repository — changes made after it
+are under `[Unreleased]` above.
 
 ### Added
 - Publishing requires a tag whose `package.json` matches it, and the published code is checked
