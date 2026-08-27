@@ -9,9 +9,12 @@
 
 <!-- This table said "0.2.x" while the published package was 0.5.2 — so the security policy told
      every reporter that the version everybody is running is unsupported. Corrected 2026-08-26
-     (SHAT-2526). If you bump the package version, bump this row in the same commit: a support
-     matrix is only read by someone deciding whether to bother telling us. Bumped to 1.0.x with
-     the 1.0.0 version bump, per that instruction. -->
+     (SHAT-2526). Bumped to 1.0.x with the 1.0.0 version bump, per the instruction that stood here —
+     and the instruction is now enforced as well: tests/unit/the-support-table-tracks-the-version.test.ts
+     fails a bump that leaves this row behind (SHAT-2527). Both halves are worth recording. It was
+     followed this time because somebody remembered, and "somebody remembered" is the part that does
+     not survive a busy release: a support matrix is only read by someone deciding whether to bother
+     telling us. -->
 
 ## Reporting a Vulnerability
 
