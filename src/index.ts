@@ -222,8 +222,10 @@ if (!isGuest) {
   registerModule(createOnboardingTools(client, { enabled: onboardingEnabled }))
 
   if (isSandbox) {
-    // Demo: request_purchase is registered but client-blocked (steers to the
-    // side-effect-free simulator); sandbox lifecycle helpers are live.
+    // Demo: request_purchase runs the ordinary path — the server stamps the environment from the
+    // key (SHAT-2373), so nothing here reaches live money; the client-side refusal was removed in
+    // SHAT-2611. sandbox_simulate_authorization remains the narrower tool, for a policy decision
+    // without a purchase. Sandbox lifecycle helpers are live.
     registerModule(createPurchaseTools(client, { isSandbox: true }))
     registerModule(createCredentialTools(client))
     registerModule(createSandboxTools(client))

@@ -30,17 +30,18 @@ export { redactPurchaseCard } from '../redact.js'
 
 export interface PurchaseToolOptions {
   /**
-   * SHAT-1488 safety guard. `POST /v1/purchases` is NOT sandbox-gated on the
-   * backend (apps/api/main.go), so a `sk_sandbox_*` key can otherwise reach a
-   * live, side-effectful path (real ledger/outbox). When the active key is a
-   * sandbox key we block `request_purchase` client-side and steer callers to
-   * the side-effect-free `sandbox_simulate_authorization` instead.
+   * Whether the active key is a sandbox key. NOT USED FOR A REFUSAL — SHAT-2611.
+   *
+   * This doc used to be the SHAT-1488 safety guard: "`POST /v1/purchases` is NOT sandbox-gated on
+   * the backend, so a `sk_sandbox_*` key can otherwise reach a live, side-effectful path — we block
+   * `request_purchase` client-side". SHAT-2373 changed that property of the backend. The endpoint
+   * serves sandbox keys deliberately, the environment is stamped by the SERVER from the key, and
+   * the money-movers resolve to sandbox implementations.
+   *
+   * The field stays only because both call sites pass it and a future decision may legitimately
+   * want to know the mode. If nothing claims it, it should go: a plausible unused seam is an
+   * invitation to re-wire the refusal it used to carry.
    */
-  // ⚠️ KEPT, AND NOT USED FOR A REFUSAL ANY MORE — SHAT-2611. It described "should this client
-  // refuse the call", and that question is gone: the environment is a property of the PURCHASE,
-  // stamped by the server from the key. It stays only because the two call sites pass it and a
-  // future decision may legitimately want to know the mode; if nothing claims it, it should go,
-  // because a plausible unused seam is an invitation to re-wire the refusal it used to carry.
   isSandbox: boolean
 }
 

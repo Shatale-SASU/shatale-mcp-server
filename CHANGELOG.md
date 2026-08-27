@@ -25,10 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `SHATALE_MODE=live` and `SHATALE_MONEY_GO`" — as the way out of a sandbox that was safe by
   construction. That advice is gone and is asserted absent. (SHAT-2611)
 
-## [1.0.0] — unreleased
+## [1.0.0] — 2026-08-27
 
-No code change. `dist/` in the 1.0.0 tarball is byte-identical to `dist/` in the published
-0.5.2. Upgrading from 0.5.2 changes the documentation and the packaging, not the server.
+No code change **relative to 0.5.2**: `dist/` in the 1.0.0 tarball is byte-identical to `dist/` in
+the published 0.5.2, so upgrading from 0.5.2 changes the documentation and the packaging, not the
+server. That is a statement about this release, not about the repository — changes made after it
+are under `[Unreleased]` above.
 
 ### Added
 - Publishing requires a tag whose `package.json` matches it, and the published code is checked
