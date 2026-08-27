@@ -30,22 +30,42 @@ If you discover a security vulnerability, please report it responsibly:
 This MCP server is designed with the following security principles:
 
 - **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true, in three deliberate acts with no accidental path between them: a live key (`sk_live_*`) supplied WITHOUT `SHATALE_MODE=live` refuses to start; `SHATALE_MODE=live` supplied WITHOUT a live key also refuses; and the purchase/credential tools are registered only when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. A live key with the mode and no money-GO runs onboarding-only.
-- **No card data in a tool result.** PAN and CVV are stripped from **every response this server
-  returns**, not from a list of tools: the scrub (`redactPurchaseCard`, `src/redact.ts`) is applied
-  once inside `ShataleClient.request`, so a tool added tomorrow that returns an upstream body is
-  covered by construction rather than by somebody remembering.
+- **The card we issued IS returned, deliberately. The person's card never is.**
+  Until 2026-08-27 this bullet said PAN and CVV were stripped from every response this server
+  returns. That is no longer true, by decision, and the reason is a distinction the earlier text
+  did not make.
 
-  ⚠️ **This bullet said the opposite until 2026-08-27, and the correction is recorded rather than
-  quietly swapped.** It described the scrub as living at four tool call sites, and stated that making
-  it a property of the client "would close that, and is tracked separately". That change had already
-  merged — `6b95e4f`, 2026-08-26 09:40:20 — **four seconds after this file's previous edit**
-  (`46efaea`, 09:40:16), code last. The document understated a guarantee that already existed, and
-  went on understating it for a day.
+  **The card whose details are returned is OURS.** We mint it for one purchase, the cardholder is
+  Shatale SASU, and it is handed to the agent precisely so the agent can pay with it. An agent
+  cannot fill a merchant checkout with a masked PAN, for the same reason it cannot register with a
+  masked relay password — see the bullet below, which reached this conclusion first.
 
-  **Boundary, stated because a scrub is easy to over-claim:** this removes card numbers and CVV from
-  tool RESULTS — what reaches the agent's context. Card data reaches a merchant checkout
-  out-of-band. It is not a statement about what the upstream API stores, logs, or returns to other
-  clients.
+  ⚠️ **The PERSON's saved card is never returned, in any mode, on any path.** It is the funding
+  instrument and it does not leave our side. These are two different objects and the earlier
+  blanket scrub did not tell them apart: it fired on any object carrying `number`/`cvv`, whoever
+  owned it. Removing it wholesale would have opened ours AND stopped protecting theirs.
+
+  **How the two are told apart, and why not the obvious way.** Disclosure is an allowlist of API
+  paths, not a property read off the response body. The obvious signal lies: the sandbox approval
+  answers `merchant_locked: true` while the issuer request carries no merchant field at all
+  (measured 2026-08-27). **A response that describes itself incorrectly cannot decide whether to
+  reveal a PAN.** What is known reliably is which endpoint we called. Anything not on the list is
+  still scrubbed, including response shapes we have not seen yet.
+
+  **Boundaries, stated because a disclosure is easy to under-describe:**
+  - The card is capped at the purchase amount. It is **not** merchant-locked — that is a decision,
+    not an oversight. It stays usable until one of three things ends it: **the card expires, it is
+    locked, or it is quarantined.** Nothing about completing a purchase ends it by itself. So the
+    returned details permit spending the capped amount **at any merchant** until one of those three
+    happens.
+  - This says nothing about what the upstream API stores, logs, or returns to other clients.
+
+  ⚠️ **Honest history: this bullet has been wrong twice in twenty-four hours.** It first understated
+  a guarantee that already existed (the scrub had become a property of the client four seconds
+  after the file's previous edit — `6b95e4f` at 2026-08-26 09:40:20 against `46efaea` at 09:40:16,
+  code last), was corrected to "stripped from every response", and now there is no blanket strip at
+  all. Recorded rather than quietly swapped, because an external document has a version history and
+  a silent edit is found out worse than a loud one.
 - **Relay credentials ARE returned, deliberately.** This bullet used to read "No credentials:
   Email aliases and credential vault are not accessible", and that has not been true since the
   masking was removed on purpose (`src/tools/credentials.ts`): `request_temporary_credentials`
