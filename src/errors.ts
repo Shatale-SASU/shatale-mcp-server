@@ -150,8 +150,7 @@ export const TIMED_OUT = {
 /**
  * Convert a CAUGHT error into a structured, leak-safe tool error result.
  *
- * ⚠️ THE SECOND ARGUMENT IS A CODE, NOT A DIAGNOSIS, AND THAT IS THE WHOLE POINT. Found while
- * verifying SHAT-2611 against the published package; it has no ticket id of its own yet.
+ * ⚠️ THE SECOND ARGUMENT IS A CODE, NOT A DIAGNOSIS, AND THAT IS THE WHOLE POINT. SHAT-2678.
  *
  * This used to take a whole `fallback: StructuredError`, and every tool wrote one as a sentence
  * about WHY the call failed: "Confirm the merchant, amount, and user details are valid, then
