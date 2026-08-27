@@ -85,8 +85,12 @@ sandbox_simulate_authorization when you want to test a POLICY decision alone, wi
       : ctx.moneyEnabled
         ? `## You are in LIVE mode with money-GO (\`sk_live_*\` + SHATALE_MODE=live + SHATALE_MONEY_GO)
 Real production APIs. Onboarding, request_purchase and credentials move REAL money.
-Card credentials (PAN/CVV) are NEVER returned into this reasoning context — the raw card is
-revealed out-of-band to the checkout executor only (PCI). request_purchase returns last4 + constraints.`
+Two different cards, and only one of them ever reaches you: THE CARD WE ISSUE for a purchase is
+returned in full, deliberately — you cannot fill a merchant checkout with a masked number. THE
+PERSON'S OWN CARD is never returned, in any mode, on any path; it is the funding instrument and it
+stays on our side. Which one you get is decided by the endpoint called, not by anything in the
+response body. request_purchase returns last4 + constraints; the full card comes from the reveal
+path.`
         : `## You are in LIVE mode, onboarding-only (\`sk_live_*\` + SHATALE_MODE=live, no money-GO)
 Real production APIs, but MONEY tools are disabled. You can drive a real user to Shatale
 onboarding (registration + card + limits); request_purchase/credentials require SHATALE_MONEY_GO.`
@@ -116,10 +120,27 @@ ${toolList}
   money tools (purchase/credentials) additionally require \`SHATALE_MONEY_GO\`. A bare live key
   without \`SHATALE_MODE=live\` is refused (fat-finger guard).
 
-## PCI safety note
-Raw card credentials (PAN/CVV) are NEVER returned into this reasoning context, even in LIVE mode:
-request_purchase yields last4 + constraints, and the raw card is revealed out-of-band to the
-checkout executor only. A local IDE/agent is not a trust boundary for live PANs.`)
+## Card handling — two different cards, and which one reaches you
+Until 2026-08-27 this note made a blanket promise that no card details ever reach you. That is
+no longer true, by
+decision, and the distinction it was missing is whose card it is.
+
+THE CARD SHATALE ISSUES for a purchase IS returned in full. We mint it for that purchase, the
+cardholder is Shatale SASU, and it is handed to you precisely so you can pay with it — a masked
+number cannot be typed into a checkout form. It is capped at the purchase amount and it is NOT
+merchant-locked, so those details permit spending that amount at any merchant until the card
+expires, is locked, or is quarantined; completing the purchase does not end it by itself. Treat
+them as live payment credentials: use them for the checkout, do not repeat them into logs or a
+summary.
+
+THE PERSON'S OWN CARD IS NEVER RETURNED, in any mode, on any path. It funds the purchase and it
+does not leave our side.
+
+How the two are told apart: disclosure is an allowlist of API paths, not a property read off the
+response. A response that describes itself cannot be trusted to decide whether to reveal a card —
+what is known reliably is which endpoint was called. Anything not on that list is scrubbed,
+including shapes we have not seen yet. A local IDE or agent is still not a trust boundary, which is
+an argument about where you run this, not a claim that nothing sensitive arrives.`)
 }
 
 type SimResult = 'approved' | 'declined' | 'requires_approval'

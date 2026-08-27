@@ -60,7 +60,11 @@
  * ALLOWLIST of paths that return a card WE issued. Anything else keeps the scrub, including any
  * shape we have not seen yet.
  */
-const OUR_CARD_PATHS: RegExp[] = [
+// Exported so a TEST can derive from it rather than restate it. The shipped copy in guest.ts
+// describes this list in words; if the list and the words are maintained separately, one of them
+// goes stale silently — which is exactly what happened when the allowlist was introduced and the
+// "never returned" promise stayed (SHAT-2678 follow-up).
+export const OUR_CARD_PATHS: RegExp[] = [
   // Sandbox approval hands back the pool card for the checkout the agent is about to fill.
   /^\/v1\/sandbox\/purchases\/[^/]+\/approve$/,
   // The dedicated no-store reveal path, for when the client learns to call it.
