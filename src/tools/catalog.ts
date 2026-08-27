@@ -1,8 +1,24 @@
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult } from '../types.js'
-import { errorResult } from '../errors.js'
+import { errorResult, ShataleApiError } from '../errors.js'
 import { requireId } from '../validate.js'
+
+/**
+ * The catalogue's own account of itself, from the endpoint search_merchants uses.
+ *
+ * Returns `undefined` when it cannot be established — a probe that fails must never replace the
+ * caller's original error with a worse one, so the 404 stands and this simply adds nothing.
+ */
+async function catalogState(client: ShataleClient): Promise<string | undefined> {
+  try {
+    const catalog = await client.request('GET', '/v1/merchants/catalog', undefined, 'fixed')
+    const state = (catalog as { catalog_state?: unknown } | null)?.catalog_state
+    return typeof state === 'string' ? state : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function createCatalogTools(client: ShataleClient): ToolModule {
   return {
@@ -65,6 +81,33 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           )
           return jsonResult(result)
         } catch (err) {
+          // ⚠️ THE HONEST ANSWER ALREADY EXISTS ONE ENDPOINT AWAY, AND THIS PATH USED TO IGNORE IT.
+          //
+          // search_merchants returns `catalog_state` — measured in production, `"not_published"` —
+          // so the neighbour can say WHY it found nothing. This handler could not, and answered a
+          // bare `not_found` whose suggested_fix offers four causes: the id never existed, it
+          // belongs to another publisher, it came from the other environment, or the route is not
+          // deployed. With an unpublished catalogue every one of them is wrong, and a reader who
+          // follows the advice starts three hunts, none of them the cause.
+          //
+          // A hint that points away from the cause is worse than no hint: silence makes someone
+          // ask us, advice makes them search on their own.
+          //
+          // ⚠️ SO THE EXPLANATION IS READ FROM THE SAME PLACE THE NEIGHBOUR READS IT, not written
+          // here in different words. Two sites answering one question out of separate knowledge
+          // drift apart, and the one that drifts is the one nobody touches.
+          if (err instanceof ShataleApiError && err.code === 'not_found') {
+            const state = await catalogState(client)
+            // Only the catalogue's own word overrides the 404. If it IS published, this really is
+            // an unknown id and the original advice is the correct advice — so it survives.
+            if (state !== undefined && state !== 'published') {
+              return jsonResult({
+                catalog_state: state,
+                merchant_id: merchantId.value,
+                merchant: null,
+              })
+            }
+          }
           return errorResult(err, 'merchant_details_failed')
         }
       },
