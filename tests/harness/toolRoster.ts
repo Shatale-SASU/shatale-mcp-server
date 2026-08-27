@@ -1,44 +1,34 @@
-import type { ToolDefinition } from '../../src/types.js'
-import { createGuestTools } from '../../src/tools/guest.js'
-import { createCommonTools } from '../../src/tools/common.js'
-import { createCatalogTools } from '../../src/tools/catalog.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
-import { createPurchaseTools } from '../../src/tools/purchase.js'
-import { createCredentialTools } from '../../src/tools/credentials.js'
-import { createCheckoutTools } from '../../src/tools/checkout.js'
-import { createSandboxTools } from '../../src/tools/sandbox.js'
+// @ts-expect-error — plain ESM shared with scripts/, no types alongside it
+import { measureRoster } from '../../scripts/lib/serverRoster.mjs'
 
 /**
- * The tool roster, derived from what the modules PRODUCE rather than from what the sources look
- * like — no file layout, no quoting, no regex.
+ * The tool roster, asked of the RUNNING SERVER over MCP, one process per mode, unioned.
  *
- * ⚠️ IT LIVES HERE BECAUSE TWO GUARDS NEED IT, AND A SECOND COPY IS HOW THE FIRST GOES STALE. That
- * is the defect both of those guards exist to catch, and writing it twice would reintroduce it in
- * the one place nobody would look.
+ * ⚠️ IT USED TO BE DERIVED FROM THE SOURCES, AND THAT WAS A BLIND SPOT SHARED WITH ITS OWN SECOND
+ * OPINION — SHAT-2527. One derivation scanned the text under src/tools; the other called eight
+ * hardcoded factories. A tool declared OUTSIDE that directory was invisible to both, so they
+ * AGREED — and two readers sharing a blind spot is the defect they exist to catch, one level up.
+ * Measured by an adversarial review: a flag-gated tool in src/storefront.ts shipped with the whole
+ * suite green, and the README gate printed "20 tools defined" while 21 existed.
  *
- * Every factory, with every flag on: no single MODE registers all of them — guest is 7, sandbox 15,
- * live-with-money 14 — and both callers ask about the whole surface. The client is never used; only
- * declarations are read, and nothing here makes a request.
+ * Asking the server is the only derivation that CROSSES THE BOUNDARY. It does not care where a file
+ * sits, how a name is quoted, or which factory produced it — it reports what an MCP client is
+ * offered, which is what every document being checked is about.
+ *
+ * It spawns six servers, so it is measured once per process and reused. The suite's globalSetup has
+ * already refused a stale or partial build by the time this runs, so what it measures is the code
+ * under test rather than yesterday's.
  */
-export function rosterFromRuntime(): string[] {
-  const client = {} as never
-  const ctx = {
-    isGuest: false,
-    isSandbox: true,
-    isLive: false,
-    moneyEnabled: true,
-    getToolNames: () => [] as string[],
+let cached: string[] | null = null
+
+export async function rosterFromRuntime(): Promise<string[]> {
+  if (cached) return cached
+  const { union, failures } = (await measureRoster()) as { union: string[]; failures: string[] }
+  if (failures.length) {
+    // A mode that advertised nothing is an ERROR, not an empty set: the server failed to start, and
+    // an empty list silently shrinks every count computed from it.
+    throw new Error(`the server did not advertise its tools:\n  ${failures.join('\n  ')}`)
   }
-  const modules = [
-    createGuestTools(ctx),
-    createCommonTools(client, ctx),
-    createCatalogTools(client),
-    createOnboardingTools(client, { enabled: true }),
-    createPurchaseTools(client, { isSandbox: true }),
-    createCredentialTools(client, { emailsEnabled: true }),
-    createCheckoutTools(client),
-    createSandboxTools(client),
-  ]
-  const names = modules.flatMap((m) => (m.tools as ToolDefinition[]).map((t) => t.name))
-  return [...new Set(names)].sort()
+  cached = [...union].sort()
+  return cached
 }

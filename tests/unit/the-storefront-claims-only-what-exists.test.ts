@@ -93,9 +93,9 @@ const DECLARED: { unit: string; tools: string[]; why: string }[] = [
   },
 ]
 
-describe('the storefront claims only what the server can do', () => {
+describe('the storefront claims only what the server can do', async () => {
   const units = descriptionUnits()
-  const roster = rosterFromRuntime()
+  const roster = await rosterFromRuntime()
 
   // POSITIVE CONTROLS on both readers. A description that failed to parse, or a roster that came
   // back empty, would make every assertion below pass over nothing.

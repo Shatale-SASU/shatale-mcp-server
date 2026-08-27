@@ -22,8 +22,10 @@ import { rosterFromRuntime } from '../harness/toolRoster.js'
 // So there are two derivations here and they share nothing:
 //
 //   TEXT    — every .ts under src/tools, RECURSIVELY, matching all three quote forms.
-//   RUNTIME — every tool factory called and its declarations read. No file layout, no quoting, no
-//             regex: what the modules actually produce, which is what index.ts registers.
+//   RUNTIME — the BUILT SERVER asked over MCP, one process per mode, unioned. Not the factories:
+//             an adversarial review showed that calling factories misses a tool registered
+//             elsewhere, and misses a factory moved behind a flag. Only the server crosses the
+//             boundary of what this file concludes about.
 //
 // A disagreement between them is itself a finding, and it fails.
 
@@ -54,8 +56,8 @@ const matrixRows = (): string[] => {
   return [...new Set(rows)].sort()
 }
 
-describe('the coverage matrix lists exactly the tools that exist', () => {
-  const runtime = rosterFromRuntime()
+describe('the coverage matrix lists exactly the tools that exist', async () => {
+  const runtime = await rosterFromRuntime()
 
   // ⚠️ CONTROLS SIT AT THE POPULATION, NOT BELOW IT. The first version asked for `>= 15` against a
   // real 20 — a floor five under the truth, which catches a reader that has died and misses one
