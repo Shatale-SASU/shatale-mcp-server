@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
-import { errorResult } from '../errors.js'
+import { errorResult, refusal } from '../errors.js'
 
 // A merchant checkout form can ask for the CARDHOLDER and the BUYER separately. Shatale returns them
 // as two honest, legitimately-distinct identities (they need not match — the pool card is Shatale's,
@@ -29,8 +29,11 @@ function hasKeys(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && Object.keys(v as object).length > 0
 }
 
+// A refusal THIS CLIENT decided, having read the response — the cause is known, so the advice is
+// earned. It goes through refusal(), not errorResult(): the latter is for a caught error whose cause
+// nobody knows, and it is no longer allowed to name one.
 function identityUnavailable(which: string) {
-  return errorResult(new Error(`${which} identity unavailable`), {
+  return refusal({
     code: 'checkout_identity_unavailable',
     message: `The ${which} identity is not available for this purchase.`,
     suggested_fix: 'Check get_purchase_status — the purchase must be payment_ready before checkout identities exist.',
@@ -91,11 +94,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
             _note: 'Cardholder/billing identity only. Card number/expiry/CVV are entered out-of-band, not returned here.',
           })
         } catch (err) {
-          return errorResult(err, {
-            code: 'checkout_cardholder_failed',
-            message: 'Could not fetch the cardholder/billing identity.',
-            suggested_fix: 'Confirm the purchase is yours and payment_ready, then retry.',
-          })
+          return errorResult(err, 'checkout_cardholder_failed')
         }
       },
 
@@ -110,11 +109,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
             merchant_customer_identity: got.data.merchant_customer_identity,
           })
         } catch (err) {
-          return errorResult(err, {
-            code: 'checkout_customer_failed',
-            message: 'Could not fetch the buyer/customer identity.',
-            suggested_fix: 'Confirm the purchase is yours and payment_ready, then retry.',
-          })
+          return errorResult(err, 'checkout_customer_failed')
         }
       },
     },

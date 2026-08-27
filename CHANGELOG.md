@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- An error whose cause is unknown no longer names one. `errorResult(err, fallback)` reached its
+  fallback exactly when the caught error was NOT an API error — when the server had not answered —
+  and each of the fourteen tools had written that fallback as a diagnosis. Measured against the
+  published package with the API unreachable, `request_purchase` came back advising the caller to
+  "Confirm the merchant, amount, and user details are valid, then retry." Nothing had rejected any
+  of them. The second argument is now a CODE, not a diagnosis, and there is one shared text saying
+  that no reply came back. Advice about inputs stays where the server rejected them (`mapHttpError`),
+  which a test asserts, so this cannot be satisfied by removing all advice. A refusal the client
+  itself decides now goes through `refusal()`, where the cause is known and the advice is earned.
+
 - `request_purchase` is no longer refused under a sandbox key. The refusal cited a property of the
   backend — "`/v1/purchases` is NOT sandbox-gated, so a `sk_sandbox_*` key can reach a live,
   side-effectful path" — and SHAT-2373 changed exactly that property while this client went on
@@ -21,9 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `list_capabilities` told a sandbox caller that `request_purchase` was "disabled"/"BLOCKED"; an
   agent that reads that does not call the tool, so the refusal survived its own removal in prose.
   Both are now pinned by a test. (SHAT-2611)
-- The refusal's suggested fix pointed at real money — "run with a live key (`sk_live_`) plus
-  `SHATALE_MODE=live` and `SHATALE_MONEY_GO`" — as the way out of a sandbox that was safe by
-  construction. That advice is gone and is asserted absent. (SHAT-2611)
+- The refusal's suggested fix pointed at real money: it told the caller to escape the sandbox by
+  switching to a live key together with the two production money switches, as the way out of a
+  sandbox that was safe by construction. That advice is gone and is asserted absent. (SHAT-2611)
 
 ## [1.0.0] — 2026-08-27
 

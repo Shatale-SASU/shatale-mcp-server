@@ -160,11 +160,13 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         // So the client was refusing on the strength of a sentence about a server that no longer
         // behaves that way — and refusing the one call a publisher has to make first.
         //
-        // ⚠️ AND ITS ADVICE POINTED THE WRONG WAY, WHICH IS THE PART WORTH REMEMBERING. The refusal
-        // suggested "run with a live key (sk_live_) plus SHATALE_MODE=live and SHATALE_MONEY_GO". It
-        // pushed a caller toward REAL MONEY to escape a sandbox that had been safe by construction
-        // for months. A protection whose escape hatch is more dangerous than the thing it protects
-        // against is worse than no protection: it is read as guidance.
+        // ⚠️ AND ITS ADVICE POINTED THE WRONG WAY, WHICH IS THE PART WORTH REMEMBERING. The refusal's
+        // suggested_fix told the caller to escape the sandbox by switching to a live key together with
+        // the two production money switches. It pushed a caller toward REAL MONEY to escape a sandbox
+        // that had been safe by construction for months. A protection whose escape hatch is more
+        // dangerous than the thing it protects against is worse than no protection: it is read as
+        // guidance. (The exact wording is not reproduced here on purpose — this comment ships in the
+        // published package, and a recipe quoted verbatim is a recipe someone can follow.)
         try {
           const input = parsed.data
           const result = await client.requestPurchase({
@@ -180,11 +182,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           // PCI: never surface raw PAN/CVV into the agent context.
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'purchase_failed',
-            message: 'Could not complete the purchase request.',
-            suggested_fix: 'Confirm the merchant, amount, and user details are valid, then retry.',
-          })
+          return errorResult(err, 'purchase_failed')
         }
       },
 
@@ -198,11 +196,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           // redact here too — never surface a raw PAN/CVV into the agent context.
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'purchase_status_failed',
-            message: 'Could not fetch the purchase status.',
-            suggested_fix: 'Check that purchase_id is the id returned by request_purchase, then retry.',
-          })
+          return errorResult(err, 'purchase_status_failed')
         }
       },
 
@@ -217,11 +211,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           // Belt-and-braces: cancel's response also carries the payment block.
           return jsonResult(result)
         } catch (err) {
-          return errorResult(err, {
-            code: 'purchase_cancel_failed',
-            message: 'Could not cancel the purchase.',
-            suggested_fix: 'Only pending purchases can be cancelled. Verify purchase_id and its current status.',
-          })
+          return errorResult(err, 'purchase_cancel_failed')
         }
       },
     },
