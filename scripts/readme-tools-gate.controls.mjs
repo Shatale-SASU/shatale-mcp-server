@@ -97,15 +97,46 @@ control('(c) get_checkout_cardholder deleted from the matrix',
   GOOD.replace(/^\| `get_checkout_cardholder` \|.*\n/m, '').replace(/- `get_checkout_cardholder` — .*\n/, ''),
   { red: true, mustName: ['get_checkout_cardholder'] })
 
-// (d) a count that belongs to no mode.
-control('(d) count 17 attached to sandbox',
-  GOOD.replace('16 tools <!-- count:sandbox -->', '17 tools <!-- count:sandbox -->'),
-  { red: true, mustName: ['17', 'sandbox', '16'] })
+// ── (d)/(d2): the counts are READ FROM THE README, not typed here ───────────
+// The first version of (d) carried '16 tools <!-- count:sandbox -->' as a literal. The sandbox
+// roster moved to 17 (SHAT-2698 added a tool), the literal stopped matching, and the applied-
+// mutation check above refused to run — an honest red about the CONTROL, not the gate. A
+// hand-typed count in a control drifts exactly the way a hand-typed count in the README does,
+// so both numbers are now derived from the README being mutated:
+//   - the annotated sandbox sentence gives the true count to replace;
+//   - the matrix totals row gives a planted count that is REAL for another mode, because (d)'s
+//     whole point is that "is this number real anywhere" must not be the rule — the original
+//     defect, "17", was true of a mode nobody could reach.
+const sandboxSentence = GOOD.match(/(\d+) tools <!-- count:sandbox -->/)
+if (!sandboxSentence) {
+  console.error('controls (d)/(d2): the README no longer says "<N> tools <!-- count:sandbox -->" — ' +
+    'the controls cannot find the sentence they mutate. Nothing was planted, so a green gate ' +
+    'proves nothing. Fix the pattern here to match the README.')
+  process.exit(1)
+}
+const sandboxCount = Number(sandboxSentence[1])
+const totalsRow = GOOD.match(/^\| \*\*total advertised\*\* \|(.*)\|\s*$/m)
+const totals = totalsRow ? [...totalsRow[1].matchAll(/\*\*(\d+)\*\*/g)].map((m) => Number(m[1])) : []
+// Prefer a planted number that shares no substring with the real one, so "named the planted
+// number" below cannot be satisfied by the real number's own digits (17 contains 7).
+const foreign = totals.find((n) => n !== sandboxCount &&
+    !String(n).includes(String(sandboxCount)) && !String(sandboxCount).includes(String(n))) ??
+  totals.find((n) => n !== sandboxCount)
+if (foreign === undefined) {
+  console.error('controls (d)/(d2): every mode in the totals row advertises the sandbox count — ' +
+    'there is no foreign number to plant. Fix the totals-row pattern or the README.')
+  process.exit(1)
+}
 
-// (d2) a bare count with no mode — 17 is REAL for live+money+flags, so a
-//      "is this number real anywhere" rule would pass the original defect verbatim.
-control('(d2) bare "17 tools" with no mode',
-  GOOD.replace('16 tools <!-- count:sandbox -->', '17 tools'),
+// (d) a true number attached to the wrong mode.
+control(`(d) count ${foreign} attached to sandbox`,
+  GOOD.replace(`${sandboxCount} tools <!-- count:sandbox -->`, `${foreign} tools <!-- count:sandbox -->`),
+  { red: true, mustName: [String(foreign), 'sandbox', String(sandboxCount)] })
+
+// (d2) a bare count with no mode — real for another mode, so a
+//      "is this number real anywhere" rule would pass it verbatim.
+control(`(d2) bare "${foreign} tools" with no mode`,
+  GOOD.replace(`${sandboxCount} tools <!-- count:sandbox -->`, `${foreign} tools`),
   { red: true, mustName: ['no mode'] })
 
 // ── The classic control: a tool that simply does not exist ──────────────────

@@ -495,6 +495,43 @@ export class ShataleClient {
    * or purchase is absent, belongs to another publisher, or lives in the other environment: all
    * things the caller can check, and the only things it can.
    */
+  /**
+   * Create the publisher's OWN sandbox user, with the delegation that lets it buy.
+   *
+   * ⚠️ THIS IS THE FIRST STEP OF THE PUBLISHER'S PATH, AND IT WAS MISSING FROM THIS CLIENT. Without
+   * it a publisher had to call the API by hand, outside the tools — which is precisely what the
+   * owner's rule forbids: the concierge must use only what an external publisher has.
+   *
+   * One call provisions the lot (apps/api/api/v1/sandbox.go): the user, the publisher_user_links
+   * row as 'verified', the profile and 3DS flags when `onboarded` is set, and an ACTIVE sandbox
+   * delegation with a default budget. It is idempotent on all of them, so a demo can re-run.
+   *
+   * `agentId` is REQUIRED by the backend, and its error text explains why that is not a formality:
+   * a sandbox user linked WITHOUT a delegation is found by the purchase and blocked with
+   * delegation_unavailable. The agent itself is created by a PERSON in the publisher console — no
+   * key issues one, deliberately — so the caller has to be given it, never invent it.
+   *
+   * addressing is 'fixed': the path carries no caller id, so a 404 here is about the route, not
+   * about anything in the request.
+   */
+  async createSandboxUser(
+    userId: string,
+    agentId: string,
+    opts: { onboarded?: boolean; currency?: string } = {},
+  ): Promise<unknown> {
+    return this.request(
+      'POST',
+      '/v1/sandbox/users',
+      {
+        user_id: userId,
+        agent_id: agentId,
+        onboarded: opts.onboarded ?? true,
+        ...(opts.currency ? { currency: opts.currency } : {}),
+      },
+      'fixed',
+    )
+  }
+
   async sandboxCompleteOnboarding(userId: string): Promise<unknown> {
     return this.request(
       'POST',

@@ -132,6 +132,11 @@ export class MockUpstream {
     if (method === 'POST' && path === '/v1/sandbox/authorizations') {
       return ok({ decision: 'approved', explanation: 'all_rules_passed', sandbox: true })
     }
+    // Ordered BEFORE the onboarding branch: `/v1/sandbox/users` is a different route from
+    // `/v1/sandbox/users/{id}/onboarding`, and a startsWith would swallow it.
+    if (method === 'POST' && path === '/v1/sandbox/users') {
+      return ok({ user_id: 'usr_fixture_new', agent_id: 'agt_fixture_1', delegation_id: 'dlg_fixture_1', onboarded: true, is_sandbox: true })
+    }
     if (method === 'POST' && /\/v1\/sandbox\/users\/[^/]+\/onboarding$/.test(path)) {
       return ok({ status: 'onboarded' })
     }

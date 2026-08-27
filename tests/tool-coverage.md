@@ -46,19 +46,20 @@ Last updated: 2026-08-26 (SHAT-2527)
 | 13 | `register_user_profile` | ✅ | ✅ | - | - | happy-path, validation |
 | 14 | `get_onboarding_status` | ✅ | - | - | - | happy-path |
 | 15 | `sandbox_simulate_authorization` | ✅ | ✅ | ✅ | - | mock-contract, sandbox-tools, validation, happy-path |
-| 16 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
-| 17 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
-| 18 | `get_checkout_cardholder` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
-| 19 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
-| 20 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
+| 16 | `sandbox_create_user` | ✅ | - | ✅ | - | mock-contract, wire-fixtures |
+| 17 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
+| 18 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
+| 19 | `get_checkout_cardholder` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
+| 20 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
+| 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` was **blocked when a sandbox key is set** — no longer true since SHAT-2373 made `/v1/purchases` serve sandbox keys deliberately (environment stamped from the key). The client-side refusal was removed in SHAT-2611; `sandbox_simulate_authorization` remains the narrower tool for a policy decision without a purchase.
 
 ## Coverage Summary
 
-- **Tools defined in code**: 20
-- **Happy path**: 20/20
-- **Input validation**: 3/20 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Tools defined in code**: 21
+- **Happy path**: 21/21
+- **Input validation**: 3/21 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 24 cases), which this table predates.
 - **Contract (Zod)**: 6/20
