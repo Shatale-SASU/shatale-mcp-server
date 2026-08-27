@@ -39,7 +39,42 @@
 //
 // The walk is depth-limited and cycle-safe: a redactor that hangs on a self-referential response
 // would take the tool down with it.
-export function redactPurchaseCard(result: unknown): unknown {
+/**
+ * ⚠️ WHOSE CARD IT IS, NOT WHETHER IT LOOKS LIKE A CARD — SHAT-2610.
+ *
+ * The scrub was SHAPE-BASED: `isCardish` fires on any object carrying number/card_number/cvv/cvc,
+ * whoever the card belongs to. That made it correct about the customer's instrument and wrong about
+ * ours — and the two are different subjects with opposite requirements.
+ *
+ * THE CARD WE ISSUE IS A TOOL WE HANDED THE AGENT SO IT COULD PAY. We minted it, we hold it, it is
+ * capped, and withholding its digits from the agent removes the only way to use the thing we gave it
+ * for exactly that. A protection that takes away the working path is the "half is worse than none"
+ * shape this codebase keeps finding, pointed inward.
+ *
+ * THE CUSTOMER'S CARD IS NOT OURS TO SHOW, EVER, IN ANY MODE. That is untouched.
+ *
+ * ⚠️ AND THE DISCRIMINATOR IS PROVENANCE, NOT A FIELD IN THE BODY. The obvious markers lie: the
+ * sandbox approval answers `merchant_locked: true`, and the request we send the issuer carries no
+ * such field at all — measured. A response that misdescribes itself cannot be the thing that decides
+ * whether to reveal a PAN. What we know for certain is which endpoint we called, so revealing is an
+ * ALLOWLIST of paths that return a card WE issued. Anything else keeps the scrub, including any
+ * shape we have not seen yet.
+ */
+const OUR_CARD_PATHS: RegExp[] = [
+  // Sandbox approval hands back the pool card for the checkout the agent is about to fill.
+  /^\/v1\/sandbox\/purchases\/[^/]+\/approve$/,
+  // The dedicated no-store reveal path, for when the client learns to call it.
+  /^\/v1\/purchases\/[^/]+\/card-credentials$/,
+]
+
+/** True when the response for `path` carries a card THIS platform issued. */
+export function pathReturnsOurCard(path: string): boolean {
+  const clean = path.split('?')[0]
+  return OUR_CARD_PATHS.some((re) => re.test(clean))
+}
+
+export function redactPurchaseCard(result: unknown, path?: string): unknown {
+  if (path !== undefined && pathReturnsOurCard(path)) return result
   return scrub(result, 0, new WeakSet())
 }
 

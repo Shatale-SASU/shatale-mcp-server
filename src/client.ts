@@ -188,7 +188,12 @@ export class ShataleClient {
       // They arrived as separate pull requests and conflicted on exactly this line, as predicted and
       // rehearsed before either was merged. Taking either side alone compiles, passes most of the
       // suite, and silently restores one of the two defects. Keep both.
-      return redactPurchaseCard(await res.json())
+      // ⚠️ THE PATH IS PASSED NOW, BECAUSE THE QUESTION IS WHOSE CARD IT IS (SHAT-2610). The scrub
+      // was shape-based and could not tell the card we issued — a tool we handed the agent so it
+      // could pay — from the customer's own instrument, which is never ours to show. Provenance is
+      // what we know for certain; the body misdescribes itself (the sandbox approval claims
+      // merchant_locked, and no such field is sent to the issuer at all).
+      return redactPurchaseCard(await res.json(), path)
     } finally {
       clearTimeout(timeout)
     }
