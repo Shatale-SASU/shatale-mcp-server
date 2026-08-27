@@ -85,8 +85,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   error". Every case supplies a VALID `user_id`, because the handler checks that first and a call
   with `{}` would be answered by the user_id branch and prove nothing about agent_id.
 - The coverage summary in `tests/tool-coverage.md` is now derived and enforced rather than asserted
-  by hand. It read `Contract (Zod): 6/20` and `Security edge cases: 1/20` against a table holding 11
-  and 4 ticks over 21 tools — wrong in the NUMERATOR and the denominator both, three lines under a
+  by hand. Three of the four fractions were wrong, not two: `Contract (Zod): 6/20` and
+  `Security edge cases: 1/20` against a table holding 11 and 4 ticks over 21 tools — wrong in the
+  NUMERATOR and the denominator both — and `Input validation: 3/21`, whose denominator was right and
+  whose numerator was one short of the column's 4. All three sat three lines under a
   `Tools defined in code: 21` that was correct, and green the whole time because the only gate on
   the file counted rows. `tool-coverage-matches-the-roster.test.ts` now counts each column and
   compares both halves of every fraction against the live roster. This is the document's own
@@ -109,9 +111,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   reasoned: the roster is fixed by the key's PREFIX and the env flags before any request is made, so
   a sandbox-shaped key with no network reproduces the failure — `expected [ …(17) ] to have a length
   of 15`.
-- `package-lock.json` rejoins `package.json`. It was left at 1.0.1 by the 1.0.2 release, which
-  touched only the changelog and the manifest; nothing in the suite or in CI compares the two, so
-  the drift was invisible until an `npm ci` or a publish read it.
+- `demo/demo-script.md` still opened with the sentence SHAT-2604 was opened to remove — "Create a
+  shopping agent with a €1000 monthly budget. Block gambling and alcohol." — and it was the last
+  live copy in the repository. The entry above records that wording being taken out of the prompts,
+  the README and `smithery.yaml`; the demo script was not on that list, so the one surface a
+  newcomer is most likely to paste verbatim kept it. Its "expected MCP calls" were wrong in the
+  same direction: `register_user_profile` is not among the 17 tools the banner three lines above
+  advertises (it needs `SHATALE_ONBOARDING_ENABLED=true`, which makes the roster 19), and the step
+  promised to show "Agent ID, Card ID, Policy config" — none of which any tool produces. The flow
+  now starts where the tools actually start, at `sandbox_create_user`, and the `explain_shatale`
+  step no longer claims to return a per-rule breakdown of an earlier decline: that comes back in
+  `sandbox_simulate_authorization`'s own response.
+- The `exercise-the-policy-engine` prompt was grammatically broken by its own fix. The clause about
+  who creates an agent had been spliced into the middle of the instruction, stranding "one call
+  each": "...nothing here can create one for them, one call each, and read the rule explanation...".
+  The fact was right and the sentence was rubble — and this is a PROMPT, read verbatim by a model as
+  an instruction, so it is not a cosmetic defect. The clause now sits at the end.
+- `package-lock.json` rejoins `package.json`, and a test now keeps them together. It was left at
+  1.0.1 by the 1.0.2 release, which touched only the changelog and the manifest; nothing in the
+  suite or in CI compared the two, so the drift was invisible until an `npm ci` or a publish read
+  it. Both copies of the version in the lockfile are asserted, because the second is eight lines
+  down and looks like a dependency, which is the one a hand-edit misses.
+- The per-file test counts in `tool-coverage.md` are gated too, against the files on disk. They were
+  the last number in that document with no watcher, and they had drifted furthest — which is what a
+  hand-maintained table does under a banner warning that hand-maintained tables drift.
 
 ## [1.0.2] — 2026-08-27
 

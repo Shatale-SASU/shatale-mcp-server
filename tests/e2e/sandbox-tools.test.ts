@@ -24,8 +24,12 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     //
     // This file is key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count
     // here stays green-by-skip and only breaks the first KEYED run — exactly the
-    // skipped-but-green trap (#276). It did: the count stayed at 17 when the tools were
-    // unadvertised, and the keyless CI that gates PRs never ran this file.
+    // skipped-but-green trap (#276). It did, back when the roster SHRANK: this assertion sat at
+    // the pre-SHAT-1488 figure while the tools were being unadvertised, and the keyless CI that
+    // gates PRs never ran this file. (That stale figure was also 17, which is a coincidence and
+    // not today's 17 — the roster has since come back up to the same number from the other
+    // direction. Two different 17s, and the reason to spell that out is that a bare number in a
+    // comment is exactly what nobody re-checks.)
     //
     // ⚠️ AND IT DID IT AGAIN, TWICE OVER, WHICH IS WHY THE WARNING ABOVE IS NOT ENOUGH ON ITS OWN.
     // This assertion sat at 15 across two changes that each moved the roster — get_credential_emails

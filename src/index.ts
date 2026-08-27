@@ -407,7 +407,12 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
     case 'exercise-the-policy-engine':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine. If you do not have an agent id, ask the person for one — they create agents by hand in the publisher console, and nothing here can create one for them, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money.` },
+        // ⚠️ THE HUMAN-STEP CLAUSE WAS SPLICED INTO THE MIDDLE OF THE INSTRUCTION AND STRANDED
+        // "one call each" mid-sentence: "...nothing here can create one for them, one call each,
+        // and read the rule explanation...". The fact was right and the sentence was rubble, and
+        // this is a PROMPT — the model reads it verbatim as an instruction, so a garbled clause is
+        // not a cosmetic defect. The clause now sits at the end, where it qualifies the whole thing.
+        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money. If you do not have an agent id, ask the person for one — they create agents by hand in the publisher console, and nothing here can create one for them.` },
       }]
     default:
       return []

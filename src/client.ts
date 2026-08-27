@@ -452,6 +452,19 @@ export class ShataleClient {
       // stdout and stderr goes to the host's own log, out of the model's context — the same channel
       // src/index.ts already uses to refuse a start and say why. The operator gets the exception;
       // the agent still gets only the fact.
+      //
+      // ⚠️ AND WHAT GOES TO stderr IS UNFILTERED, WHICH IS DELIBERATE AND WORTH SAYING OUT LOUD.
+      // Every other egress in this package is scrubbed — redactPurchaseCard on every response,
+      // redactLongDigitRuns on validation messages, errorResult echoing nothing by construction.
+      // This line is the exception: describeErrorChain flattens the whole cause chain verbatim, so
+      // if SHATALE_API_URL carries credentials they appear here, and whatever a future runtime puts
+      // in a `cause` appears here too.
+      //
+      // That is the correct trade for THIS audience and only this one. The operator supplied
+      // SHATALE_API_URL themselves, the host's log is their own machine, and a redacted diagnostic
+      // is frequently a useless one — the point of the line is to tell DNS, refusal and timeout
+      // apart. It must never be widened to a channel the model reads.
+
       console.error(
         `list_mcc_codes: the /v1/mcc-codes lookup failed, serving this package's built-in ISO ` +
           `18245 list instead. Reason: ${describeErrorChain(err)}`,

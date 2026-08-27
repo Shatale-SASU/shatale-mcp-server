@@ -134,6 +134,52 @@ describe('the coverage matrix lists exactly the tools that exist', async () => {
     expect(matrixCells().length).toBe(runtime.length)
   })
 
+  // ⚠️ THE ONE TABLE IN THIS DOCUMENT THAT STILL HAD NO WATCHER, AND IT HAD DRIFTED FURTHEST.
+  //
+  // The "Test Files" table records a test count per e2e file. Measured against a run: it said
+  // guest-mode 9 against 16, security 16 against 18, mock-contract 8 against 14, and three e2e
+  // files had no row at all. Every OTHER number in this document is now derived; leaving this one
+  // hand-written under a banner reading "a hand-written list silently excludes everything added
+  // after it" is the document arguing against itself.
+  //
+  // ⚠️ COUNTED STATICALLY, AND THE LIMIT OF THAT IS STATED RATHER THAN HIDDEN. Running vitest
+  // inside vitest to get the true number is not worth what it costs, so this counts `test(`/`it(`
+  // declarations in the source. That is exact for every file here today (verified against a
+  // `--reporter=json` run: all ten agree), and it would UNDERCOUNT a file that generates cases in
+  // a loop, the way tests/unit/ids-never-reach-the-api-unvalidated.test.ts does. If that ever
+  // happens to an e2e file this goes red — which is the correct outcome: the number in the
+  // document would have stopped meaning what the column header says.
+  const E2E_DIR = resolve(ROOT, 'tests/e2e')
+
+  const declaredTestsIn = (file: string): number =>
+    [...readFileSync(resolve(E2E_DIR, file), 'utf8').matchAll(/^\s*(?:test|it)\(/gm)].length
+
+  const fileRows = (): Array<{ file: string; stated: number }> => {
+    const md = readFileSync(resolve(ROOT, 'tests/tool-coverage.md'), 'utf8')
+    return [...md.matchAll(/^\|\s*`([a-z0-9-]+\.test\.ts)`\s*\|\s*(\d+)\s*\|/gm)]
+      .map((m) => ({ file: m[1], stated: Number(m[2]) }))
+  }
+
+  it('the Test Files table lists every e2e file, with the count a run produces', () => {
+    const rows = fileRows()
+    // Control: a regex that stopped matching would make the loop below assert nothing.
+    expect(rows.length, 'no rows parsed out of the Test Files table').toBeGreaterThanOrEqual(10)
+
+    const onDisk = readdirSync(E2E_DIR).filter((f) => f.endsWith('.test.ts')).sort()
+    expect(
+      rows.map((r) => r.file).sort(),
+      'the Test Files table and tests/e2e disagree about which files exist. A file with no row is ' +
+        'the exact omission this document was already corrected for once.',
+    ).toEqual(onDisk)
+
+    for (const { file, stated } of rows) {
+      expect(
+        stated,
+        `${file}: the table says ${stated} tests, the file declares ${declaredTestsIn(file)}.`,
+      ).toBe(declaredTestsIn(file))
+    }
+  })
+
   for (const [column, label] of [
     [0, 'Happy path'],
     [1, 'Input validation'],
