@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-08-27
+
+Five fixes that all share one shape: a text that outran, or misread, the code it describes.
+1.0.1 shipped with each of them, which is why they are grouped here rather than held back.
+
 ### Changed
 
 - A tool DESCRIPTION is a promise too, and two of them outran the code. `request_purchase`
@@ -25,6 +30,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   that no reply came back. Advice about inputs stays where the server rejected them (`mapHttpError`),
   which a test asserts, so this cannot be satisfied by removing all advice. A refusal the client
   itself decides now goes through `refusal()`, where the cause is known and the advice is earned.
+- A 404 no longer exonerates a bad id. The old rule guessed from the shape of the path whether a
+  request could carry a caller-supplied id, and it was wrong in BOTH directions: it told two POSTs
+  with an id mid-path that "nothing in your request is wrong", and it told three requests that carry
+  no id at all to go check their id. The fact now travels WITH the request — every one of the fifteen
+  call sites declares `caller-id`, `fixed`, or `unknown` — and the reply is a table over that
+  declaration, so a fourth kind of knowledge will not compile until someone writes its sentence.
+  `unknown` is the default and says plainly that the two cannot be told apart from here. (SHAT-2678)
+- The card promise was wider than the code, and a promise wider than the code is the dangerous
+  direction: it licenses the reader to quote and to log. `explain_shatale` said raw PAN/CVV are
+  NEVER returned into the reasoning context, "even in LIVE mode", while `sandbox_approve_purchase`
+  returns them in full — deliberately, because the card is one WE issued and an agent cannot fill a
+  checkout form with a mask. The person's own card is never returned, on any path, in any mode. What
+  separates the two is an allowlist of API paths, not a property read off the response body. The
+  boundaries are stated with it: the card is not merchant-locked, and it spends until it expires, is
+  locked, or is quarantined. (SHAT-2610)
+
+### Fixed
+
+- An e2e assertion outlived its subject. `sandbox-tools.test.ts` still asserted that
+  `request_purchase` answers `sandbox_key_purchase_blocked` — a refusal removed in 1.0.1. Nothing
+  caught it: the suite is key-gated, and without a key it SKIPS, which in the summary line is
+  indistinguishable from passing. The damage is not the failure it would have caused on the first
+  keyed run. It is that anyone checking whether the removed refusal is really gone would have found
+  a green-looking assertion that it is not. (SHAT-2611, and the class itself is SHAT-2685)
 
 ## [1.0.1] — 2026-08-27
 
