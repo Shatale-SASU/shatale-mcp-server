@@ -180,10 +180,10 @@ if (!isGuest && !isSandbox && !isLive) {
 // is OFF too (fail-closed).
 const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE_MONEY_GO_SHA256)
 
-// get_credential_emails' backend (GET /v1/credentials/{id}/emails) ships in PR #361, not yet
-// deployed. Keep the tool out of the advertised list until the backend is live so it never reads
-// as a working-but-404ing tool. Flip this once #361 is merged AND deployed. (Odin review.)
-const credentialEmailsEnabled = (process.env.SHATALE_CREDENTIAL_EMAILS_ENABLED ?? '').toLowerCase() === 'true'
+// SHATALE_CREDENTIAL_EMAILS_ENABLED is gone (SHAT-2527): the condition it named — "#361 merged AND
+// deployed" — has been met on both halves, measured. See src/tools/credentials.ts for the probe and
+// its control. A flag whose condition is satisfied is a switch nobody looks at again, and the next
+// reader takes it for a live decision.
 // SHAT-1662: see src/tools/onboarding.ts — the register→status loop cannot close on any
 // deployed backend, so the pair stays unadvertised until Funnel B is merged AND deployed.
 const onboardingEnabled = (process.env.SHATALE_ONBOARDING_ENABLED ?? '').toLowerCase() === 'true'
@@ -225,13 +225,13 @@ if (!isGuest) {
     // Demo: request_purchase is registered but client-blocked (steers to the
     // side-effect-free simulator); sandbox lifecycle helpers are live.
     registerModule(createPurchaseTools(client, { isSandbox: true }))
-    registerModule(createCredentialTools(client, { emailsEnabled: credentialEmailsEnabled }))
+    registerModule(createCredentialTools(client))
     registerModule(createSandboxTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
     // live mode is onboarding-only (can drive registration, cannot move money).
     registerModule(createPurchaseTools(client, { isSandbox: false }))
-    registerModule(createCredentialTools(client, { emailsEnabled: credentialEmailsEnabled }))
+    registerModule(createCredentialTools(client))
     // Checkout identity is on the live money path (backend rejects sandbox keys) — register it only
     // here, alongside the real purchase flow.
     registerModule(createCheckoutTools(client))

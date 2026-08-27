@@ -26,10 +26,10 @@ export const GO_SHA = createHash('sha256').update(GO_CODE, 'utf8').digest('hex')
 export const MODES = [
   ['guest', 'guest (no key)', {}],
   ['sandbox', 'sandbox', { SHATALE_API_KEY: 'sk_sandbox_gate_stub' }],
-  ['sandbox+flags', 'sandbox + flags', { SHATALE_API_KEY: 'sk_sandbox_gate_stub', SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' }],
+  ['sandbox+flags', 'sandbox + flags', { SHATALE_API_KEY: 'sk_sandbox_gate_stub', SHATALE_ONBOARDING_ENABLED: 'true' }],
   ['live', 'live, no money-GO', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live' }],
   ['live+money', 'live + money-GO', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA }],
-  ['live+money+flags', 'live + money-GO + flags', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA, SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' }],
+  ['live+money+flags', 'live + money-GO + flags', { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA, SHATALE_ONBOARDING_ENABLED: 'true' }],
 ]
 
 const BASE_ENV = { PATH: process.env.PATH, HOME: process.env.HOME, SHATALE_API_URL: 'http://127.0.0.1:9' }
