@@ -4,13 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.5.x   | Yes       |
-| < 0.5   | No        |
+| 1.0.x   | Yes       |
+| < 1.0   | No        |
 
 <!-- This table said "0.2.x" while the published package was 0.5.2 — so the security policy told
      every reporter that the version everybody is running is unsupported. Corrected 2026-08-26
      (SHAT-2526). If you bump the package version, bump this row in the same commit: a support
-     matrix is only read by someone deciding whether to bother telling us. -->
+     matrix is only read by someone deciding whether to bother telling us. Bumped to 1.0.x with
+     the 1.0.0 version bump, per that instruction. -->
 
 ## Reporting a Vulnerability
 
