@@ -26,12 +26,22 @@ If you discover a security vulnerability, please report it responsibly:
 This MCP server is designed with the following security principles:
 
 - **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true, in three deliberate acts with no accidental path between them: a live key (`sk_live_*`) supplied WITHOUT `SHATALE_MODE=live` refuses to start; `SHATALE_MODE=live` supplied WITHOUT a live key also refuses; and the purchase/credential tools are registered only when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. A live key with the mode and no money-GO runs onboarding-only.
-- **No card data:** PAN, CVV and card details are never exposed through MCP tools — enforced by
-  `redactPurchaseCard` at the four tool results that can carry a card
-  (`request_purchase`, `get_purchase_status`, `cancel_purchase`, `sandbox_approve_purchase`).
-  Stated as call sites rather than as an invariant because that is what it is: a tool added tomorrow
-  that returns an upstream body gets no redaction from anywhere. Making it a property of
-  `ShataleClient.request` instead would close that, and is tracked separately.
+- **No card data in a tool result.** PAN and CVV are stripped from **every response this server
+  returns**, not from a list of tools: the scrub (`redactPurchaseCard`, `src/redact.ts`) is applied
+  once inside `ShataleClient.request`, so a tool added tomorrow that returns an upstream body is
+  covered by construction rather than by somebody remembering.
+
+  ⚠️ **This bullet said the opposite until 2026-08-27, and the correction is recorded rather than
+  quietly swapped.** It described the scrub as living at four tool call sites, and stated that making
+  it a property of the client "would close that, and is tracked separately". That change had already
+  merged — `6b95e4f`, 2026-08-26 09:40:20 — **four seconds after this file's previous edit**
+  (`46efaea`, 09:40:16), code last. The document understated a guarantee that already existed, and
+  went on understating it for a day.
+
+  **Boundary, stated because a scrub is easy to over-claim:** this removes card numbers and CVV from
+  tool RESULTS — what reaches the agent's context. Card data reaches a merchant checkout
+  out-of-band. It is not a statement about what the upstream API stores, logs, or returns to other
+  clients.
 - **Relay credentials ARE returned, deliberately.** This bullet used to read "No credentials:
   Email aliases and credential vault are not accessible", and that has not been true since the
   masking was removed on purpose (`src/tools/credentials.ts`): `request_temporary_credentials`
