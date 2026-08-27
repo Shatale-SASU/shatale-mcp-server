@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- A tool DESCRIPTION is a promise too, and two of them outran the code. `request_purchase`
+  advertised that Shatale "executes the payment"; no branch of the backend does — the call answers
+  with a status, and even `payment_ready` means only that a card was issued. And every 401 AND every
+  403 told the reader to set a sandbox key: destructive under a live key, since the server refuses
+  to start on `SHATALE_MODE=live` with a non-live key, and simply wrong for a 403, which is a key
+  that WAS accepted. 403 is now its own code with its own advice. (SHAT-2683)
 - An error whose cause is unknown no longer names one. `errorResult(err, fallback)` reached its
   fallback exactly when the caught error was NOT an API error — when the server had not answered —
   and each of the fourteen tools had written that fallback as a diagnosis. Measured against the
@@ -19,6 +25,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   that no reply came back. Advice about inputs stays where the server rejected them (`mapHttpError`),
   which a test asserts, so this cannot be satisfied by removing all advice. A refusal the client
   itself decides now goes through `refusal()`, where the cause is known and the advice is earned.
+
+## [1.0.1] — 2026-08-27
+
+Everything below shipped in this release; 1.0.0 carried none of it. The entries sat under
+`[Unreleased]` until now, which was true by commit order and false for the person reading the
+changelog — and the changelog is what gets read.
+
+### Changed
 
 - `request_purchase` is no longer refused under a sandbox key. The refusal cited a property of the
   backend — "`/v1/purchases` is NOT sandbox-gated, so a `sk_sandbox_*` key can reach a live,

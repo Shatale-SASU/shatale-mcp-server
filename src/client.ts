@@ -193,7 +193,7 @@ export class ShataleClient {
         } catch {
           requestId = undefined
         }
-        throw mapHttpError(res.status, method, path, requestId, addressing, this.keyKind())
+        throw mapHttpError(res.status, method, path, requestId, { addressing, keyKind: this.keyKind() })
       }
 
       // /!\ THE PCI SCRUB IS APPLIED HERE, ON EVERY RESPONSE, AND THAT IS THE WHOLE CHANGE.

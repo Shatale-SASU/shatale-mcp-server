@@ -127,9 +127,15 @@ export function mapHttpError(
   method: string,
   path: string,
   requestId?: string,
-  addressing: RequestAddressing = 'unknown',
-  keyKind: KeyKind = 'none',
+  // ⚠️ ONE NAMED BAG, NOT TWO POSITIONAL SLOTS, AND THE REASON IS FRESH. These two arrived in
+  // separate branches and met in a merge: the fifth argument meant `keyKind` in one and
+  // `addressing` in the other, both are string unions, and the tests kept compiling while passing
+  // 'live' where the environment expected 'caller-id'. Two adjacent parameters that describe
+  // different knowledge, in the same shape, is an invitation to swap them silently.
+  known: { addressing?: RequestAddressing; keyKind?: KeyKind } = {},
 ): ShataleApiError {
+  const addressing: RequestAddressing = known.addressing ?? 'unknown'
+  const keyKind: KeyKind = known.keyKind ?? 'none'
   const withId = (e: StructuredError) => new ShataleApiError(requestId ? { ...e, request_id: requestId } : e)
   // 401 and 403 are different answers and were sharing one. 401: the key was not accepted. 403: it
   // WAS accepted, and this principal may not have this resource — a scope, or someone else's

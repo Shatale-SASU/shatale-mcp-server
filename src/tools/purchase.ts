@@ -51,7 +51,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       {
         name: 'request_purchase',
         description:
-          // NOT "executes the payment" — that was the description until SHAT-2678, and no branch of
+          // NOT "executes the payment" — that was the description until SHAT-2683, and no branch of
           // the backend does it. RequestPurchase answers with a STATUS, and the reachable ones
           // include onboarding_required, delegation_required, blocked, pending_approval and failed
           // (apps/api/internal/purchases/service.go). Even payment_ready only means a card was

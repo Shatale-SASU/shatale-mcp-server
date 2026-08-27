@@ -138,7 +138,7 @@ Tools defined in the code: **20**. A tool appears in a column only if the server
 - `list_mcc_codes` — Search or list MCC (Merchant Category Codes) used for spending policy configuration.
 - `search_merchants` — Search the Shatale merchant catalog. Find merchants by category, capability, keyword, or country. Returns merchants with their MCP capabilities so you can determine which merchants support agent-driven purchases.
 - `get_merchant_details` — Get detailed information about a specific merchant, including their MCP server configuration, available tools, rate limits, and capabilities. Use this after search_merchants to get integration details.
-- `request_purchase` — Request a purchase on behalf of a user. Shatale validates against spending policies and executes the payment.
+- `request_purchase` — Request a purchase on behalf of a user. Shatale checks it against the spending policies and answers with a STATUS to act on — it does not complete the payment. The answer may say the user must finish onboarding, that a delegation is missing, that policy blocked it, or that it is waiting for approval. When it reaches payment_ready a card has been issued for it and paying at the merchant is the next step, yours to take.
 - `get_purchase_status` — Get the current status of a purchase request by its ID.
 - `cancel_purchase` — Cancel a pending purchase request. Only works for purchases not yet executed.
 - `request_temporary_credentials` — Request temporary, short-lived merchant credentials (a relay email and a single-use relay password) for a merchant that requires an account. Raw card numbers are never returned here — card payment goes through request_purchase and the out-of-band checkout.

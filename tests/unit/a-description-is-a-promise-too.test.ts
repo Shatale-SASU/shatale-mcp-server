@@ -1,5 +1,5 @@
 /**
- * SHAT-2678 follow-up — a tool DESCRIPTION is read before the tool is called, and acted on after.
+ * SHAT-2683 — a tool DESCRIPTION is a promise too: read before the tool is called, acted on after.
  *
  * Two texts, both measured against the code they describe:
  *
@@ -50,19 +50,19 @@ describe('request_purchase does not promise a completed payment', () => {
 
 describe('auth advice depends on what the caller is running with', () => {
   test('a live key is never told to swap in a sandbox key', () => {
-    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, 'live').toStructured().suggested_fix
+    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, { keyKind: 'live' }).toStructured().suggested_fix
     expect(fix, 'this advice stops a live integration').not.toMatch(/set SHATALE_API_KEY to a valid sandbox key/i)
     expect(fix, 'it must warn instead of instruct').toMatch(/do not|don't/i)
   })
 
   test('a keyless session still gets the sign-up link — the advice is not merely deleted', () => {
-    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, 'none').toStructured().suggested_fix
+    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, { keyKind: 'none' }).toStructured().suggested_fix
     expect(fix).toMatch(/sk_sandbox_/)
     expect(fix).toMatch(/register/)
   })
 
   test('a sandbox key is told to check its own key, not to fetch a new one', () => {
-    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, 'sandbox').toStructured().suggested_fix
+    const fix = mapHttpError(401, 'POST', '/v1/purchases', undefined, { keyKind: 'sandbox' }).toStructured().suggested_fix
     expect(fix).toMatch(/sandbox key was not accepted/i)
     expect(fix).not.toMatch(/register\?ref=mcp/)
   })
@@ -71,7 +71,7 @@ describe('auth advice depends on what the caller is running with', () => {
   // have this resource. Advising a replacement sends the reader to fix what already works.
   test('a 403 is not reported as a bad key, whatever the key is', () => {
     for (const kind of ['none', 'sandbox', 'live'] as const) {
-      const e = mapHttpError(403, 'GET', '/v1/purchases/pur_1', undefined, kind).toStructured()
+      const e = mapHttpError(403, 'GET', '/v1/purchases/pur_1', undefined, { keyKind: kind }).toStructured()
       expect(e.code, `403 under ${kind} still reports as auth_failed`).toBe('forbidden')
       expect(e.suggested_fix, `403 under ${kind} still tells the caller to replace the key`).not.toMatch(
         /set SHATALE_API_KEY|get a free one/i,
