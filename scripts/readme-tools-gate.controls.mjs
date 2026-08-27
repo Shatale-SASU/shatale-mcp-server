@@ -38,7 +38,27 @@ function runGate(readmeText) {
 }
 
 const controls = []
-const control = (name, text, expect) => controls.push({ name, text, expect })
+const control = (name, text, expect) => {
+  // ⚠️ A MUTATION THAT DID NOT APPLY IS NOT A CONTROL — SHAT-2527. Every planted defect below is a
+  // String.replace against a literal from the README. `replace` with no match returns the string
+  // UNCHANGED and reports nothing, so the "mutated" input equals GOOD, the gate passes, and the
+  // control announces that the gate does not discriminate — when in truth nothing was ever planted.
+  //
+  // That happened: two counts were written as '15 tools <!-- count:sandbox -->', the sandbox roster
+  // moved to 16, and both controls silently stopped mutating. The gate was fine; the CONTROLS had
+  // gone quiet, which is worse, because a quiet control is the thing that tells you the gate works.
+  //
+  // ⚠️ ONLY FOR CONTROLS THAT EXPECT RED. The positive control passes GOOD deliberately — it exists
+  // to show the gate is green on a correct file — so requiring IT to differ caught a correct
+  // control. The harm is narrower than "text equals GOOD": it is a control that expects a failure
+  // and planted nothing to cause one.
+  if (expect?.red && text === GOOD) {
+    console.error(`control "${name}" did not change the README — its literal no longer matches. ` +
+      `Nothing was planted, so a green gate proves nothing. Fix the literal.`)
+    process.exit(1)
+  }
+  controls.push({ name, text, expect })
+}
 
 // ── The four defects this ticket was opened for ─────────────────────────────
 
@@ -79,13 +99,13 @@ control('(c) get_checkout_cardholder deleted from the matrix',
 
 // (d) a count that belongs to no mode.
 control('(d) count 17 attached to sandbox',
-  GOOD.replace('15 tools <!-- count:sandbox -->', '17 tools <!-- count:sandbox -->'),
-  { red: true, mustName: ['17', 'sandbox', '15'] })
+  GOOD.replace('16 tools <!-- count:sandbox -->', '17 tools <!-- count:sandbox -->'),
+  { red: true, mustName: ['17', 'sandbox', '16'] })
 
 // (d2) a bare count with no mode — 17 is REAL for live+money+flags, so a
 //      "is this number real anywhere" rule would pass the original defect verbatim.
 control('(d2) bare "17 tools" with no mode',
-  GOOD.replace('15 tools <!-- count:sandbox -->', '17 tools'),
+  GOOD.replace('16 tools <!-- count:sandbox -->', '17 tools'),
   { red: true, mustName: ['no mode'] })
 
 // ── The classic control: a tool that simply does not exist ──────────────────

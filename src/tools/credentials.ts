@@ -15,17 +15,26 @@ const requestCredentialsSchema = z.object({
   idempotency_key: z.string().optional(),
 })
 
-// get_credential_emails calls GET /v1/credentials/{id}/emails, which does NOT exist on the API
-// yet — it ships in PR #361 (credentials inbound email). Until that backend is merged AND
-// deployed, advertising the tool as working would be a soft "success reported": it appears in the
-// list, gets called, and only 404s. So it is gated OFF by default and only surfaced when the
-// caller confirms the backend is live (index.ts reads SHATALE_CREDENTIAL_EMAILS_ENABLED). Ship the
-// two together, or flip the flag once #361 is deployed. (Odin money/PCI review.)
-export function createCredentialTools(
-  client: ShataleClient,
-  opts: { emailsEnabled?: boolean } = {},
-): ToolModule {
-  const emailsEnabled = opts.emailsEnabled ?? false
+// ⚠️ get_credential_emails WAS SUPPRESSED ON A CONDITION THAT HAS BEEN MET — SHAT-2527.
+//
+// The gate said: "GET /v1/credentials/{id}/emails does NOT exist on the API yet — it ships in PR
+// #361 … flip the flag once #361 is deployed." That was true when written, and it was recorded as a
+// PROPERTY of the API rather than as a measurement with a date. The measurement expired; the
+// sentence did not, and the tool stayed hidden for seventeen days after its reason went away.
+//
+// BOTH HALVES OF THE STATED CONDITION, MEASURED 2026-08-27:
+//   merged   — apps/api/main.go:5414 registers the route with no flag beside it, and the commit
+//              that introduced it says so in its title: "revives #361" (dca2a229, 2026-08-10).
+//              Handler at api/v1/credentials.go; table at db/migrations/166_inbound_emails.sql.
+//   deployed — GET https://api.shatale.com/v1/credentials/{id}/emails answers 401 with the auth
+//              middleware's body. A path this router does not serve answers chi's plain
+//              "404 page not found" — measured against /v1/definitely-not-a-route-xyzzy as the
+//              control. Reaching the auth layer is what proves the route is there.
+//
+// So the tool is registered like its siblings. The suppression is not softened or defaulted-on: it
+// is gone, because a flag whose condition has been satisfied is a switch nobody will ever look at
+// again, and the next reader would take it for a live decision.
+export function createCredentialTools(client: ShataleClient): ToolModule {
   const tools = ([
       {
         name: 'request_temporary_credentials',
@@ -89,7 +98,7 @@ export function createCredentialTools(
           required: ['credential_request_id'],
         },
       },
-    ] as ToolModule['tools']).filter((t) => emailsEnabled || t.name !== 'get_credential_emails')
+    ] as ToolModule['tools'])
 
   // The gate must remove the HANDLER too, not just the listing: the CallTool
   // dispatch looks up handlers only, so a merely-unlisted tool would still be
@@ -178,6 +187,6 @@ export function createCredentialTools(
       },
     },
   }
-  if (!emailsEnabled) delete mod.handlers.get_credential_emails
+
   return mod
 }

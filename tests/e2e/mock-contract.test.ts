@@ -38,20 +38,25 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 15 backed tools; the three unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 16 backed tools; the two unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
-    // 15, and every one missing is missing on purpose — a tool we advertise is a
+    // 16, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
-    //   get_credential_emails ... backend not deployed (PR #361)
     //   register_user_profile  \ the register→status loop cannot close on ANY
     //   get_onboarding_status  / deployed backend — the session id is never
     //                            persisted, so the second step 404s forever
     //                            (SHAT-1662)
-    expect(res.result?.tools ?? []).toHaveLength(15)
+    //
+    // ⚠️ get_credential_emails WAS THE THIRD, and it is here now. Its suppression named a
+    // condition — "#361 merged AND deployed" — and both halves have been met: the route is
+    // registered with no flag beside it, and the live API answers 401 from the auth middleware
+    // where an unserved path answers a plain 404 (SHAT-2527). The count moved 15 → 16 because a
+    // reason expired, not because the rule changed.
+    expect(res.result?.tools ?? []).toHaveLength(16)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
-    expect(names).not.toContain('get_credential_emails')
+    expect(names).toContain('get_credential_emails')
     expect(names).not.toContain('register_user_profile')
     expect(names).not.toContain('get_onboarding_status')
   })
@@ -193,10 +198,18 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
   // (asserted above) AND uncallable — the dispatch resolves handlers, not the
   // advertised list, so a listing-only gate would leave the tool reachable by
   // name and 404ing against its not-yet-deployed backend.
-  test('get_credential_emails is not callable while gated (flag off)', async () => {
+  // ⚠️ THE "NOT CALLABLE WHILE GATED" TEST IS GONE WITH ITS SUBJECT (SHAT-2527). It asserted that
+  // the tool answers "Unknown tool" while the flag is off, and there is no flag: the condition it
+  // named — "#361 merged AND deployed" — has been met on both halves. Keeping it would demand the
+  // return of a suppression whose reason expired, which is the shape this ticket removes.
+  //
+  // What it protected is not lost. The test below calls the tool and asserts the request reaches
+  // the relay inbox, so a tool that stopped working is still caught — by what it DOES rather than
+  // by what it refuses.
+  test('get_credential_emails is callable now that its backend is deployed', async () => {
     const result = await client.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
-    expect(ToolResultText(result)).toContain('Unknown tool: get_credential_emails')
-    expect(mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')).toBeUndefined()
+    expect(ToolResultText(result)).not.toContain('Unknown tool')
+    expect(mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')).toBeDefined()
   })
 
   // The email flow itself stays covered: same server, flag ON — the shape the

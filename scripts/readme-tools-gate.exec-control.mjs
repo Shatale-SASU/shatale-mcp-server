@@ -34,18 +34,17 @@ const sig = (e) => [
   e.SHATALE_CREDENTIAL_EMAILS_ENABLED ?? '',
 ].join('|')
 
-// The env table mirrors the gate's. If the two ever drift apart the roster lookup misses,
-// the static pass fails, and this control says so loudly — the duplication is self-detecting.
-const GO_CODE = 'exec-control-money-go-not-a-real-code'
-const GO_SHA = (await import('node:crypto')).createHash('sha256').update(GO_CODE, 'utf8').digest('hex')
-const MODE_ENVS = [
-  {},
-  { SHATALE_API_KEY: 'sk_sandbox_gate_stub' },
-  { SHATALE_API_KEY: 'sk_sandbox_gate_stub', SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' },
-  { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live' },
-  { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA },
-  { SHATALE_API_KEY: 'sk_live_gate_stub', SHATALE_MODE: 'live', SHATALE_MONEY_GO: GO_CODE, SHATALE_MONEY_GO_SHA256: GO_SHA, SHATALE_ONBOARDING_ENABLED: 'true', SHATALE_CREDENTIAL_EMAILS_ENABLED: 'true' },
-]
+// ⚠️ THE ENV TABLE IS NO LONGER A COPY — SHAT-2527. It used to mirror the gate's, with a comment
+// arguing the duplication was "self-detecting" because a drift would make the roster lookup miss.
+// It did detect it: removing SHATALE_CREDENTIAL_EMAILS_ENABLED from the gate's modes left this copy
+// behind, the signatures stopped matching, every mode resolved to an EMPTY roster, and the failure
+// surfaced as something else entirely — "README names get_onboarding_status but no server advertises
+// it". A self-detecting copy still costs the next person the walk from that message back to here.
+//
+// Both callers now read the same MODES, and the money-GO pair comes with them, so there is nothing
+// left to drift.
+import { MODES, GO_CODE, GO_SHA } from './lib/serverRoster.mjs'
+const MODE_ENVS = MODES.map(([, , env]) => env)
 
 const { spawn } = await import('node:child_process')
 function realList(extraEnv) {
