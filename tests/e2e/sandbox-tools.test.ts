@@ -100,16 +100,31 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(result.content[0].type).toBe('text')
   })
 
-  test('request_purchase is blocked under a sandbox key', async () => {
+  // ⚠️ THIS TEST ASSERTED THE OPPOSITE UNTIL TODAY, AND NOTHING CAUGHT IT. SHAT-2611 removed the
+  // client-side refusal — the backend serves sandbox keys deliberately, stamping the environment
+  // from the key — and the unit and mock-contract assertions were inverted with it. This one was
+  // missed because it is key-gated: without SHATALE_TEST_KEY the whole suite SKIPS, and a skip is
+  // indistinguishable from a pass. It would have failed on the first keyed run, asserting the
+  // presence of a refusal that no longer exists.
+  //
+  // So it now watches the property that replaced it, against the REAL backend rather than a mock:
+  // the first call a publisher has to make is not refused by us.
+  test('request_purchase is NOT refused under a sandbox key', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
       merchant: 'amazon.com',
       amount: 15.0,
       currency: 'EUR',
-      description: 'Should be blocked under sandbox key',
+      description: 'Reaches the same contract an outsider uses',
     })
-    expect(result.isError).toBe(true)
-    expect(result.content[0].text).toContain('sandbox_key_purchase_blocked')
+    const text = result.content[0].text
+
+    // Deliberately not asserting success: with a fresh test user the backend may legitimately
+    // answer onboarding_required or delegation_required, and pinning one outcome would make this
+    // test about the fixture rather than about the refusal. What must be absent is OUR refusal.
+    expect(text).not.toContain('sandbox_key_purchase_blocked')
+    expect(text).not.toMatch(/run with a live key/i)
+    expect(text).not.toMatch(/SHATALE_MONEY_GO/)
   })
 })
