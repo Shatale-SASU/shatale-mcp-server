@@ -125,8 +125,25 @@ describe('no tool result carries a card (SHAT-1463 / PCI)', () => {
     ).toBeGreaterThan(10)
   })
 
-  it('every tool that calls out returns no PAN and no CVV', async () => {
+  // ⚠️ THE PREMISE NARROWED BY AN OWNER DECISION, AND THE NARROWING IS RECORDED — SHAT-2610.
+  //
+  // This asserted that NO tool result carries a card. The rule now distinguishes two subjects it
+  // used to treat as one:
+  //
+  //   THE CARD WE ISSUE is a tool we handed the agent so it could pay — capped, ours, minted for
+  //   that purchase. Withholding its digits removed the only way to use the thing we gave it for.
+  //   Owner's decision, verbatim: "we disclose the CVV of OUR card, not the client's".
+  //
+  //   THE CUSTOMER'S CARD is their real instrument, and nothing here changes about it.
+  //
+  // So the exception is BY TOOL and written down. Everything not named keeps the old rule, and a
+  // tool added tomorrow is covered by default — the list is an allowlist, and its absence is a
+  // refusal.
+  const REVEALS_OUR_ISSUED_CARD = new Set(['sandbox_approve_purchase'])
+
+  it('every tool that calls out returns no PAN and no CVV, except where we hand over our own card', async () => {
     const leaked: string[] = []
+    const revealed: string[] = []
     let called = 0
 
     for (const mod of modules) {
@@ -136,6 +153,14 @@ describe('no tool result carries a card (SHAT-1463 / PCI)', () => {
         called++
         const result = await handler(a)
         const text = JSON.stringify(result)
+        const carries = text.includes(PAN) || text.includes(`"cvv"`) || text.includes(`"cvc"`)
+        if (REVEALS_OUR_ISSUED_CARD.has(name)) {
+          // ⚠️ AND THE EXCEPTION IS ASSERTED IN BOTH DIRECTIONS. A named tool that STOPPED handing
+          // the card over is also a defect — it is the path the agent pays with — and an allowlist
+          // nobody checks is how an entry outlives the decision that earned it.
+          if (carries) revealed.push(name)
+          continue
+        }
         if (text.includes(PAN)) leaked.push(`${name}: raw PAN`)
         if (text.includes(`"cvv"`) || text.includes(`"cvc"`)) leaked.push(`${name}: cvv/cvc field`)
       }
@@ -158,6 +183,14 @@ describe('no tool result carries a card (SHAT-1463 / PCI)', () => {
         `Raw PAN/CVV must not enter the LLM reasoning context, the MCP host's logs, or the chat ` +
         `history. last4 survives the scrub, so an agent can still tell two cards apart.`,
     ).toEqual([])
+
+    expect(
+      revealed,
+      `these tools are listed as handing over OUR issued card and did not:\n  ${[...REVEALS_OUR_ISSUED_CARD].filter((n) => !revealed.includes(n)).join('\n  ')}\n\n` +
+        `The agent pays with that card; a tool that stops returning it removes the working path, ` +
+        `which is what SHAT-2610 was opened to undo. Either restore it, or remove the entry — an ` +
+        `allowlist nobody checks outlives the decision that earned it.`,
+    ).toEqual([...REVEALS_OUR_ISSUED_CARD])
   })
 
   it('last4 survives, so the redaction does not make a result useless', async () => {
