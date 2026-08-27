@@ -178,6 +178,13 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'GET', '/v1/credentials/cred_fixture_1'),
     })
 
+    await sandbox.callTool('sandbox_create_user', { user_id: 'usr_fixture_new', agent_id: 'agt_fixture_1' })
+    captured.push({
+      label: 'sandbox_create_user (the publisher\'s own user, with the delegation that lets it buy)',
+      struct_hint: 'apps/api/api/v1/sandbox.go CreateSandboxUser request struct',
+      ...describeLast(mock, 'POST', '/v1/sandbox/users'),
+    })
+
     await sandbox.callTool('sandbox_complete_onboarding', { user_id: 'usr_fixture_1' })
     captured.push({
       label: 'sandbox_complete_onboarding (a WRITE with no body — the path IS the request)',

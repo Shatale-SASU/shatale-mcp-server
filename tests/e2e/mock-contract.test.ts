@@ -38,7 +38,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 16 backed tools; the two unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 17 backed tools; the two unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
     // 16, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
@@ -54,7 +54,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // registered with no flag beside it, and the live API answers 401 from the auth middleware
     // where an unserved path answers a plain 404 (SHAT-2527). The count moved 15 → 16 because a
     // reason expired, not because the rule changed.
-    expect(res.result?.tools ?? []).toHaveLength(16)
+    expect(res.result?.tools ?? []).toHaveLength(17)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).toContain('get_credential_emails')
     expect(names).not.toContain('register_user_profile')

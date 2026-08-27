@@ -173,6 +173,38 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
       },
     },
     {
+      name: 'sandbox_create_user',
+      description:
+        "Create one of YOUR OWN sandbox users and give it the delegation that lets it buy. This is " +
+        "the first step: request_purchase needs a publisher_user_id that has an active delegation, " +
+        "and nothing else here creates one. Idempotent — calling it again with the same ids changes " +
+        "nothing. agent_id must be an agent YOU created by hand in the publisher console; no API key " +
+        "can create an agent, so if you do not have one, ask the person for it rather than inventing " +
+        "an id. user_id is yours to choose: it is how you will refer to this person afterwards.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          user_id: {
+            type: 'string',
+            description: 'Your own identifier for this person — you choose it, and you reuse it later',
+          },
+          agent_id: {
+            type: 'string',
+            description: 'An agent created by a person in the publisher console. Ask for it; do not invent one.',
+          },
+          onboarded: {
+            type: 'boolean',
+            description: 'Mark the user as onboarded (KYC passed). Default true — an un-onboarded user cannot buy.',
+          },
+          currency: {
+            type: 'string',
+            description: 'Delegation budget currency. Defaults to EUR, which is what request_purchase defaults to.',
+          },
+        },
+        required: ['user_id', 'agent_id'],
+      },
+    },
+    {
       name: 'sandbox_complete_onboarding',
       description:
         'Mark a sandbox test user as fully onboarded (KYC passed, wallet funded). Skips real verification steps.',
@@ -250,6 +282,25 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
 
   const handlers: Record<string, ToolHandler> = {
     sandbox_simulate_authorization: simulateAuthorization,
+
+    sandbox_create_user: async (args) => {
+      // Both ids are required HERE, before the network. agent_id optional would be an invitation to
+      // send an empty one, and the backend would answer with a sentence about delegations that reads
+      // like a server problem rather than a missing argument.
+      const userId = requireId(args, 'user_id')
+      if (!userId.ok) return userId.result
+      const agentId = requireId(args, 'agent_id')
+      if (!agentId.ok) return agentId.result
+      try {
+        const result = await client.createSandboxUser(userId.value, agentId.value, {
+          onboarded: args.onboarded === undefined ? true : Boolean(args.onboarded),
+          currency: typeof args.currency === 'string' ? args.currency : undefined,
+        })
+        return jsonResult(result)
+      } catch (err) {
+        return errorResult(err, 'sandbox_create_user_failed')
+      }
+    },
 
     sandbox_complete_onboarding: async (args) => {
       const userId = requireId(args, 'user_id')

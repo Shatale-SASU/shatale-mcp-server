@@ -36,7 +36,12 @@ const repoRoot = resolve(__dirname, "..", "..");
 /** Every text file we author, so a name cannot come back in a corner nobody greps. */
 function authoredFiles(): string[] {
   const out: string[] = [];
-  const skipDirs = new Set(["node_modules", "dist", ".git", "coverage"]);
+  // ⚠️ ".claude" HOLDS GIT WORKTREES, WHICH ARE COPIES OF THIS REPOSITORY INSIDE ITSELF. An agent
+  // working in a worktree put a second copy of these very files under .claude/worktrees/, and this
+  // sweep read them as if they were the shipped tree: every forbidden string in this test's OWN
+  // source counted as a hit, and three absence checks went red on a clean main. The walk was
+  // measuring the wrong subject, not finding a defect.
+  const skipDirs = new Set(["node_modules", "dist", ".git", "coverage", ".claude"]);
   const walk = (rel: string) => {
     for (const entry of readdirSync(resolve(repoRoot, rel), { withFileTypes: true })) {
       const child = rel ? `${rel}/${entry.name}` : entry.name;

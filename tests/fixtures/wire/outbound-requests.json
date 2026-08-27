@@ -87,6 +87,17 @@
     "path": "/v1/credentials/cred_fixture_1"
   },
   {
+    "label": "sandbox_create_user (the publisher's own user, with the delegation that lets it buy)",
+    "struct_hint": "apps/api/api/v1/sandbox.go CreateSandboxUser request struct",
+    "method": "POST",
+    "path": "/v1/sandbox/users",
+    "body": {
+      "user_id": "usr_fixture_new",
+      "agent_id": "agt_fixture_1",
+      "onboarded": true
+    }
+  },
+  {
     "label": "sandbox_complete_onboarding (a WRITE with no body — the path IS the request)",
     "struct_hint": "apps/api/api/v1/sandbox.go complete-onboarding route",
     "method": "POST",
