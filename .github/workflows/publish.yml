@@ -108,6 +108,34 @@ jobs:
             exit 1
           fi
 
+          # SHAT-2553 — THE TAG MUST BE REACHABLE FROM main. A TAG PROVES A NAME, NOT AN ORIGIN.
+          #
+          # The checks above ask whether the tag EXISTS and whether package.json agrees with it.
+          # Both pass on a tag placed anywhere — including a branch that was never merged. That is
+          # how 0.5.1 reached users: PR #6 was merged into fix/npm-package-contents rather than
+          # main, the interface said "merged" and closed it green, and the artifact users installed
+          # matched no commit on main. The build could not be reproduced from main afterwards.
+          #
+          # "Merged" is a statement about a PULL REQUEST. "On main" is a statement about the WORLD.
+          # The tool reports the first honestly and says nothing about the second, and nothing in
+          # the chain noticed the difference.
+          #
+          # Ancestry is the question that cannot be answered by a name. Measured both ways before
+          # this was added: a tag on main passes, a tag on a branch off main fails.
+          #
+          # main is fetched EXPLICITLY rather than assumed. A release checkout is of the tag, and if
+          # origin/main happened to be absent the comparison below would fail for a reason that has
+          # nothing to do with the tag — a guard that blocks a good release teaches people to
+          # bypass it, which costs more than the hole it closes.
+          git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+
+          if ! git merge-base --is-ancestor "refs/tags/${TAG}^{commit}" origin/main; then
+            echo "::error::tag ${TAG} is not reachable from main. \
+          Publishing it would put an artifact on npm that no commit on main can reproduce — which \
+          is exactly how 0.5.1 shipped. Merge the work into main and tag the merged commit."
+            exit 1
+          fi
+
           # ⚠️ A TAGGED RUN CERTIFIES PRODUCTION, AND `target` CANNOT SAY OTHERWISE.
           # The public registry serves one artifact to everyone, so "gated against staging,
           # published to npm" is not a combination anybody should be able to select. Deriving
