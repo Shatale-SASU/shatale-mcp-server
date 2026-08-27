@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId } from './errors.js'
+import { mapHttpError, extractRequestId, type RequestAddressing } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 
 /**
@@ -92,7 +92,24 @@ export class ShataleClient {
 
   private static readonly MAX_CREDENTIAL_KEYS = 512
 
-  async request(method: string, path: string, body?: unknown): Promise<unknown> {
+  /**
+   * ⚠️ `addressing` IS THE ONE FACT ONLY THIS FILE HAS, AND IT MUST BE STATED, NOT GUESSED
+   * (SHAT-2678).
+   *
+   * Every method below either interpolates an id the caller handed us or composes a constant
+   * path. That is knowledge, and it decides who a 404 blames — see `NOT_FOUND_FIX` in errors.ts
+   * for what was wrong twice when the answer was inferred from the path string instead.
+   *
+   * The default is 'unknown' deliberately. A new route whose author forgets this argument gets an
+   * answer that admits both causes; it does NOT inherit a confident wrong half. Say 'fixed' only
+   * where the caller contributed no part of the address.
+   */
+  async request(
+    method: string,
+    path: string,
+    body?: unknown,
+    addressing: RequestAddressing = 'unknown',
+  ): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -164,7 +181,7 @@ export class ShataleClient {
         } catch {
           requestId = undefined
         }
-        throw mapHttpError(res.status, method, path, requestId)
+        throw mapHttpError(res.status, method, path, requestId, addressing)
       }
 
       // /!\ THE PCI SCRUB IS APPLIED HERE, ON EVERY RESPONSE, AND THAT IS THE WHOLE CHANGE.
@@ -202,15 +219,17 @@ export class ShataleClient {
   // ---- Purchase flow ----
 
   async requestPurchase(input: PurchaseInput): Promise<unknown> {
-    return this.request('POST', '/v1/purchases', toPurchaseWireBody(input, true))
+    // The one genuine create on the money path: a constant collection address, no id from the
+    // caller anywhere in it. A 404 here is about the deployment.
+    return this.request('POST', '/v1/purchases', toPurchaseWireBody(input, true), 'fixed')
   }
 
   async getPurchaseStatus(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}`)
+    return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}`, undefined, 'caller-id')
   }
 
   async cancelPurchase(id: string, reason?: string): Promise<unknown> {
-    return this.request('DELETE', `/v1/purchases/${encodeURIComponent(id)}`, { reason })
+    return this.request('DELETE', `/v1/purchases/${encodeURIComponent(id)}`, { reason }, 'caller-id')
   }
 
   // ---- Credentials ----
@@ -247,7 +266,12 @@ export class ShataleClient {
     // Closing that needs the backend to de-dup on (publisher_user_id, agent_id, merchant_domain)
     // while a credential is live, or to expose a lookup for one - neither exists today.
     if (input.idempotency_key) {
-      return this.request('POST', '/v1/credentials', { ...input, idempotency_key: input.idempotency_key })
+      return this.request(
+        'POST',
+        '/v1/credentials',
+        { ...input, idempotency_key: input.idempotency_key },
+        'fixed',
+      )
     }
 
     const now = Date.now()
@@ -288,17 +312,17 @@ export class ShataleClient {
       this.credentialKeys.set(fingerprint, entry)
     }
 
-    return this.request('POST', '/v1/credentials', { ...input, idempotency_key: entry.key })
+    return this.request('POST', '/v1/credentials', { ...input, idempotency_key: entry.key }, 'fixed')
   }
 
   async getCredentialStatus(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}`)
+    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}`, undefined, 'caller-id')
   }
 
   // Emails received on a credential's relay address (verification/OTP mail). Publisher-scoped
   // by the API key on the backend; the agent reads the code it needs to finish signup.
   async getCredentialEmails(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}/emails`)
+    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}/emails`, undefined, 'caller-id')
   }
 
   // ---- Checkout identity ----
@@ -307,7 +331,14 @@ export class ShataleClient {
   // cardholder on the pool card) and merchant_customer_identity (the end-user / buyer). Live money
   // path (agent-scoped by the API key's publisher); no card credentials here.
   async getCheckoutIdentity(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}/checkout-identity`)
+    // The id sits in the MIDDLE and the path ends in a noun — the shape that fooled the old
+    // heuristic in both of its incarnations. It is still a caller's id.
+    return this.request(
+      'GET',
+      `/v1/purchases/${encodeURIComponent(id)}/checkout-identity`,
+      undefined,
+      'caller-id',
+    )
   }
 
   // ---- Onboarding / User Resolution ----
@@ -318,11 +349,16 @@ export class ShataleClient {
     intended_use?: string
     idempotency_key?: string
   }): Promise<unknown> {
-    return this.request('POST', '/v1/onboarding/register', input)
+    return this.request('POST', '/v1/onboarding/register', input, 'fixed')
   }
 
   async getOnboardingStatus(sessionId: string): Promise<unknown> {
-    return this.request('GET', `/v1/onboarding/sessions/${encodeURIComponent(sessionId)}`)
+    return this.request(
+      'GET',
+      `/v1/onboarding/sessions/${encodeURIComponent(sessionId)}`,
+      undefined,
+      'caller-id',
+    )
   }
 
   // ---- Common ----
@@ -330,7 +366,10 @@ export class ShataleClient {
   async listMCCCodes(query?: string): Promise<unknown> {
     const qs = query ? `?q=${encodeURIComponent(query)}` : ''
     try {
-      return await this.request('GET', `/v1/mcc-codes${qs}`)
+      // `qs` is a filter, not an address: the route is constant and carries no id. The old
+      // heuristic (any non-POST → "verify the id") told a caller to check an id this call
+      // does not have.
+      return await this.request('GET', `/v1/mcc-codes${qs}`, undefined, 'fixed')
     } catch (err) {
       // F-008/F-011: fall back to the built-in list rather than failing — this is static
       // reference data and an agent looking up "which code is gambling" should not be
@@ -409,21 +448,45 @@ export class ShataleClient {
    * force-decline, neutral (e.g. 4111…) → real policy decides.
    */
   async sandboxSimulateAuthorization(input: SandboxAuthInput): Promise<unknown> {
-    return this.request('POST', '/v1/sandbox/authorizations', {
-      agent_id: input.agent_id,
-      amount: input.amount,
-      currency: input.currency,
-      mcc: input.mcc,
-      merchant_name: input.merchant_name,
-      card_number: input.card_number,
-    })
+    return this.request(
+      'POST',
+      '/v1/sandbox/authorizations',
+      {
+        agent_id: input.agent_id,
+        amount: input.amount,
+        currency: input.currency,
+        mcc: input.mcc,
+        merchant_name: input.merchant_name,
+        card_number: input.card_number,
+      },
+      'fixed',
+    )
   }
 
+  /**
+   * ⚠️ THESE TWO ARE POSTs THAT DO NOT CREATE, AND THAT IS THE WHOLE OF SHAT-2678.
+   *
+   * A caller-supplied id sits in the middle of each path and the last segment is a verb, so both
+   * looked like creates to a heuristic reading the tail of the string — and both were answered
+   * "nothing in your request is wrong". apps/api api/v1/sandbox.go returns 404 here when the user
+   * or purchase is absent, belongs to another publisher, or lives in the other environment: all
+   * things the caller can check, and the only things it can.
+   */
   async sandboxCompleteOnboarding(userId: string): Promise<unknown> {
-    return this.request('POST', `/v1/sandbox/users/${encodeURIComponent(userId)}/onboarding`)
+    return this.request(
+      'POST',
+      `/v1/sandbox/users/${encodeURIComponent(userId)}/onboarding`,
+      undefined,
+      'caller-id',
+    )
   }
 
   async sandboxApprovePurchase(purchaseId: string): Promise<unknown> {
-    return this.request('POST', `/v1/sandbox/purchases/${encodeURIComponent(purchaseId)}/approve`)
+    return this.request(
+      'POST',
+      `/v1/sandbox/purchases/${encodeURIComponent(purchaseId)}/approve`,
+      undefined,
+      'caller-id',
+    )
   }
 }

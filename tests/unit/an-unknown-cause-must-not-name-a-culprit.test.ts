@@ -1,7 +1,7 @@
 /**
  * An error whose cause is unknown must not name one.
  *
- * Found while verifying SHAT-2611 against the published package; no ticket id of its own yet.
+ * SHAT-2678, found while verifying SHAT-2611 against the published package.
  *
  * ⚠️ MEASURED AGAINST THE PUBLISHED PACKAGE, NOT IMAGINED. With the API unreachable, the shipped
  * 1.0.1 answered `request_purchase` with: "Could not complete the purchase request. Confirm the
