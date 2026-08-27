@@ -113,13 +113,32 @@ function redactLongDigitRuns(message: string): string {
 }
 
 /**
- * Sandbox tool surface (SHAT-1488, Option 1).
+ * Sandbox tool surface (SHAT-1488, Option 1; corrected SHAT-2621 on 2026-08-27).
  *
- * Every tool here maps to a route the backend ACTUALLY deploys
- * (apps/api/main.go). The previously-shipped `sandbox_create_test_user`,
- * `sandbox_decline_request`, and `sandbox_reset` tools called endpoints that
- * were never deployed and have been removed — an honest, smaller surface beats
- * visible-but-broken tools.
+ * Every tool here maps to a route the backend actually serves.
+ *
+ * ⚠️ THE REASON THIS COMMENT USED TO GIVE WAS FALSE, AND A SURFACE CHECK CONFIRMED IT. It said
+ * `sandbox_create_test_user`, `sandbox_decline_request` and `sandbox_reset` "called endpoints that
+ * were never deployed". Measured:
+ *
+ *     apps/api/main.go:4838  POST /v1/sandbox/reset      registered, behind
+ *                            SANDBOX_CANCEL_ROUTES_ENABLED, parsed fail-closed
+ *     live api.shatale.com   POST /v1/sandbox/reset  -> 404
+ *                            POST /v1/sandbox/users  -> 401   (control, same host, route mounted)
+ *
+ * The routes exist. They are switched off. "Never deployed" and "registered and disabled" call for
+ * different actions — one is a rewrite, the other an environment variable.
+ *
+ * ⚠️ AND THE SENTENCE WAS RIGHT FOR THE WRONG REASON, WHICH OUTLIVES BEING SIMPLY WRONG. A reader
+ * who checks production sees the 404, concludes "never deployed" is accurate, and stops. A plainly
+ * false comment is caught by the first measurement; a false reason that a shallow check CONFIRMS is
+ * not caught at all.
+ *
+ * `sandbox_create_user` has since returned (PR #51). `sandbox_decline_request` is in scope to
+ * return — a demo that can show "yes" and not "no" is half a demo of a product whose point is that
+ * a person may refuse. `sandbox_reset` is deliberately NOT in this surface: it erases sandbox state,
+ * and this surface is what we hand to an external publisher, where the cost of a mistaken call is
+ * not symmetric with the cost of a correct one.
  */
 export function createSandboxTools(client: ShataleClient): ToolModule {
   const tools: ToolDefinition[] = [

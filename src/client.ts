@@ -457,12 +457,18 @@ export class ShataleClient {
 
   // ---- Sandbox ----
   //
-  // These map 1:1 to the three sandbox routes the backend actually deploys
-  // (apps/api/main.go): the side-effect-free policy engine and the two
-  // SandboxOnly-gated lifecycle helpers. The previously-shipped
-  // create-user / requests/{id}/{approve,decline} / reset methods were built
-  // against endpoints that were never deployed and have been removed
-  // (SHAT-1488).
+  // These map to the sandbox routes the backend serves: the side-effect-free policy engine and the
+  // SandboxOnly-gated lifecycle helpers.
+  //
+  // ⚠️ CORRECTED (SHAT-2621, 2026-08-27). This said the removed methods were built "against
+  // endpoints that were never deployed". They were not: /v1/sandbox/reset is registered at
+  // apps/api/main.go:4838 behind SANDBOX_CANCEL_ROUTES_ENABLED, parsed fail-closed, and answers 404
+  // in production only because the flag is off — while POST /v1/sandbox/users answers 401 on the
+  // same host, which is the control that tells "not mounted" from "wrong host".
+  //
+  // The second copy of this claim lived in src/tools/sandbox.ts and is corrected there too. Both
+  // were written from one measurement and both outlived it; fixing one and not the other is the
+  // failure this repository has hit repeatedly.
 
   /**
    * Run the policy engine without side effects (no ledger, no outbox, no
