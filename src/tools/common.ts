@@ -74,7 +74,7 @@ function handleListCapabilities(ctx: GuestContext) {
   const note = ctx.isGuest
     ? 'No API key configured — explore, simulate, and generate a policy. No real call or payment. Set SHATALE_API_KEY to unlock more tools.'
     : ctx.isSandbox
-      ? 'Sandbox key — the full API against test data, no real money. Note: request_purchase is registered but BLOCKED under a sandbox key; use sandbox_simulate_authorization instead.'
+      ? 'Sandbox key — the full API against test data, no real money. request_purchase runs the ordinary path: the server stamps the environment from the key, so nothing here reaches live money. sandbox_simulate_authorization is the narrower tool for testing a policy decision without creating a purchase.'
       : ctx.moneyEnabled
         ? 'Live key with money-GO — real production APIs; the purchase and credential tools move REAL money.'
         : 'Live key, onboarding-only — real APIs, but money tools are disabled (they require SHATALE_MONEY_GO).'

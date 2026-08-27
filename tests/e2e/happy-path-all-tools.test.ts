@@ -50,7 +50,15 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
 
   // ── Purchase tools ──
 
-  test('request_purchase is blocked under a sandbox key (SHAT-1488 guard)', async () => {
+  // ⚠️ THIS ASSERTED A REFUSAL THAT OUTLIVED ITS REASON — SHAT-2611. The client refused
+  // request_purchase under a sandbox key, citing "/v1/purchases is NOT sandbox-gated on the
+  // backend". SHAT-2373 changed exactly that: the endpoint serves sandbox keys deliberately, the
+  // environment is stamped from the KEY, and the money-movers resolve to sandbox implementations.
+  //
+  // What is asserted now is the property that replaced it: the call REACHES the server, and it is
+  // not refused by us. Whether it succeeds depends on the sandbox account this suite runs against,
+  // so the assertion is about the refusal being gone, not about a particular outcome.
+  test('request_purchase is no longer refused by the client under a sandbox key', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: testId('user'),
       agent_id: testId('agent'),
@@ -61,8 +69,9 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
       idempotency_key: testId('idem'),
     })
     expect(result.content[0].type).toBe('text')
-    expect(result.isError).toBe(true)
-    expect(result.content[0].text).toContain('sandbox_key_purchase_blocked')
+    expect(result.content[0].text).not.toContain('sandbox_key_purchase_blocked')
+    // And the old escape hatch must not survive anywhere: it pushed the caller toward real money.
+    expect(result.content[0].text).not.toMatch(/run with a live key/i)
   })
 
   test('get_purchase_status with non-existent ID', async () => {

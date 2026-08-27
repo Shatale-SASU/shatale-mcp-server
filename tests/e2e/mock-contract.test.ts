@@ -115,7 +115,49 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(body.mcc).toBe('7995')
   })
 
-  test('request_purchase is blocked under a sandbox key (never hits /v1/purchases)', async () => {
+  // SHAT-2611 — the concierge's through-scenario under a SANDBOX key, and it goes through the MCP
+  // tools only: no handler is invoked directly, no client method is called from the test. This is
+  // the assertion that used to say the opposite ("blocked, never hits /v1/purchases"), and it was
+  // true when written. SHAT-2373 made the endpoint serve sandbox keys deliberately: a sandbox key
+  // using the same public contract an outsider uses IS the product.
+  test('a publisher can buy end to end under a sandbox key, through the tools alone', async () => {
+    const created = await client.callTool('request_purchase', {
+      publisher_user_id: 'pub-1',
+      agent_id: 'agent-1',
+      merchant: 'amazon.com',
+      amount: 49.99,
+      currency: 'EUR',
+      description: 'Mock contract purchase',
+    })
+    expect(created.isError).toBeFalsy()
+    expect(ToolResultText(created)).not.toContain('sandbox_key_purchase_blocked')
+    expect(ToolResultText(created)).toContain('pur_mock_1')
+
+    // It reached the real, shared route — not a privileged sandbox bypass, which SHAT-2373 names
+    // as the thing it forbids.
+    const wire = mock.lastRequest('POST', '/v1/purchases')
+    expect(wire).toBeDefined()
+    expect(wire!.authorization).toBe('Bearer sk_sandbox_mock')
+
+    // ⚠️ THE ENVIRONMENT IS STAMPED FROM THE KEY, NEVER FROM THE BODY. If this client ever starts
+    // TELLING the server which environment it is in, the server has a second, caller-controlled
+    // source for a fact it already owns — and the test that reads "sandbox works" would then be
+    // reading the client's own claim back to itself.
+    const body = wire!.body as Record<string, unknown>
+    for (const claimed of ['environment', 'mode', 'sandbox', 'is_sandbox']) {
+      expect(body[claimed]).toBeUndefined()
+    }
+
+    // And the purchase is readable afterwards — the scenario ends where a publisher would look.
+    const status = await client.callTool('get_purchase_status', { purchase_id: 'pur_mock_1' })
+    expect(ToolResultText(status)).toContain('pur_mock_1')
+  })
+
+  // The advice is pinned separately from the refusal. The old message told the caller to escape a
+  // sandbox by switching to a live key plus the money flag — it pointed at REAL MONEY as the way
+  // out of a path that was safe by construction. If a refusal ever comes back for another reason,
+  // it must not come back carrying that.
+  test('no tool answers a sandbox purchase by pointing at real money', async () => {
     const result = await client.callTool('request_purchase', {
       publisher_user_id: 'pub-1',
       agent_id: 'agent-1',
@@ -124,10 +166,25 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
       currency: 'EUR',
       description: 'Mock contract purchase',
     })
-    expect(result.isError).toBe(true)
-    expect(ToolResultText(result)).toContain('sandbox_key_purchase_blocked')
-    // The guard must short-circuit before any outbound call.
-    expect(mock.lastRequest('POST', '/v1/purchases')).toBeUndefined()
+    const text = ToolResultText(result)
+    expect(text).not.toMatch(/run with a live key/i)
+    expect(text).not.toMatch(/SHATALE_MONEY_GO/)
+    expect(text).not.toMatch(/sk_live_/)
+  })
+
+  // ⚠️ THE SERVER'S OWN GUIDANCE IS PART OF THE REFUSAL. Removing the code block left two shipped
+  // sentences still telling an agent that request_purchase is "disabled"/"BLOCKED" under a sandbox
+  // key — and the whole suite stayed green, because nothing pinned the prose. An agent reads that
+  // text and does not call the tool: a refusal made of words costs exactly what a refusal made of
+  // code costs.
+  test('nothing the server SAYS claims a purchase is refused here', async () => {
+    for (const tool of ['explain_shatale', 'list_capabilities']) {
+      const text = ToolResultText(await client.callTool(tool, {}))
+      expect(text, `${tool} still advertises a refusal`).not.toMatch(
+        /request_purchase[^.]{0,80}(disabled|blocked|unavailable|not available)/i,
+      )
+      expect(text, `${tool} still names a refusal code`).not.toContain('sandbox_key_purchase_blocked')
+    }
   })
 
   test('forwards the API key as a Bearer token', async () => {
