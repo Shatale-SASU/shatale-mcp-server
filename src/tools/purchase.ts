@@ -51,7 +51,17 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       {
         name: 'request_purchase',
         description:
-          'Request a purchase on behalf of a user. Shatale validates against spending policies and executes the payment.',
+          // NOT "executes the payment" — that was the description until SHAT-2683, and no branch of
+          // the backend does it. RequestPurchase answers with a STATUS, and the reachable ones
+          // include onboarding_required, delegation_required, blocked, pending_approval and failed
+          // (apps/api/internal/purchases/service.go). Even payment_ready only means a card was
+          // issued; paying at the merchant is still the agent's own step. An agent told the call
+          // executes the payment reports success on a purchase that is waiting for a human.
+          'Request a purchase on behalf of a user. Shatale checks it against the spending policies ' +
+          'and answers with a STATUS to act on — it does not complete the payment. The answer may ' +
+          'say the user must finish onboarding, that a delegation is missing, that policy blocked ' +
+          'it, or that it is waiting for approval. When it reaches payment_ready a card has been ' +
+          'issued for it and paying at the merchant is the next step, yours to take.',
         inputSchema: {
           type: 'object',
           properties: {

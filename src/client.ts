@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, type RequestAddressing } from './errors.js'
+import { mapHttpError, extractRequestId, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 
 /**
@@ -67,6 +67,18 @@ export class ShataleClient {
     private readonly apiKey: string,
     private readonly timeoutMs: number = 30_000,
   ) {}
+
+  /**
+   * What this process is RUNNING WITH — read from the key it holds, never from a flag someone set.
+   * The auth advice depends on it: telling a live integration to swap in a sandbox key is
+   * destructive (SHAT-2678 follow-up), and telling a keyless session to check its scopes is noise.
+   */
+  private keyKind(): KeyKind {
+    if (!this.apiKey) return 'none'
+    if (this.apiKey.startsWith('sk_live_')) return 'live'
+    if (this.apiKey.startsWith('sk_sandbox_')) return 'sandbox'
+    return 'none'
+  }
 
   /**
    * SHAT-1686. Derived credential idempotency keys, anchored to the FIRST request of a window
@@ -181,7 +193,7 @@ export class ShataleClient {
         } catch {
           requestId = undefined
         }
-        throw mapHttpError(res.status, method, path, requestId, addressing)
+        throw mapHttpError(res.status, method, path, requestId, { addressing, keyKind: this.keyKind() })
       }
 
       // /!\ THE PCI SCRUB IS APPLIED HERE, ON EVERY RESPONSE, AND THAT IS THE WHOLE CHANGE.
