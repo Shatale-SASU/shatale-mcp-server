@@ -24,6 +24,7 @@
     "test": "vitest run",
     "gate": "node scripts/publish-gate.mjs",
     "gate:readme": "node scripts/readme-tools-gate.mjs",
+    "verify:published": "node scripts/verify-published.mjs",
     "gate:readme:controls": "node scripts/readme-tools-gate.controls.mjs && node scripts/readme-tools-gate.exec-control.mjs",
     "pretest:public": "tsc",
     "test:public": "vitest run",
