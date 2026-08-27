@@ -5,6 +5,39 @@ import { mapHttpError, extractRequestId, BUILT_IN_MCC_NOTE, type RequestAddressi
 import { redactPurchaseCard } from './redact.js'
 
 /**
+ * Flattens an error's `cause` chain into one operator-readable line.
+ *
+ * ⚠️ FOR STDERR ONLY — NEVER FOR ANYTHING AN AGENT RECEIVES. Everything a tool returns goes through
+ * `errorResult`, which echoes nothing by construction. This exists for the one place that must tell
+ * the OPERATOR what happened (the `list_mcc_codes` fallback), on the channel the model cannot see.
+ *
+ * ⚠️ AND IT EXISTS BECAUSE `err.message` ALONE SAYS NOTHING. Node's fetch reports every network
+ * failure as the same two words — `fetch failed` — and puts the thing that actually happened one
+ * level down in `cause`: `connect ECONNREFUSED 127.0.0.1:9`, `getaddrinfo ENOTFOUND …`, a timeout.
+ * Logging only the message produces a line that is identical for DNS, refusal and timeout, which
+ * are precisely the three cases the note tells the operator this log will distinguish. A promise of
+ * a reason has to deliver the reason.
+ */
+export function describeErrorChain(err: unknown, maxDepth = 5): string {
+  const parts: string[] = []
+  const seen = new Set<unknown>()
+  let cur: unknown = err
+  for (let depth = 0; depth < maxDepth && cur && typeof cur === 'object'; depth++) {
+    if (seen.has(cur)) break // a cause chain may loop back on itself
+    seen.add(cur)
+    const e = cur as { message?: unknown; code?: unknown; cause?: unknown }
+    if (typeof e.message === 'string' && e.message) {
+      // The code is the part an operator greps for, and it is not always in the message.
+      const code = typeof e.code === 'string' && !e.message.includes(e.code) ? ` (${e.code})` : ''
+      const line = `${e.message}${code}`
+      if (!parts.includes(line)) parts.push(line)
+    }
+    cur = e.cause
+  }
+  return parts.length ? parts.join(' ← ') : String(err)
+}
+
+/**
  * SHAT-1682: derive a STABLE idempotency key from the purchase's identifying
  * fields, so an LLM (or transport) that retries the same logical `request_purchase`
  * — e.g. after the 30s fetch timeout below — reuses the same key and the backend
@@ -388,7 +421,7 @@ export class ShataleClient {
       // heuristic (any non-POST → "verify the id") told a caller to check an id this call
       // does not have.
       return await this.request('GET', `/v1/mcc-codes${qs}`, undefined, 'fixed')
-    } catch {
+    } catch (err) {
       // F-008/F-011: fall back to the built-in list rather than failing — this is static
       // reference data and an agent looking up "which code is gambling" should not be
       // blocked by a network hiccup.
@@ -406,6 +439,23 @@ export class ShataleClient {
       // other failure in this package goes through `errorResult`, which echoes nothing by
       // construction; this path bypassed that guard purely by being a success. The note keeps the
       // FACT and drops the prose — see BUILT_IN_MCC_NOTE in errors.ts.
+      //
+      // ⚠️ BUT "NOT TO THE AGENT" IS NOT THE SAME AS "NOWHERE", AND FOR ONE RELEASE IT WAS. With
+      // `err` unbound the exception was destroyed at the moment it was caught, while the note went
+      // on telling the operator that "the server-side log has the detail" — and for the usual
+      // causes here (DNS, connection refused, timeout) NO SERVER WAS REACHED, so no server-side log
+      // exists to have it. The fallback answers as a success, so nothing downstream reports a
+      // problem either: a deployment where /v1/mcc-codes is simply absent looks completely healthy
+      // from every direction at once.
+      //
+      // stderr is the channel that separates the two audiences. Under stdio MCP the protocol owns
+      // stdout and stderr goes to the host's own log, out of the model's context — the same channel
+      // src/index.ts already uses to refuse a start and say why. The operator gets the exception;
+      // the agent still gets only the fact.
+      console.error(
+        `list_mcc_codes: the /v1/mcc-codes lookup failed, serving this package's built-in ISO ` +
+          `18245 list instead. Reason: ${describeErrorChain(err)}`,
+      )
       return {
         ...(ShataleClient.filterBuiltInMCC(query) as Record<string, unknown>),
         _source: 'built-in',

@@ -64,7 +64,10 @@ describe('the coverage matrix lists exactly the tools that exist', async () => {
   // that has merely gone half-blind. That is the failure mode being fixed, so the control must not
   // share it.
   it('both readers see the whole roster, and agree', () => {
-    expect(runtime.length).toBeGreaterThanOrEqual(20)
+    // 21 as of SHAT-2698. This floor had been left at 20 when the roster moved to 21 — one under
+    // the population, which is the exact drift the paragraph above condemns, reappearing in the
+    // line that paragraph is attached to.
+    expect(runtime.length).toBeGreaterThanOrEqual(21)
     expect(rosterFromText()).toEqual(runtime)
     expect(matrixRows().length).toBe(runtime.length)
     expect(runtime).toContain('request_purchase')
@@ -86,4 +89,70 @@ describe('the coverage matrix lists exactly the tools that exist', async () => {
     expect(stated).toBeDefined()
     expect(Number(stated)).toBe(runtime.length)
   })
+
+  // ⚠️ AND THE ROW COUNT WAS THE ONLY NUMBER GUARDED, SO EVERY OTHER NUMBER IN THE DOCUMENT DRIFTED
+  // UNDERNEATH IT.
+  //
+  // Measured on this file before this test existed: the table had 21 rows with 11 ✅ in the Contract
+  // column and 4 in Security, while the summary three lines below said "Contract (Zod): 6/20" and
+  // "Security edge cases: 1/20". Both denominators were a release behind AND both numerators were
+  // wrong by five and by three — the row-count gate above was green throughout, because a row count
+  // is not a coverage number.
+  //
+  // ⚠️ WHICH IS THE DOCUMENT'S OWN STATED DEFECT, RECURRING. The banner at the top of
+  // tool-coverage.md exists because it once "reported 17/17 (100%)" against a roster of 20: a
+  // fraction that agrees with nothing is exactly what a coverage document is for, and it is the one
+  // thing nothing checked. Half-fixing it — moving the denominator to 21 and leaving the numerator
+  // at 6 — would have produced a line that is still false and now looks freshly maintained, which is
+  // worse than an obviously stale one.
+  //
+  // So the fractions are derived from the table's own columns, and the denominators from the RUNTIME
+  // roster. A ✅ added or removed moves the numerator here on the next run; a tool added moves every
+  // denominator at once.
+  const COLUMNS = ['Happy Path', 'Validation', 'Contract', 'Security'] as const
+
+  /** Every data row, split into its four verdict cells. */
+  const matrixCells = (): string[][] => {
+    const md = readFileSync(resolve(ROOT, 'tests/tool-coverage.md'), 'utf8')
+    return [...md.matchAll(/^\|\s*\d+\s*\|\s*`[a-z0-9_]+`\s*\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|/gm)]
+      .map((m) => [m[1], m[2], m[3], m[4]])
+  }
+
+  const tickedIn = (column: number): number =>
+    matrixCells().filter((cells) => cells[column].includes('✅')).length
+
+  const summaryFraction = (label: string): { n: number; d: number } => {
+    const md = readFileSync(resolve(ROOT, 'tests/tool-coverage.md'), 'utf8')
+    const m = new RegExp(`\\*\\*${label}\\*\\*:\\s*(\\d+)/(\\d+)`).exec(md)
+    if (!m) throw new Error(`the summary line "${label}" is gone or no longer states a fraction`)
+    return { n: Number(m[1]), d: Number(m[2]) }
+  }
+
+  it('the table has one verdict row per tool, so the columns can be counted at all', () => {
+    // The control for everything below: if this regex stops matching rows, every count becomes 0
+    // and the assertions would be comparing zeroes.
+    expect(matrixCells().length).toBe(runtime.length)
+  })
+
+  for (const [column, label] of [
+    [0, 'Happy path'],
+    [1, 'Input validation'],
+    [2, 'Contract \\(Zod\\)'],
+    [3, 'Security edge cases'],
+  ] as const) {
+    it(`the "${label.replace('\\(', '(').replace('\\)', ')')}" summary matches the ${COLUMNS[column]} column`, () => {
+      const { n, d } = summaryFraction(label)
+      expect(
+        d,
+        `the denominator is ${d} but the server registers ${runtime.length} tools. A coverage ` +
+          `fraction over a stale roster overstates coverage silently — the percentage moves the ` +
+          `right way while the population underneath it grows.`,
+      ).toBe(runtime.length)
+      expect(
+        n,
+        `the summary claims ${n} but the ${COLUMNS[column]} column has ${tickedIn(column)} ticks. ` +
+          `Update the summary from the table, not from memory.`,
+      ).toBe(tickedIn(column))
+    })
+  }
 })

@@ -133,3 +133,85 @@ describe('an id that is missing or empty never leaves the process (SHAT-2526)', 
     }
   }
 })
+
+/**
+ * /!\ THE SAME REFUSAL, ON AN ID THAT IS NOT A PATH SEGMENT — AND THAT IS WHY IT NEEDED ITS OWN
+ * TEST RATHER THAN A ROW IN THE TABLE ABOVE.
+ *
+ * `sandbox_create_user` (SHAT-2698) takes TWO ids and puts both in the BODY:
+ * `POST /v1/sandbox/users {user_id, agent_id, onboarded, currency}`. So none of the path-collapse
+ * reasoning applies — nothing becomes the literal "undefined" in a URL, and no route turns into a
+ * different route. It reaches the upstream as a perfectly well-formed request.
+ *
+ * /!\ WHICH MAKES THE CONSEQUENCE WORSE HERE, NOT BETTER, BECAUSE THIS ROUTE WRITES. The call
+ * provisions a user, a publisher link, a profile AND an active delegation in one shot. `agent_id`
+ * is what the delegation is FOR. A create that reaches the backend without it does not fail
+ * cleanly and leave nothing behind — it is the one shape that produces a user who exists, looks
+ * onboarded, and cannot buy: `request_purchase` finds them and answers `delegation_unavailable`,
+ * a sentence about delegations that reads like a server problem two tools and one hop away from
+ * the argument that was actually missing. The handler's own comment says exactly this; until now
+ * nothing held it to it.
+ *
+ * /!\ AND THE ORDER OF THE CHECKS IS LOAD-BEARING, SO EVERY CASE BELOW SUPPLIES A VALID user_id.
+ * The handler validates `user_id` first and returns on its failure, so calling with `{}` would be
+ * answered by the user_id branch and would prove nothing at all about agent_id — it would pass
+ * just as well if the agent_id check were deleted outright. This was measured with a throwaway
+ * probe during review and then thrown away with it; a defect a temporary test found is a defect
+ * nothing is watching.
+ */
+describe('sandbox_create_user refuses a missing agent_id before the write (SHAT-2698)', () => {
+  it('positive control: with BOTH ids the create does reach the upstream', async () => {
+    // Without this, "the upstream saw nothing" below is also what a tool that stopped existing,
+    // or a recorder that stopped recording, would produce.
+    const before = upstream.requests.length
+    await handlerFor('sandbox_create_user')({ user_id: 'usr_ctl_1', agent_id: 'agt_ctl_1' })
+
+    const sent = upstream.requests.slice(before)
+    expect(
+      sent.map((r) => `${r.method} ${r.path}`),
+      'a complete sandbox_create_user call recorded nothing upstream, so the absence assertions ' +
+        'below are green for free.',
+    ).toEqual(['POST /v1/sandbox/users'])
+    // And the id really does travel in the body — which is the premise of this whole block.
+    expect((sent[0].body as Record<string, unknown>).agent_id).toBe('agt_ctl_1')
+  })
+
+  for (const [label, agentArg] of [
+    ['absent', {}],
+    ['an empty string', { agent_id: '' }],
+    ['whitespace only', { agent_id: '   ' }],
+    ['not a string', { agent_id: 12345 }],
+  ] as const) {
+    it(`with agent_id ${label}: nothing is written, and the refusal names agent_id`, async () => {
+      const before = upstream.requests.length
+      const result = await handlerFor('sandbox_create_user')({
+        user_id: 'usr_probe_1',
+        ...(agentArg as Record<string, unknown>),
+      })
+
+      expect(
+        upstream.requests.slice(before).map((r) => `${r.method} ${r.path}`),
+        'a user was provisioned without the delegation that lets it buy. This is a WRITE: the row ' +
+          'survives the failed call, and the next thing the agent does (request_purchase) answers ' +
+          'delegation_unavailable — a server-shaped sentence for a missing argument. Validate ' +
+          'before the call: src/validate.ts requireId.',
+      ).toEqual([])
+
+      expect(result.isError, 'the refusal was not marked as an error').toBe(true)
+
+      const text = JSON.stringify(result.content)
+      expect(
+        text,
+        'the refusal does not name agent_id, so a caller who supplied user_id correctly cannot ' +
+          'tell which of the two ids it got wrong.',
+      ).toContain('agent_id')
+      // /!\ AND IT MUST NOT BE ANSWERED BY THE user_id BRANCH. If that check ever moved after this
+      // one, or this one were dropped, a valid user_id plus no agent_id would sail through — and a
+      // test asserting only "isError" would still be green.
+      expect(
+        text,
+        'the refusal blames user_id, which was supplied and is valid — the wrong branch answered.',
+      ).not.toContain('user_id')
+    })
+  }
+})

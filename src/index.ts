@@ -346,8 +346,9 @@ Budget: 2,000 EUR/month per employee. Block gambling, ATM, money transfer.`,
 // They told the model, in the imperative: "Create a shopping agent with a monthly budget of 1000
 // EUR. Block gambling, alcohol, and tobacco categories. Set per-transaction limit to 500 EUR."
 // NOTHING HERE CREATES AN AGENT, STORES A POLICY OR BLOCKS A CATEGORY. The union of every tool over
-// every mode is 20, and not one of them does any of it: generate_policy_template returns text and
-// makes no request at all.
+// every mode is 21, and not one of them does any of it: generate_policy_template returns text and
+// makes no request at all. (sandbox_create_user creates a sandbox USER and its delegation — it
+// still cannot create an AGENT, which is why it has to be GIVEN an agent_id.)
 //
 // The cost lands on the model, which is the worst place for it. Handed an instruction it cannot
 // carry out, it improvises — inventing an agent id, or reporting a limit it never set — and the

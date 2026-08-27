@@ -7,7 +7,7 @@
 # Terminal 1: Start MCP server
 export SHATALE_API_KEY=sk_sandbox_demo_key
 npx shatale-mcp-server
-# Output on stderr: Shatale MCP server started (demo(sandbox) mode, 15 tools)
+# Output on stderr: Shatale MCP server started (demo(sandbox) mode, 17 tools)
 ```
 
 ### Demo Flow (in Claude Desktop / Cursor)

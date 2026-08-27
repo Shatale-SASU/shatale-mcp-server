@@ -267,12 +267,25 @@ export const UNKNOWN_CAUSE = {
  *
  * Exported so the test pins THIS text rather than restating a paraphrase of it, the way
  * {@link UNKNOWN_CAUSE} is.
+ *
+ * ⚠️ AND THE LAST CLAUSE USED TO SEND THE OPERATOR SOMEWHERE THE DETAIL HAS NEVER BEEN. It read
+ * "the server-side log has the detail". For the usual reasons this branch fires — DNS failure,
+ * connection refused, timeout — NO SERVER WAS EVER REACHED, so no server logged anything. The only
+ * copy of that detail existed in this process, and the fix above (dropping `err` from the catch)
+ * destroyed it. An operator following the old sentence searches backend logs for an event that was
+ * never emitted, finds nothing, and concludes the deployment is healthy.
+ *
+ * So the detail is now WRITTEN, to stderr, and the sentence names that place instead. stderr is
+ * this package's established operator channel — src/index.ts refuses to start and explains why on
+ * it — and under stdio MCP the protocol owns stdout while stderr goes to the host's own log,
+ * never into the model's context. That is the whole point: the operator gets the exception, the
+ * agent still does not.
  */
 export const BUILT_IN_MCC_NOTE =
   'Served from this package\'s built-in ISO 18245 list, not from the API — the lookup failed. ' +
   'Codes are stable, but a code added server-side will not appear here, and the reason for the ' +
   'failure is not reported to the agent. If this matters, check that SHATALE_API_URL is reachable ' +
-  'and that /v1/mcc-codes is deployed there; the server-side log has the detail.'
+  'and that /v1/mcc-codes is deployed there; this server writes the reason to its own stderr.'
 
 /**
  * The refusal for a `query` this process cannot put on a URL at all.

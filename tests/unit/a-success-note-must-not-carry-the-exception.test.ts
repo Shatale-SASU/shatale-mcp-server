@@ -35,7 +35,9 @@
  * loudly, saying the canary is dead — instead of the suite quietly certifying nothing.
  */
 
-import { describe, test, expect, beforeAll } from 'vitest'
+import { describe, test, expect, beforeAll, vi, afterEach } from 'vitest'
+import { createServer } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import { ShataleClient } from '../../src/client.js'
 import { createCommonTools } from '../../src/tools/common.js'
 import { BUILT_IN_MCC_NOTE, MALFORMED_QUERY } from '../../src/errors.js'
@@ -138,6 +140,118 @@ describe('list_mcc_codes falls back to the built-in list', () => {
     const codes = body.codes as Array<{ code: number }>
     expect(Array.isArray(codes)).toBe(true)
     expect(codes.map((c) => c.code)).toContain(7995)
+  })
+})
+
+// ── The other half of the same fix: the detail must still exist SOMEWHERE ───────────────────────
+//
+// ⚠️ THE LEAK WAS CLOSED BY THROWING THE DETAIL AWAY, AND THE NOTE WENT ON PROMISING IT.
+//
+// Removing `err` from the catch stopped the exception reaching the agent — which was the point —
+// but the caught error was then bound to nothing and dropped. Meanwhile the note told the operator
+// "the server-side log has the detail". For the most common causes of this branch there IS no
+// server-side log: a DNS failure, a refused connection or a timeout never reached a server, so no
+// server wrote a line about it. The only place that detail ever existed was this process, and the
+// fix deleted it. An operator following that sentence goes looking through backend logs for an
+// event that was never emitted, and concludes the deployment is fine.
+//
+// stderr is the right channel and this package already uses it for exactly this class of operator
+// message (src/index.ts refuses to start and says why on stderr). Under stdio MCP the protocol owns
+// stdout; stderr goes to the host's own log and never enters the model's context — so the operator
+// can have the detail without the agent getting it. That separation is what BOTH assertions below
+// hold in place at once: present on stderr, absent from the result.
+describe('the caught detail reaches the operator, and only the operator', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('the note does not promise a log that does not exist for this failure', () => {
+    // A DNS failure, a refused connection and a timeout produce no server-side record anywhere.
+    // Pointing the reader at one is a wrong diagnosis dressed as a next step.
+    expect(
+      BUILT_IN_MCC_NOTE,
+      'the note still sends the operator to a "server-side log" — the usual causes of this branch ' +
+        '(DNS, connection refused, timeout) never reached a server, so nothing there logged them.',
+    ).not.toMatch(/server-side log/i)
+  })
+
+  test('the note points at a place the detail is actually written', () => {
+    expect(
+      BUILT_IN_MCC_NOTE.toLowerCase(),
+      'the note says the reason is not reported to the agent but never says where it IS reported. ' +
+        'The operator is left with no next step at all, which is the defect the old sentence was ' +
+        'trying to avoid.',
+    ).toMatch(/stderr|this server's log|the server's own log/)
+  })
+
+  test('the caught exception is written to stderr, where the operator can read it', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await handlerFor(URL_WITH_CREDENTIALS)({ query: 'gambling' })
+
+    expect(
+      spy.mock.calls.length,
+      'nothing was logged. The catch drops the error entirely, so the one and only copy of why ' +
+        '/v1/mcc-codes could not be reached is destroyed at the moment it is caught — and the ' +
+        'fallback then answers as a success, so nothing downstream reports a problem either.',
+    ).toBeGreaterThan(0)
+
+    const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+    expect(logged, 'the log line does not name the tool whose lookup failed').toMatch(/mcc/i)
+    expect(
+      logged,
+      'the log line does not carry the caught reason, so it says no more than the note already did',
+    ).toContain(CANARY)
+  })
+
+  // ⚠️ AND "A REASON WAS LOGGED" IS NOT THE SAME CLAIM AS "THE REASON WAS LOGGED".
+  //
+  // The note now promises the operator that this server writes the reason to stderr. Node's fetch
+  // does not put the reason in `err.message`: every network failure arrives as the same five
+  // characters, `fetch failed`, with the thing that actually happened — ECONNREFUSED, ENOTFOUND,
+  // a timeout — hidden one level down in `err.cause`. Measured against a dead loopback port before
+  // this was handled, the whole line read "Reason: fetch failed".
+  //
+  // That is the original defect wearing the fix's clothes: DNS, refused and timeout are the three
+  // causes the note names as the reason a server-side log would not have this, and they were
+  // exactly the three the log could not tell apart. So the cause chain is flattened, and this test
+  // is what stops it silently collapsing back to the generic message.
+  test('the logged reason names the underlying cause, not just "fetch failed"', async () => {
+    // ⚠️ NOT PORT 9, WHICH THE REST OF THIS FILE USES. Port 9 is on the fetch spec's BLOCKED-PORT
+    // list, so undici refuses it before opening a socket and the cause reads "bad port" — a real
+    // cause, but not the one operators actually meet. A port that is merely CLOSED gives the
+    // ordinary ECONNREFUSED. Bound and released so the number is known to be free rather than
+    // assumed, and it is on loopback either way: no packet leaves the machine.
+    const port = await new Promise<number>((res) => {
+      const srv = createServer()
+      srv.listen(0, '127.0.0.1', () => {
+        const p = (srv.address() as AddressInfo).port
+        srv.close(() => res(p))
+      })
+    })
+
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await handlerFor(`http://127.0.0.1:${port}`)({ query: 'gambling' })
+
+    const logged = spy.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+    expect(logged, 'nothing was logged for a connection failure').toMatch(/mcc/i)
+    expect(
+      logged,
+      `the log line stops at Node's generic wrapper and never reaches err.cause, so every DNS ` +
+        `failure, refused connection and timeout produces the same unusable sentence. Logged: ` +
+        `"${logged}"`,
+    ).toMatch(/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|connect /)
+  })
+
+  test('and that stderr line does not also travel to the agent', async () => {
+    // The two assertions are a pair on purpose. Satisfying the one above by putting the detail back
+    // into `_note` would reopen SHAT-2686 exactly as it was.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await handlerFor(URL_WITH_CREDENTIALS)({ query: 'gambling' })
+    expect(spy.mock.calls.length).toBeGreaterThan(0)
+    expect(
+      wholeResult(result),
+      'the detail was routed to stderr AND left in the tool result — the leak is unchanged',
+    ).not.toContain(CANARY)
   })
 })
 
