@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-08-26 (SHAT-2527)
+Last updated: 2026-08-27 (SHAT-2698)
 
 > ⚠️ **THIS IS A HAND-MAINTAINED SNAPSHOT, AND IT HAD DRIFTED BY THREE TOOLS.** The matrix listed
 > 17 rows and reported "Happy path 17/17 (100%)" while the code defined **20** tools. The three it
@@ -8,13 +8,16 @@ Last updated: 2026-08-26 (SHAT-2527)
 > `get_credential_emails` — so the denominator moved and the percentage stayed at 100%, which is
 > the one number a coverage document exists to make honest.
 >
-> No mode registers 17 tools, either: the live roster is 7 (guest), 15 (sandbox, 18 with both
-> feature flags), 7 (live onboarding-only) or 14 (live + money-GO). "17" was never a count of
-> anything the server does.
+> At the time, no mode registered 17 tools either: the roster was 7 (guest), 15 (sandbox, 18 with
+> both feature flags), 7 (live onboarding-only) or 14 (live + money-GO). "17" was not a count of
+> anything the server did. (Those figures are the 2026-08-26 measurement and are kept as the record
+> of that defect — today's are below, and sandbox has since reached 17 by a different route.)
 >
-> **A hand-written list silently excludes everything added after it.** Treat the percentages below
-> as illustration, not as a measurement; the roster of record is `grep -h "name: '" src/tools/*.ts`,
-> and tests/tool-coverage.test.ts now fails if this table and that roster disagree.
+> **A hand-written list silently excludes everything added after it.** The roster of record is the
+> BUILT SERVER asked over MCP, one process per mode and unioned
+> (`tests/harness/toolRoster.ts` → `scripts/lib/serverRoster.mjs`); a text scan of `src/tools/*.ts`
+> is kept only as a second, independent opinion. `tests/unit/tool-coverage-matches-the-roster.test.ts`
+> fails if this table and that roster disagree.
 >
 > 🔴 **AND THE CORRECTION WAS MADE THE SAME WAY AS THE DEFECT (2026-08-27).** The three missing rows
 > were added and marked "not covered here" — by hand, without looking. All three are covered, by
@@ -46,7 +49,7 @@ Last updated: 2026-08-26 (SHAT-2527)
 | 13 | `register_user_profile` | ✅ | ✅ | - | - | happy-path, validation |
 | 14 | `get_onboarding_status` | ✅ | - | - | - | happy-path |
 | 15 | `sandbox_simulate_authorization` | ✅ | ✅ | ✅ | - | mock-contract, sandbox-tools, validation, happy-path |
-| 16 | `sandbox_create_user` | ✅ | - | ✅ | - | mock-contract, wire-fixtures |
+| 16 | `sandbox_create_user` | ✅ | ✅ | ✅ | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 17 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
 | 18 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
 | 19 | `get_checkout_cardholder` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
@@ -59,20 +62,34 @@ Last updated: 2026-08-26 (SHAT-2527)
 
 - **Tools defined in code**: 21
 - **Happy path**: 21/21
-- **Input validation**: 3/21 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Input validation**: 5/21 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
-  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 24 cases), which this table predates.
-- **Contract (Zod)**: 6/20
-- **Security edge cases**: 1/20 + global injection/leak tests + `request_purchase` sandbox-guard
+  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 28 refusal cases plus 2 positive
+  controls), which this table predates.
+- **Contract (Zod)**: 11/21
+- **Security edge cases**: 4/21 + global injection/leak tests + `request_purchase` sandbox-guard
+
+> These four fractions are no longer hand-maintained claims: `tool-coverage-matches-the-roster.test.ts`
+> counts the ✅ in each column and the live roster, and fails if either half of a fraction drifts.
+> Before it existed, "Contract (Zod)" read `6/20` against a column holding 11 ticks over 21 tools —
+> wrong in the numerator AND the denominator, under a row-count gate that was green the whole time.
 
 ## Test Files
 
+Counts below are the `tests/e2e` files as MEASURED by a run (`vitest run tests/e2e`), not as
+remembered. Three of them had drifted: `guest-mode` was recorded as 9 against 16, `security` as 16
+against 18, and `mock-contract` as 8 against 14 — and the three files at the bottom had no row at
+all. Unit tests under `tests/unit` are not listed here.
+
 | File | Tests | Requires Key |
 |------|:-----:|:---:|
-| `guest-mode.test.ts` | 9 | No |
-| `security.test.ts` | 16 | No |
+| `guest-mode.test.ts` | 16 | No |
+| `security.test.ts` | 18 | No |
 | `contract.test.ts` | 7 | Partial |
-| `mock-contract.test.ts` | 8 | No (mock upstream) |
+| `mock-contract.test.ts` | 14 | No (mock upstream) |
 | `sandbox-tools.test.ts` | 6 | Yes |
 | `validation.test.ts` | 9 | Yes |
 | `happy-path-all-tools.test.ts` | 12 | Partial |
+| `stdio-hardening.test.ts` | 5 | No |
+| `where-a-live-key-may-be-sent.test.ts` | 8 | No |
+| `wire-fixtures.test.ts` | 4 | No (mock upstream) |

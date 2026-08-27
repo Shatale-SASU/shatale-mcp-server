@@ -8,6 +8,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-08-27
+
+### Added
+
+- `sandbox_create_user` — a publisher can now create one of ITS OWN sandbox users, with the
+  delegation that lets it buy, in a single call (`POST /v1/sandbox/users`, idempotent on all of
+  it). This closes the one gap that made the sandbox flow undemonstrable end to end:
+  `request_purchase` needs a `publisher_user_id` with an ACTIVE delegation, and nothing in the tool
+  surface produced one — the demo could simulate an authorization but could not reach a purchase.
+  Sandbox mode goes 16 → 17 tools; the union over all modes goes 20 → 21.
+  `agent_id` is REQUIRED, and required HERE rather than upstream. It is not a formality: a sandbox
+  user linked WITHOUT a delegation is found by the purchase and refused with
+  `delegation_unavailable` — a sentence about delegations, two tools and one hop away from the
+  argument that was actually missing. The agent itself is created by a PERSON in the publisher
+  console; no API key issues one, deliberately, so the tool asks to be GIVEN the id and says so
+  rather than letting a model invent one. (SHAT-2698)
+
+### Changed
+
+- The MCP PROMPTS no longer sell a product this server does not have. They told the model, in the
+  imperative, to "Create a shopping agent with a monthly budget of 1000 EUR. Block gambling,
+  alcohol, and tobacco categories." Nothing here creates an agent, stores a policy or blocks a
+  category. The cost of that lands on the model, which is the worst place for it: handed an
+  instruction it cannot carry out, it improvises — inventing an agent id, or reporting a limit it
+  never set — and the person watching sees a setup that does not exist. The same wording had
+  already been removed from `smithery.yaml` and the README; the surface an MCP client actually
+  reads kept it, and the `shatale://guides/quickstart` resource carried it too.
+  Prompts are now mode-filtered the way tools have always been — a guest with seven tools was
+  being offered a prompt whose instructions need the sandbox simulator — and `agent_id` on that
+  prompt became required rather than optional, since optional was an invitation to make one up.
+  (SHAT-2604. This shipped as PR #32, which was merged into a branch that had itself just been
+  merged and closed: "merged" was a true statement about the action and a false one about the
+  result, nothing caught it, and 1.0.2 therefore still shipped the prompts it had fixed.)
+
 ### Fixed
 
 - A note attached to a SUCCESS no longer carries the caught exception's own text. When
@@ -26,6 +60,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   cannot be put on a URL is now refused by name, and anything else goes through `errorResult` like
   every other tool. The refusal deliberately does not point at `SHATALE_API_URL`: our own encode
   call threw before a byte was sent, so nothing about the deployment is implicated.
+- ...and the detail it stopped sending to the agent now goes to the OPERATOR instead of nowhere.
+  Dropping `err` from the catch closed the leak and destroyed the only copy of the reason in the
+  same stroke, while the note went on saying "the server-side log has the detail". For the usual
+  causes of that branch — DNS failure, connection refused, timeout — NO SERVER WAS REACHED, so no
+  server-side log exists to have it; and because the fallback answers as a success, nothing
+  downstream reports a problem either. A deployment where `/v1/mcc-codes` is simply absent looked
+  healthy from every direction at once. The reason is now written to stderr, which under stdio MCP
+  goes to the host's own log and never into the model's context — the same channel `src/index.ts`
+  already uses to refuse a start and say why — and the note names that place instead of promising
+  one that does not exist. Both halves are pinned: present on stderr, absent from the result.
+  The line carries the CAUSE CHAIN, not just the message, because the first version of this fix
+  reproduced the defect it was fixing: Node's fetch reports every network failure as the same two
+  words, `fetch failed`, and hides the real event in `err.cause`. Measured end to end against a
+  dead loopback port, the promised "reason" was literally `Reason: fetch failed` — identical for
+  DNS, refusal and timeout, which are the exact three cases the note cites. It now reads
+  `fetch failed ← connect ECONNREFUSED 127.0.0.1:62436`, and a test pins that it cannot collapse
+  back to the generic wrapper.
+- A permanent test that `sandbox_create_user` refuses a missing, empty, whitespace-only or
+  non-string `agent_id` BEFORE the write. The behaviour shipped correct in this release; nothing
+  was watching it. The route creates a user, a link, a profile and a delegation in one POST, so a
+  create that reaches the backend without an agent leaves a user who exists, looks onboarded and
+  cannot buy — the assertion is therefore "the upstream saw nothing", not "the tool returned an
+  error". Every case supplies a VALID `user_id`, because the handler checks that first and a call
+  with `{}` would be answered by the user_id branch and prove nothing about agent_id.
+- The coverage summary in `tests/tool-coverage.md` is now derived and enforced rather than asserted
+  by hand. Three of the four fractions were wrong, not two: `Contract (Zod): 6/20` and
+  `Security edge cases: 1/20` against a table holding 11 and 4 ticks over 21 tools — wrong in the
+  NUMERATOR and the denominator both — and `Input validation: 3/21`, whose denominator was right and
+  whose numerator was one short of the column's 4. All three sat three lines under a
+  `Tools defined in code: 21` that was correct, and green the whole time because the only gate on
+  the file counted rows. `tool-coverage-matches-the-roster.test.ts` now counts each column and
+  compares both halves of every fraction against the live roster. This is the document's own
+  original defect recurring: it exists because it once reported "17/17 (100%)" against 20 tools.
+- Counts that outran the code, swept rather than fixed one at a time. `mock-contract.test.ts`
+  carried a comment reading "16" directly above `toHaveLength(17)`; `src/index.ts` said the union
+  over every mode "is 20" when it is 21; `demo/demo-script.md` printed a startup banner claiming 15
+  tools; and two roster floors sat at `>= 20` against a real 21 — one under the population, which is
+  precisely the drift the comment attached to one of them condemns. The per-file test counts in
+  `tool-coverage.md` were three rows wrong in the same way (`guest-mode` recorded as 9 against 16,
+  `security` 16 against 18, `mock-contract` 8 against 14) with three e2e files missing entirely;
+  they are now the output of a run rather than a recollection.
+- Two key-gated roster assertions that had been stale for two releases and could not fail in CI.
+  `contract.test.ts` and `sandbox-tools.test.ts` both asserted 15 tools in sandbox mode, and
+  `sandbox-tools.test.ts` additionally asserted `not.toContain('get_credential_emails')` — the exact
+  opposite of the truth since SHAT-2527. Both files are `describe.skip` without `SHATALE_TEST_KEY`,
+  and a skip and a pass are the same line in the summary, so the keyless CI that gates PRs was green
+  across both moves (15 → 16 when a suppression expired, 16 → 17 when a tool was added). This is the
+  skipped-but-green trap of SHAT-2611/2685, in files whose own comments warn about it. Measured, not
+  reasoned: the roster is fixed by the key's PREFIX and the env flags before any request is made, so
+  a sandbox-shaped key with no network reproduces the failure — `expected [ …(17) ] to have a length
+  of 15`.
+- `demo/demo-script.md` still opened with the sentence SHAT-2604 was opened to remove — "Create a
+  shopping agent with a €1000 monthly budget. Block gambling and alcohol." — and it was the last
+  live copy in the repository. The entry above records that wording being taken out of the prompts,
+  the README and `smithery.yaml`; the demo script was not on that list, so the one surface a
+  newcomer is most likely to paste verbatim kept it. Its "expected MCP calls" were wrong in the
+  same direction: `register_user_profile` is not among the 17 tools the banner three lines above
+  advertises (it needs `SHATALE_ONBOARDING_ENABLED=true`, which makes the roster 19), and the step
+  promised to show "Agent ID, Card ID, Policy config" — none of which any tool produces. The flow
+  now starts where the tools actually start, at `sandbox_create_user`, and the `explain_shatale`
+  step no longer claims to return a per-rule breakdown of an earlier decline: that comes back in
+  `sandbox_simulate_authorization`'s own response.
+- The `exercise-the-policy-engine` prompt was grammatically broken by its own fix. The clause about
+  who creates an agent had been spliced into the middle of the instruction, stranding "one call
+  each": "...nothing here can create one for them, one call each, and read the rule explanation...".
+  The fact was right and the sentence was rubble — and this is a PROMPT, read verbatim by a model as
+  an instruction, so it is not a cosmetic defect. The clause now sits at the end.
+- `package-lock.json` rejoins `package.json`, and a test now keeps them together. It was left at
+  1.0.1 by the 1.0.2 release, which touched only the changelog and the manifest; nothing in the
+  suite or in CI compared the two, so the drift was invisible until an `npm ci` or a publish read
+  it. Both copies of the version in the lockfile are asserted, because the second is eight lines
+  down and looks like a dependency, which is the one a hand-edit misses.
+- The per-file test counts in `tool-coverage.md` are gated too, against the files on disk. They were
+  the last number in that document with no watcher, and they had drifted furthest — which is what a
+  hand-maintained table does under a banner warning that hand-maintained tables drift.
 
 ## [1.0.2] — 2026-08-27
 

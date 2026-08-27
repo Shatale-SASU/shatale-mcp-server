@@ -16,18 +16,32 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists the 15 backed tools in sandbox mode (three withheld until their backends ship)', async () => {
+  test('lists the 17 backed tools in sandbox mode (the onboarding pair stays withheld)', async () => {
     const tools = await client.listTools()
-    // 15, not 18. Three tools are withheld because their flow cannot complete on any
-    // deployed backend — get_credential_emails (backend in PR #361, not deployed) and the
-    // register→status onboarding pair (the session id is never persisted, SHAT-1662).
+    // 17. Two tools are withheld because their flow cannot complete on any deployed backend:
+    // the register→status onboarding pair (the session id is never persisted, SHAT-1662).
     // Kept in lockstep with mock-contract.test.ts.
     //
     // This file is key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count
     // here stays green-by-skip and only breaks the first KEYED run — exactly the
-    // skipped-but-green trap (#276). It did: the count stayed at 17 when the tools were
-    // unadvertised, and the keyless CI that gates PRs never ran this file.
-    expect(tools).toHaveLength(15)
+    // skipped-but-green trap (#276). It did, back when the roster SHRANK: this assertion sat at
+    // the pre-SHAT-1488 figure while the tools were being unadvertised, and the keyless CI that
+    // gates PRs never ran this file. (That stale figure was also 17, which is a coincidence and
+    // not today's 17 — the roster has since come back up to the same number from the other
+    // direction. Two different 17s, and the reason to spell that out is that a bare number in a
+    // comment is exactly what nobody re-checks.)
+    //
+    // ⚠️ AND IT DID IT AGAIN, TWICE OVER, WHICH IS WHY THE WARNING ABOVE IS NOT ENOUGH ON ITS OWN.
+    // This assertion sat at 15 across two changes that each moved the roster — get_credential_emails
+    // ceasing to be withheld (15 → 16, SHAT-2527) and sandbox_create_user being added (16 → 17,
+    // SHAT-2698) — while `not.toContain('get_credential_emails')` below had become the exact
+    // opposite of the truth. Neither showed up: keyless CI skips the file, and a skip and a pass are
+    // the same line in the summary.
+    //
+    // The count is reachable WITHOUT a live key, because the roster is decided by the key's PREFIX
+    // and the env flags before any request is made (src/tools/common.ts isSandboxKey). Measured with
+    // SHATALE_TEST_KEY=sk_sandbox_<anything>: 17, and this assertion failed at 15.
+    expect(tools).toHaveLength(17)
 
     // Guest tools
     expect(tools).toContain('explain_shatale')
@@ -47,11 +61,12 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('get_purchase_status')
     expect(tools).toContain('cancel_purchase')
 
-    // Credential tools (get_credential_emails returns behind
-    // SHATALE_CREDENTIAL_EMAILS_ENABLED=true once #361 is deployed)
+    // Credential tools. get_credential_emails is ADVERTISED now: its suppression named a condition
+    // — "#361 merged AND deployed" — and both halves have been met, so the flag it hid behind is
+    // gone (SHAT-2527). This line asserted `not.toContain` for a release after that became false.
     expect(tools).toContain('request_temporary_credentials')
     expect(tools).toContain('get_credential_status')
-    expect(tools).not.toContain('get_credential_emails')
+    expect(tools).toContain('get_credential_emails')
 
     // Onboarding tools stay hidden: RegisterUserProfile never persists the session id it
     // returns, so the second step 404s forever (SHAT-1662). Behind SHATALE_ONBOARDING_ENABLED.
@@ -60,6 +75,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
     // Sandbox tools (SHAT-1488: deployed routes only)
     expect(tools).toContain('sandbox_simulate_authorization')
+    expect(tools).toContain('sandbox_create_user')
     expect(tools).toContain('sandbox_complete_onboarding')
     expect(tools).toContain('sandbox_approve_purchase')
 

@@ -346,8 +346,9 @@ Budget: 2,000 EUR/month per employee. Block gambling, ATM, money transfer.`,
 // They told the model, in the imperative: "Create a shopping agent with a monthly budget of 1000
 // EUR. Block gambling, alcohol, and tobacco categories. Set per-transaction limit to 500 EUR."
 // NOTHING HERE CREATES AN AGENT, STORES A POLICY OR BLOCKS A CATEGORY. The union of every tool over
-// every mode is 20, and not one of them does any of it: generate_policy_template returns text and
-// makes no request at all.
+// every mode is 21, and not one of them does any of it: generate_policy_template returns text and
+// makes no request at all. (sandbox_create_user creates a sandbox USER and its delegation — it
+// still cannot create an AGENT, which is why it has to be GIVEN an agent_id.)
 //
 // The cost lands on the model, which is the worst place for it. Handed an instruction it cannot
 // carry out, it improvises — inventing an agent id, or reporting a limit it never set — and the
@@ -406,7 +407,12 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
     case 'exercise-the-policy-engine':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine. If you do not have an agent id, ask the person for one — they create agents by hand in the publisher console, and nothing here can create one for them, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money.` },
+        // ⚠️ THE HUMAN-STEP CLAUSE WAS SPLICED INTO THE MIDDLE OF THE INSTRUCTION AND STRANDED
+        // "one call each" mid-sentence: "...nothing here can create one for them, one call each,
+        // and read the rule explanation...". The fact was right and the sentence was rubble, and
+        // this is a PROMPT — the model reads it verbatim as an instruction, so a garbled clause is
+        // not a cosmetic defect. The clause now sits at the end, where it qualifies the whole thing.
+        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money. If you do not have an agent id, ask the person for one — they create agents by hand in the publisher console, and nothing here can create one for them.` },
       }]
     default:
       return []

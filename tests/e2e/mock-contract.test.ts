@@ -40,7 +40,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
 
   test('sandbox key unlocks the 17 backed tools; the two unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
-    // 16, and every one missing is missing on purpose — a tool we advertise is a
+    // 17, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
@@ -54,6 +54,15 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // registered with no flag beside it, and the live API answers 401 from the auth middleware
     // where an unserved path answers a plain 404 (SHAT-2527). The count moved 15 → 16 because a
     // reason expired, not because the rule changed.
+    //
+    // 16 → 17 is `sandbox_create_user` (SHAT-2698), which is the opposite kind of move: a tool
+    // ADDED against a route the backend already serves. The two withheld ones above are unchanged.
+    //
+    // ⚠️ AND THIS COMMENT SAID "16" FOR A RELEASE WHILE THE ASSERTION THREE LINES DOWN SAID 17.
+    // Whoever bumped the number bumped the title and the expectation and not the prose between
+    // them, which is the same shape as every defect this file's neighbours were written for: the
+    // count is measured, the explanation of the count is not, and a reader checking WHY the number
+    // is what it is gets last release's answer. Bump all three or none.
     expect(res.result?.tools ?? []).toHaveLength(17)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).toContain('get_credential_emails')

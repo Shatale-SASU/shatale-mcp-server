@@ -52,4 +52,36 @@ describe('the security policy supports the version we actually publish', () => {
       expect(cut).toBeLessThanOrEqual(published)
     }
   })
+
+  // ⚠️ AND THE OTHER COPY OF THE VERSION IS THE ONE THAT ACTUALLY GOT FORGOTTEN.
+  //
+  // SECURITY.md is keyed on major.minor, so a PATCH release cannot break it — it has a guard and
+  // needed none. `package-lock.json` carries the version twice, verbatim, and had no guard at all:
+  // the 1.0.2 release touched CHANGELOG.md and package.json only, and left the lockfile saying
+  // 1.0.1. Measured on the release commit (`git diff --stat 7ada37c^ 7ada37c`), and nothing in the
+  // suite or in CI compared the two, so it survived a full release cycle unnoticed.
+  //
+  // It is not cosmetic: the lockfile is what `npm ci` installs from and what a publish reads, and
+  // it is the file a reader consults to answer "what version is this tree". Two files disagreeing
+  // about the version of the same package is the plainest possible instance of this repo's
+  // recurring defect, and it is the cheapest possible one to prevent.
+  it('package-lock.json states the same version as package.json', () => {
+    const lock = JSON.parse(readFileSync(resolve(ROOT, 'package-lock.json'), 'utf8')) as {
+      name: string
+      version: string
+      packages: Record<string, { name?: string; version?: string }>
+    }
+    // The version appears twice: once at the root, once in the `""` entry describing this package.
+    // Both are asserted, because npm writes both and a hand-edit tends to fix the one you can see.
+    expect(lock.version, 'package-lock.json root version disagrees with package.json').toBe(pkg.version)
+    expect(
+      lock.packages[''].version,
+      'package-lock.json packages[""].version disagrees with package.json — this is the copy a ' +
+        'hand-edit misses, because it is eight lines further down and looks like a dependency.',
+    ).toBe(pkg.version)
+    // Control: prove we read the right package's entry rather than some dependency that happens to
+    // share a version number.
+    expect(lock.name).toBe('shatale-mcp-server')
+    expect(lock.packages[''].name).toBe('shatale-mcp-server')
+  })
 })

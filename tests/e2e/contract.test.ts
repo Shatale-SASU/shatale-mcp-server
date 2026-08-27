@@ -119,14 +119,20 @@ describeIfKey('Contract: Sandbox mode response schemas', () => {
 
   afterAll(() => client.close())
 
-  // 15, not 18: get_credential_emails and the register→status onboarding pair are
-  // withheld until their backends ship (see mock-contract.test.ts). This count is
-  // key-gated, so it only breaks on a KEYED run — it stayed at 18 after the tools were
-  // unadvertised because the CI that gates PRs runs keyless.
-  test('all 15 tool definitions are valid', async () => {
+  // 17: only the register→status onboarding pair is withheld, until its backend persists the
+  // session id (see mock-contract.test.ts). This count is key-gated, so it only breaks on a KEYED
+  // run — it stayed at 18 after the tools were unadvertised because the CI that gates PRs runs
+  // keyless.
+  //
+  // ⚠️ AND IT THEN SAT AT 15 THROUGH TWO MORE ROSTER MOVES, for the same reason and unnoticed:
+  // get_credential_emails ceasing to be withheld (SHAT-2527) and sandbox_create_user arriving
+  // (SHAT-2698). A comment warning about the skipped-but-green trap does not escape it. Measured
+  // with a sandbox-PREFIXED key and no network — the roster is fixed before any request — this
+  // read 17 while asserting 15.
+  test('all 17 tool definitions are valid', async () => {
     const res = await client.send('tools/list')
     const tools = res.result?.tools ?? []
-    expect(tools).toHaveLength(15)
+    expect(tools).toHaveLength(17)
     for (const tool of tools) {
       const parsed = ToolDef.safeParse(tool)
       if (!parsed.success) {

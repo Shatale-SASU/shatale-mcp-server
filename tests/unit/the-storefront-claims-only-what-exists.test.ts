@@ -101,7 +101,9 @@ describe('the storefront claims only what the server can do', async () => {
   // back empty, would make every assertion below pass over nothing.
   it('both sides were read', () => {
     expect(units.length).toBeGreaterThanOrEqual(5)
-    expect(roster.length).toBeGreaterThanOrEqual(20)
+    // 21 as of SHAT-2698 — a control below the population catches a reader that has died and
+    // misses one that has gone half-blind, which is the failure this control exists for.
+    expect(roster.length).toBeGreaterThanOrEqual(21)
     expect(units.join(' ')).toContain('Shatale' in {} ? '' : 'AI agents')
   })
 
