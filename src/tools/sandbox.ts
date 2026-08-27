@@ -230,12 +230,18 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     const purchaseId = chosen.value
     try {
       const result = await client.sandboxApprovePurchase(purchaseId)
-      // This returns a top-level `card` with number and cvv. It is the static 4242
-      // test card, so nothing sensitive leaks today — but "harmless because of what
-      // the backend happens to emit" is a property of the other side of the wire,
-      // and it is not ours to rely on. The invariant is that no tool result carries
-      // a number+cvv pair, without exceptions that have to be re-checked whenever
-      // the backend changes.
+      // This returns a top-level `card` with number and cvv, and it reaches the caller INTACT —
+      // this path is on the disclosure allowlist in src/redact.ts, deliberately.
+      //
+      // The comment here used to state the opposite invariant: "no tool result carries a
+      // number+cvv pair, without exceptions". It sat directly above the one call the allowlist
+      // exempts, and it stayed after the allowlist was introduced. A stale invariant is worse than
+      // none: the next reader trusts it and stops checking.
+      //
+      // What is true: the card returned here is OURS, minted for this purchase, and the agent is
+      // given it because it has to pay with it. The person's own card is never returned on any
+      // path. Which of the two you get is decided by the endpoint, not by the response body — see
+      // SECURITY.md, which carries the same decision in the same words.
       return jsonResult(result)
     } catch (err) {
       return errorResult(err, 'sandbox_approve_failed')
