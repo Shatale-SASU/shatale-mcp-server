@@ -200,8 +200,11 @@ describe('the prompts instruct the model in things the tools can do', () => {
     expect(PROMPTS_DECLARED.filter((d) => !promptNames.includes(d.name)).map((d) => d.name)).toEqual([])
   })
 
-  it('every tool a prompt rests on is one the server registers', () => {
-    const roster = rosterFromRuntime()
+  // await, because rosterFromRuntime became async after this test was written (it now measures the
+  // booted server per mode). Without it, `roster` is a Promise and `.includes` throws — which is how
+  // this test announced that the code around it had moved while it sat in a dead branch.
+  it('every tool a prompt rests on is one the server registers', async () => {
+    const roster = await rosterFromRuntime()
     const missing = PROMPTS_DECLARED.flatMap((d) => d.tools.filter((t) => !roster.includes(t)).map((t) => `${t} (in prompt: ${d.name})`))
     expect(missing).toEqual([])
   })
@@ -215,6 +218,28 @@ describe('the prompts instruct the model in things the tools can do', () => {
     expect(code).not.toMatch(/Create a (shopping|travel) agent/i)
     expect(code).not.toMatch(/Set per-transaction limit/i)
     expect(code).not.toMatch(/Block gambling, alcohol/i)
+  })
+
+  // ⚠️ ADDED ON RESTORATION, AND IT COULD NOT HAVE BEEN IN THE ORIGINAL. This work merged into a
+  // dead branch yesterday and was rebuilt today, and in between the owner settled what had been an
+  // open question: creating an agent is a HUMAN step, done by hand in the publisher console. So it
+  // is no longer enough for the prompts to stop ordering the model to create one — silence would
+  // leave the model to guess where an agent comes from, and a guessing model invents an id.
+  //
+  // Wherever the surface mentions an agent it must say WHOSE step it is. Checked over the prompt
+  // texts and the quickstart resource together, because a reader meets whichever comes first.
+  it('where an agent is mentioned, the surface says a person creates it', () => {
+    const surface = src.slice(src.indexOf('const prompts = ['), src.indexOf('// Create server'))
+    const code = surface.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+
+    const mentionsAgent = code.match(/does not create an agent|agent id|agent \$\{args\.agent_id\}/gi) ?? []
+    expect(mentionsAgent.length, 'the prompts stopped mentioning agents at all — this check now asserts nothing').toBeGreaterThan(0)
+    expect(code).toMatch(/publisher console/)
+
+    // And the quickstart, which is the first thing a new reader opens.
+    const quickstart = src.slice(src.indexOf('### 4.'), src.indexOf('## Key Concepts'))
+    expect(quickstart, 'the quickstart must name the human step, not hide it').toMatch(/YOUR step|by hand/)
+    expect(quickstart).not.toMatch(/Create a shopping agent/i)
   })
 
   // The mode filter is the difference between "not offered" and "offered and unusable".

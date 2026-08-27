@@ -282,11 +282,14 @@ export SHATALE_API_KEY=sk_sandbox_your_key_here
 npx shatale-mcp-server
 \`\`\`
 
-### 4. Try It
-Ask your AI assistant:
-- "Create a shopping agent with a 1000 EUR monthly budget"
-- "Simulate a 150 EUR purchase at Nike Store"
-- "Block gambling and alcohol categories"
+### 4. Who does what
+Creating the agent is YOUR step, not the assistant's: you create it yourself in the publisher
+console, by hand. That is deliberate — no API key issues an agent, and no tool here can.
+
+Once you have an agent id, ask your AI assistant:
+- "Draft a spending policy with a 1000 EUR monthly budget and gambling blocked"
+- "Simulate a 150 EUR purchase at Nike Store and read the verdict"
+- "Run a few authorizations for agent <your agent id> through the policy engine"
 
 ## Key Concepts
 - **Agent**: AI entity that can make payments
@@ -388,12 +391,12 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
     case 'shopping-policy':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Draft a spending policy for shopping with a monthly budget of ${args.budget ?? '1000'} EUR, a 500 EUR per-transaction limit, and gambling, alcohol and tobacco blocked. Use generate_policy_template, which also validates it and names the risks. Then run simulate_purchase_flow for sneakers at 150 EUR from Nike Store and read the verdict. Note what this does and does not do: it produces a policy DOCUMENT and a simulated decision. It does not create an agent or store a policy anywhere — no tool here can.` },
+        content: { type: 'text' as const, text: `Draft a spending policy for shopping with a monthly budget of ${args.budget ?? '1000'} EUR, a 500 EUR per-transaction limit, and gambling, alcohol and tobacco blocked. Use generate_policy_template, which also validates it and names the risks. Then run simulate_purchase_flow for sneakers at 150 EUR from Nike Store and read the verdict. Note what this does and does not do: it produces a policy DOCUMENT and a simulated decision. It does not create an agent or store a policy anywhere — no tool here can, and creating the agent is the person's own step in the publisher console.` },
       }]
     case 'travel-policy':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Draft a spending policy for travel with a budget of ${args.budget ?? '5000'} EUR and a 2000 EUR per-transaction limit, allowing airlines (MCC 4511), hotels (MCC 7011), car rental (MCC 7512) and travel agencies (MCC 4722). Use generate_policy_template. Then run simulate_purchase_flow for a 350 EUR British Airways booking and read the verdict. This produces a policy document and a simulated decision; it does not create an agent or store a policy.` },
+        content: { type: 'text' as const, text: `Draft a spending policy for travel with a budget of ${args.budget ?? '5000'} EUR and a 2000 EUR per-transaction limit, allowing airlines (MCC 4511), hotels (MCC 7011), car rental (MCC 7512) and travel agencies (MCC 4722). Use generate_policy_template. Then run simulate_purchase_flow for a 350 EUR British Airways booking and read the verdict. This produces a policy document and a simulated decision; it does not create an agent or store a policy — the agent is created by the person, by hand, in the publisher console.` },
       }]
     case 'policy-designer':
       return [{
@@ -403,7 +406,7 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
     case 'exercise-the-policy-engine':
       return [{
         role: 'user' as const,
-        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money.` },
+        content: { type: 'text' as const, text: `Use sandbox_simulate_authorization for agent ${args.agent_id} to run these through the real policy engine. If you do not have an agent id, ask the person for one — they create agents by hand in the publisher console, and nothing here can create one for them, one call each, and read the rule explanation the server returns: 1) 100 EUR retail 2) 2000 EUR electronics 3) 50 EUR at a gambling merchant 4) 30 EUR at a restaurant 5) 500 EUR airline. Each call needs an amount, a currency, a merchant and a test card — 4242… forces approve, 4000…0002 forces decline, a neutral card lets the policy decide. These are side-effect-free: no purchase, no ledger, no money.` },
       }]
     default:
       return []
