@@ -46,6 +46,25 @@ export function describeErrorChain(err: unknown, maxDepth = 5): string {
  * "intent-first / stable key" lesson). Callers who genuinely want to repeat an
  * identical purchase must pass an explicit `idempotency_key` to differentiate.
  */
+/**
+ * A stable idempotency key for an operation identified by its target, not by its payload.
+ *
+ * ⚠️ DETERMINISTIC, NOT RANDOM, FOR THE SAME REASON AS deriveIdempotencyKey ABOVE. A per-call
+ * `randomUUID()` gives every retry a fresh key, so a transport retry or an LLM repeating itself
+ * becomes a SECOND real effect — the exact defect SHAT-1682 fixed for purchases. Keyed on the
+ * operation and its target, a retry of "approve purchase X" is the same intent and de-dups, while
+ * "approve purchase Y" is a different key.
+ *
+ * ⚠️ AND THAT IS THE RIGHT CHOICE ONLY BECAUSE THESE OPERATIONS ARE ADDRESSED, NOT CREATED. Each
+ * names a row that already exists (a purchase, a user), so repeating the call can only ever mean
+ * "do that same thing again". request_purchase is different — it CREATES — which is why it hashes
+ * the whole purchase and lets a caller pass an explicit key to repeat one deliberately.
+ */
+export function deriveOperationKey(operation: string, ...targets: string[]): string {
+  const canonical = JSON.stringify([operation, ...targets])
+  return 'mcp-' + createHash('sha256').update(canonical).digest('hex').slice(0, 32)
+}
+
 export function deriveIdempotencyKey(input: PurchaseInput, amountCents: number): string {
   // JSON.stringify (not a space-join): fields can contain spaces, so a delimiter
   // join lets two DIFFERENT purchases canonicalize to the same string and collide
@@ -274,7 +293,15 @@ export class ShataleClient {
   }
 
   async cancelPurchase(id: string, reason?: string): Promise<unknown> {
-    return this.request('DELETE', `/v1/purchases/${encodeURIComponent(id)}`, { reason }, 'caller-id')
+    // SHAT-2633: a cancel is a state change on the money path. Without a key a retry is
+    // indistinguishable from a second intent — the sentence that ticket uses to explain why this
+    // one mattered, and the reason "all" was in SHAT-1104's title.
+    return this.request(
+      'DELETE',
+      `/v1/purchases/${encodeURIComponent(id)}`,
+      { reason, idempotency_key: deriveOperationKey('cancel_purchase', id) },
+      'caller-id',
+    )
   }
 
   // ---- Credentials ----
@@ -394,7 +421,27 @@ export class ShataleClient {
     intended_use?: string
     idempotency_key?: string
   }): Promise<unknown> {
-    return this.request('POST', '/v1/onboarding/register', input, 'fixed')
+    // ⚠️ SHAT-2633: THIS FORWARDED A KEY AND DID NOT ENFORCE ONE, WHICH IS NOT THE SAME THING.
+    //
+    // `idempotency_key` was an optional field on the input, passed straight through. A caller who
+    // supplied one got idempotency; a caller who did not — which is every caller that does not know
+    // to — got none. SHAT-1104 was closed over the word "all" with this counted as done, and an
+    // optional field satisfies "the tool accepts a key" while satisfying nothing about the request
+    // that actually leaves.
+    //
+    // An explicit key still wins: registration is addressed by publisher_user_id, so deriving from
+    // it means a retry of the same registration de-dups, while a caller who genuinely wants to
+    // repeat one can say so.
+    return this.request(
+      'POST',
+      '/v1/onboarding/register',
+      {
+        ...input,
+        idempotency_key:
+          input.idempotency_key ?? deriveOperationKey('register_user_profile', input.publisher_user_id),
+      },
+      'fixed',
+    )
   }
 
   async getOnboardingStatus(sessionId: string): Promise<unknown> {
@@ -596,25 +643,35 @@ export class ShataleClient {
         agent_id: agentId,
         onboarded: opts.onboarded ?? true,
         ...(opts.currency ? { currency: opts.currency } : {}),
+        // SHAT-2633. This route is already idempotent server-side, which is a property of the
+        // backend today and not a promise to this client — the key makes the guarantee ours.
+        idempotency_key: deriveOperationKey('create_sandbox_user', userId, agentId),
       },
       'fixed',
     )
   }
 
   async sandboxCompleteOnboarding(userId: string): Promise<unknown> {
+    // SHAT-2633: a write that builds the state a demo depends on.
     return this.request(
       'POST',
       `/v1/sandbox/users/${encodeURIComponent(userId)}/onboarding`,
-      undefined,
+      { idempotency_key: deriveOperationKey('sandbox_complete_onboarding', userId) },
       'caller-id',
     )
   }
 
   async sandboxApprovePurchase(purchaseId: string): Promise<unknown> {
+    // ⚠️ SHAT-2633, AND THE MOST SERIOUS OF THE SET: THIS ISSUES A CARD.
+    //
+    // It was absent from the ticket's own list of four write tools — the same way cancel_purchase
+    // fell out of SHAT-1104's list, one level up. A repeat without a key is indistinguishable from
+    // a second intent, which is verbatim the argument that ticket makes for caring about
+    // cancel_purchase, and it applies here with money attached.
     return this.request(
       'POST',
       `/v1/sandbox/purchases/${encodeURIComponent(purchaseId)}/approve`,
-      undefined,
+      { idempotency_key: deriveOperationKey('sandbox_approve_purchase', purchaseId) },
       'caller-id',
     )
   }

@@ -46,7 +46,8 @@
     "method": "DELETE",
     "path": "/v1/purchases/pur_fixture_1",
     "body": {
-      "reason": "user changed their mind"
+      "reason": "user changed their mind",
+      "idempotency_key": "<derived-string>"
     }
   },
   {
@@ -94,20 +95,27 @@
     "body": {
       "user_id": "usr_fixture_new",
       "agent_id": "agt_fixture_1",
-      "onboarded": true
+      "onboarded": true,
+      "idempotency_key": "<derived-string>"
     }
   },
   {
     "label": "sandbox_complete_onboarding (a WRITE with no body — the path IS the request)",
     "struct_hint": "apps/api/api/v1/sandbox.go complete-onboarding route",
     "method": "POST",
-    "path": "/v1/sandbox/users/usr_fixture_1/onboarding"
+    "path": "/v1/sandbox/users/usr_fixture_1/onboarding",
+    "body": {
+      "idempotency_key": "<derived-string>"
+    }
   },
   {
     "label": "sandbox_approve_purchase (a WRITE with no body — the path IS the request)",
     "struct_hint": "apps/api/api/v1/sandbox.go approve route",
     "method": "POST",
-    "path": "/v1/sandbox/purchases/pur_fixture_5/approve"
+    "path": "/v1/sandbox/purchases/pur_fixture_5/approve",
+    "body": {
+      "idempotency_key": "<derived-string>"
+    }
   },
   {
     "label": "get_credential_emails",
@@ -154,7 +162,8 @@
         "name": "Fixture User",
         "country": "FR"
       },
-      "intended_use": "purchase"
+      "intended_use": "purchase",
+      "idempotency_key": "<derived-string>"
     }
   },
   {
