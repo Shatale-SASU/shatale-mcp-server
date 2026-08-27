@@ -2,13 +2,23 @@ import { describe, test, expect } from 'vitest'
 import { ShataleApiError, mapHttpError, errorResult, UNKNOWN_CAUSE, TIMED_OUT } from '../../src/errors.js'
 
 describe('SHAT-1463 structured errors: mapHttpError', () => {
-  test('401/403 → auth_failed', () => {
-    for (const s of [401, 403]) {
-      const e = mapHttpError(s, 'POST', '/v1/purchases')
-      expect(e).toBeInstanceOf(ShataleApiError)
-      expect(e.code).toBe('auth_failed')
-      expect(e.suggested_fix).toContain('sk_sandbox_')
-    }
+  // 401 and 403 were one branch and one answer. They are different answers: 401 means the key was
+  // not accepted, 403 means it WAS and this principal may not have this resource (SHAT-2678
+  // follow-up). What this test was written to guarantee — a structured, leak-safe error carrying
+  // actionable advice — is unchanged and asserted for both.
+  test('401 → auth_failed, and a keyless caller is told where to get a key', () => {
+    const e = mapHttpError(401, 'POST', '/v1/purchases')
+    expect(e).toBeInstanceOf(ShataleApiError)
+    expect(e.code).toBe('auth_failed')
+    expect(e.suggested_fix).toContain('sk_sandbox_')
+  })
+
+  test('403 → forbidden, and does not send the caller to replace a working key', () => {
+    const e = mapHttpError(403, 'POST', '/v1/purchases')
+    expect(e).toBeInstanceOf(ShataleApiError)
+    expect(e.code).toBe('forbidden')
+    expect(e.suggested_fix).not.toContain('sk_sandbox_')
+    expect(e.suggested_fix).toMatch(/scope|belong/i)
   })
 
   test('404 → not_found, echoes method+path (no body)', () => {

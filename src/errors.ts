@@ -103,10 +103,24 @@ const NOT_FOUND_FIX: Record<RequestAddressing, string> = {
 }
 
 /**
+ * What the caller is RUNNING WITH. It exists because the auth advice used to be written for one of
+ * the three: every 401 and every 403 told the reader to "set SHATALE_API_KEY to a valid sandbox
+ * key". Under a live key that instruction is destructive — the server refuses to start with
+ * SHATALE_MODE=live and a non-live key (src/index.ts), so following it stops the integration, and
+ * dropping the mode flag instead silently demotes production to demo.
+ */
+export type KeyKind = 'none' | 'sandbox' | 'live'
+
+const GET_A_KEY = 'Get a free one at https://admin.shatale.com/register?ref=mcp'
+
+/**
  * Map an HTTP status into a structured, leak-safe error.
  *
  * `addressing` is what the CALL SITE knows about the path (see {@link RequestAddressing}). Omitting
  * it is not an error — it means the 404 answer names both causes instead of one.
+ *
+ * `keyKind` is what the process holds (see {@link KeyKind}), and it decides whether the auth advice
+ * is safe to follow.
  */
 export function mapHttpError(
   status: number,
@@ -114,14 +128,35 @@ export function mapHttpError(
   path: string,
   requestId?: string,
   addressing: RequestAddressing = 'unknown',
+  keyKind: KeyKind = 'none',
 ): ShataleApiError {
   const withId = (e: StructuredError) => new ShataleApiError(requestId ? { ...e, request_id: requestId } : e)
-  if (status === 401 || status === 403) {
+  // 401 and 403 are different answers and were sharing one. 401: the key was not accepted. 403: it
+  // WAS accepted, and this principal may not have this resource — a scope, or someone else's
+  // record. Telling a 403 to replace its key sends the reader to fix the one thing that worked.
+  if (status === 403) {
+    return withId({
+      code: 'forbidden',
+      message: 'The key was accepted, but it is not allowed to do this.',
+      suggested_fix:
+        'This is not a bad key — do not replace it. Check that the ids in the request belong to the ' +
+        'publisher this key belongs to, and that the key carries the scope this route needs.',
+    })
+  }
+  if (status === 401) {
     return withId({
       code: 'auth_failed',
       message: 'Authentication failed.',
       suggested_fix:
-        'Set SHATALE_API_KEY to a valid sandbox key (sk_sandbox_*). Get a free one at https://admin.shatale.com/register?ref=mcp',
+        keyKind === 'live'
+          ? 'The live key was not accepted. Check it is current and that SHATALE_API_URL points at ' +
+            'production. Do NOT swap in a sandbox key while SHATALE_MODE=live — the server refuses ' +
+            'to start on that combination, and dropping the mode flag would quietly move you off ' +
+            'production.'
+          : keyKind === 'sandbox'
+            ? 'The sandbox key was not accepted. Check it is current and that SHATALE_API_URL points ' +
+              'at the environment that issued it.'
+            : `Set SHATALE_API_KEY to a valid sandbox key (sk_sandbox_*). ${GET_A_KEY}`,
     })
   }
   if (status === 404) {
