@@ -44,7 +44,9 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           if (args.category) params.set('category', String(args.category))
           if (args.capability) params.set('capability', String(args.capability))
           if (args.country) params.set('country', String(args.country))
-          const result = await client.request('GET', `/v1/merchants/catalog?${params}`)
+          // SHAT-2678: the query string filters, it does not address. No id here for a 404 to be
+          // about, so do not send the caller looking for one.
+          const result = await client.request('GET', `/v1/merchants/catalog?${params}`, undefined, 'fixed')
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, 'catalog_search_failed')
@@ -55,7 +57,12 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
         const merchantId = requireId(args, 'merchant_id')
         if (!merchantId.ok) return merchantId.result
         try {
-          const result = await client.request('GET', `/v1/merchants/catalog/${encodeURIComponent(merchantId.value)}`)
+          const result = await client.request(
+            'GET',
+            `/v1/merchants/catalog/${encodeURIComponent(merchantId.value)}`,
+            undefined,
+            'caller-id',
+          )
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, 'merchant_details_failed')

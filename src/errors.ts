@@ -67,8 +67,54 @@ export function extractRequestId(body: unknown): string | undefined {
   return trimmed
 }
 
-/** Map an HTTP status into a structured, leak-safe error. */
-export function mapHttpError(status: number, method: string, path: string, requestId?: string): ShataleApiError {
+/**
+ * What the code that BUILT a request path knows about that path, carried alongside the request so a
+ * failure does not have to be reconstructed from the string afterwards.
+ *
+ * Stated at the call site, never inferred. `unknown` is the default on purpose: a call that says
+ * nothing gets an answer admitting both possibilities, rather than a confident half.
+ */
+export type RequestAddressing =
+  /** The path carries an id the CALLER supplied; this client only interpolated it. */
+  | 'caller-id'
+  /** Every character of the address was composed here; the caller contributed no part of it. */
+  | 'fixed'
+  /** Nobody said. Answer with both possibilities. */
+  | 'unknown'
+
+/**
+ * The three answers to "the server said 404", one per thing we actually know about the address.
+ *
+ * A table rather than a ternary, so a fourth kind of knowledge cannot compile until it has a
+ * sentence of its own, and so each sentence sits next to the ones it must not contradict.
+ */
+const NOT_FOUND_FIX: Record<RequestAddressing, string> = {
+  'caller-id':
+    'Verify the id in the path — pass the id returned by the create call (purchase_id, session_id, etc.). ' +
+    'One 404 covers an id that never existed, one belonging to another publisher, and one from the other ' +
+    'environment (a sandbox id is not visible to a live key, or the reverse). If the id is right, the route ' +
+    'may not be deployed on the environment SHATALE_API_URL points at.',
+  fixed:
+    'This route is not available on the connected deployment — nothing in your request is wrong. Check SHATALE_API_URL points at the right environment, and that the feature is released there.',
+  unknown:
+    'This could be either, and nothing here can tell which: an id in the request that does not resolve, or a ' +
+    'route that is not deployed on the connected deployment. If the request carried an id, verify that first; ' +
+    'otherwise check SHATALE_API_URL points at the right environment.',
+}
+
+/**
+ * Map an HTTP status into a structured, leak-safe error.
+ *
+ * `addressing` is what the CALL SITE knows about the path (see {@link RequestAddressing}). Omitting
+ * it is not an error — it means the 404 answer names both causes instead of one.
+ */
+export function mapHttpError(
+  status: number,
+  method: string,
+  path: string,
+  requestId?: string,
+  addressing: RequestAddressing = 'unknown',
+): ShataleApiError {
   const withId = (e: StructuredError) => new ShataleApiError(requestId ? { ...e, request_id: requestId } : e)
   if (status === 401 || status === 403) {
     return withId({
@@ -79,17 +125,31 @@ export function mapHttpError(status: number, method: string, path: string, reque
     })
   }
   if (status === 404) {
-    // A 404 on a POST that creates something is not a missing id — there is no id in
-    // the request to verify. The old advice ("pass the id returned by the create
-    // call") sent a caller hunting for its own mistake when the truth was that the
-    // route is not deployed, which is the failure it kept meaning in practice.
-    const creating = method.toUpperCase() === 'POST' && !/\/[^/]*_?id[^/]*$/i.test(path)
+    // /!\ WHO IS BLAMED FOR A 404 IS DECIDED AT THE CALL SITE, NOT BY THE SHAPE OF THE PATH — AND
+    // THIS HAS NOW BEEN WRONG IN BOTH DIRECTIONS (SHAT-2678).
+    //
+    // First it sent EVERY 404 hunting for a bad id, which is nonsense for a genuine create: POST
+    // /v1/purchases carries no id to verify. The correction guessed "creating" from the string —
+    // POST, plus a last segment with no "id" in it — which reads the wrong end of the path. POST
+    // /v1/sandbox/purchases/{purchaseId}/approve and POST /v1/sandbox/users/{userId}/onboarding
+    // both carry a caller-supplied id in the MIDDLE and both end in a verb, so both classified as
+    // creates and both were answered "nothing in your request is wrong". A 404 on either
+    // overwhelmingly means the id is wrong: apps/api api/v1/sandbox.go answers absent, another
+    // publisher's, and wrong-environment with one indistinguishable 404. An agent told its request
+    // is blameless stops examining the one thing it can fix and reports a misconfiguration instead.
+    //
+    // The same guess was wrong in the other direction for every id-less GET: GET /v1/mcc-codes and
+    // GET /v1/merchants/catalog were both told to "verify the id" when neither has one.
+    //
+    // No path string can settle this, because the answer is not in the string: `/v1/purchases` and
+    // `/v1/sandbox/purchases/{id}/approve` are both "POST ending in a word". What knows is the code
+    // that BUILT the path — it either interpolated a caller's id or it did not. So the fact rides
+    // along with the request (`addressing`), instead of being reconstructed from its remains, and
+    // where nobody stated it we name both causes rather than pick a side.
     return withId({
       code: 'not_found',
       message: `Resource not found (${method} ${path}).`,
-      suggested_fix: creating
-        ? 'This route is not available on the connected deployment — nothing in your request is wrong. Check SHATALE_API_URL points at the right environment, and that the feature is released there.'
-        : 'Verify the id exists — pass the id returned by the create call (purchase_id, session_id, etc.). If the id is right, the route may not be deployed on the environment SHATALE_API_URL points at.',
+      suggested_fix: NOT_FOUND_FIX[addressing],
     })
   }
   if (status === 429) {
