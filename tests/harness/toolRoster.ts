@@ -19,16 +19,34 @@ import { measureRoster } from '../../scripts/lib/serverRoster.mjs'
  * already refused a stale or partial build by the time this runs, so what it measures is the code
  * under test rather than yesterday's.
  */
-let cached: string[] | null = null
+type Measured = { union: string[]; advertised: Map<string, string[]>; failures: string[] }
 
-export async function rosterFromRuntime(): Promise<string[]> {
+let cached: Measured | null = null
+
+async function measureOnce(): Promise<Measured> {
   if (cached) return cached
-  const { union, failures } = (await measureRoster()) as { union: string[]; failures: string[] }
-  if (failures.length) {
+  const m = (await measureRoster()) as Measured
+  if (m.failures.length) {
     // A mode that advertised nothing is an ERROR, not an empty set: the server failed to start, and
     // an empty list silently shrinks every count computed from it.
-    throw new Error(`the server did not advertise its tools:\n  ${failures.join('\n  ')}`)
+    throw new Error(`the server did not advertise its tools:\n  ${m.failures.join('\n  ')}`)
   }
-  cached = [...union].sort()
-  return cached
+  cached = m
+  return m
+}
+
+export async function rosterFromRuntime(): Promise<string[]> {
+  return [...(await measureOnce()).union].sort()
+}
+
+/**
+ * The same measurement, kept PER MODE. The union answers "does this tool exist anywhere"; a question
+ * about a gate is the opposite one — "which mode is it offered in" — and the union cannot answer it.
+ * Same six spawned servers, measured once per process.
+ */
+export async function rosterByMode(mode: string): Promise<string[]> {
+  const { advertised } = await measureOnce()
+  const tools = advertised.get(mode)
+  if (!tools) throw new Error(`no such mode measured: "${mode}" (have: ${[...advertised.keys()].join(', ')})`)
+  return [...tools].sort()
 }
