@@ -95,7 +95,46 @@ const SHATALE_SUFFIX = '.shatale.com'
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '::1']
 const CANONICAL_API_HOST = 'api.shatale.com'
 
-const apiBaseUrl = new URL(process.env.SHATALE_API_URL ?? `https://${CANONICAL_API_HOST}`)
+// ⚠️ THREE CASES, AND TWO OF THEM USED TO BE SILENT (SHAT-2711).
+//
+// UNSET meant PRODUCTION, quietly. The variable is optional and defaults to the real API, so a
+// launcher that forgot it did not fail — it pointed at money and said nothing. Measured: the banner
+// was BYTE-IDENTICAL for a run against api.shatale.com and a run against a dead
+// http://127.0.0.1:9, so the startup log could not tell prod from a hole.
+//
+// EMPTY was worse. `??` falls back on undefined only, so an empty string travelled into
+// `new URL('')`, which throws AT MODULE SCOPE — before any handler exists. The parent sees a raw
+// Node stack and a child that dies during the MCP handshake, which arrives as a TIMEOUT rather than
+// as a message. That is exactly what a config writing `SHATALE_API_URL: process.env.X ?? ""` would
+// produce, and one did (SHAT-2703).
+//
+// So the value is read once, judged here, and both outcomes are named out loud.
+const rawApiUrl = process.env.SHATALE_API_URL
+const apiUrlWasGiven = rawApiUrl !== undefined
+
+if (apiUrlWasGiven && rawApiUrl.trim() === '') {
+  console.error(
+    'ERROR: SHATALE_API_URL is set but EMPTY. An empty value is not "unset": it does not fall back ' +
+      'to the default, it is not a URL, and left alone it would crash this process at import time ' +
+      'with a Node stack the parent reads as a handshake timeout. Either unset the variable to use ' +
+      `https://${CANONICAL_API_HOST}, or give it a URL.`,
+  )
+  process.exit(1)
+}
+
+let apiBaseUrl: URL
+try {
+  apiBaseUrl = new URL(rawApiUrl ?? `https://${CANONICAL_API_HOST}`)
+} catch {
+  // The VALUE is not echoed: a URL can carry credentials in its userinfo, and a message that helps
+  // debugging by printing them is not a help. Its length is enough to tell a typo from a variable
+  // that expanded to something unexpected.
+  console.error(
+    `ERROR: SHATALE_API_URL is not a URL (${rawApiUrl?.length ?? 0} characters). Expected something ` +
+      `like https://${CANONICAL_API_HOST}.`,
+  )
+  process.exit(1)
+}
 const host = apiBaseUrl.hostname
 const isLoopback = LOOPBACK_HOSTS.includes(host)
 const isShataleHost = host === CANONICAL_API_HOST || host.endsWith(SHATALE_SUFFIX)
@@ -509,7 +548,13 @@ async function main() {
   // Log mode to stderr so it does not interfere with stdio transport
   const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(onboarding-only)'
   const toolCount = allTools.length
-  process.stderr.write(`Shatale MCP server started (${mode} mode, ${toolCount} tools)\n`)
+  // ⚠️ THE HOST IS IN THE BANNER, AND THAT IS THE WHOLE POINT OF SHAT-2711. Two runs against
+  // different APIs used to print the same line, so the one question an operator asks of a startup
+  // log — "where is this thing pointed?" — could not be answered from it. `(default)` marks the
+  // case nobody chose: an unset variable is how a process ends up talking to production without
+  // anyone deciding that it should.
+  const where = apiUrlWasGiven ? apiBaseUrl.origin : `${apiBaseUrl.origin} (default)`
+  process.stderr.write(`Shatale MCP server started (${mode} mode, ${toolCount} tools, api=${where})\n`)
 }
 
 main().catch((err) => {
