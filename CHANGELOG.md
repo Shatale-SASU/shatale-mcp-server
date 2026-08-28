@@ -8,6 +8,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-08-28
+
+> ⚠️ **1.0.3 was published without the three commits below, and the version was never raised.** The
+> package on npm and the tree on `main` carried ONE NUMBER over DIFFERENT CONTENT, so anyone
+> installing `shatale-mcp-server@1.0.3` got the older behaviour with no way to notice — the number
+> matched. Measured by RUNNING the published tarball, not by reading it: it announced
+> `demo(sandbox) mode, 17 tools`, where `main` announces 19.
+>
+> This release exists to make the number mean something again.
+
+### Added
+
+- **Checkout tools in the sandbox.** `get_checkout_customer` and `get_checkout_cardholder` now
+  register for a sandbox key, not only for `isLive && moneyGo`. The gate that hid them was ours, and
+  the reason recorded for it — that the backend would refuse a sandbox key on those routes — was not
+  true of the backend. The owner decided the tools should be available; the gate is removed rather
+  than re-justified. Sandbox goes 17 → 19 tools; the union over all modes stays 21.
+
+### Changed
+
+- **Every write now carries an idempotency key, and the list of writes comes from the source.**
+  `cancel_purchase`, `sandbox_approve_purchase`, `sandbox_create_user`,
+  `sandbox_complete_onboarding` and `register_user_profile` send one; the last of those previously
+  *forwarded* a caller-supplied key and enforced nothing. `sandbox_approve_purchase` matters most —
+  it issues a card, and it appeared in neither of the two tickets' hand-written lists.
+  The keys are DETERMINISTIC, derived from the operation and its target: these calls address a row
+  that already exists, so a repeat means "do that again to the same thing" and must de-duplicate. A
+  per-call random key does the opposite.
+  `sandbox_simulate_authorization` is the one exemption, and it is recorded with the measurement
+  that earns it rather than as an assertion.
+
+### Fixed
+
+- **The publish workflow refuses a tag that is not reachable from `main`.** A tag cut from a branch
+  can no longer reach the registry — the failure that put 0.5.1 on npm with no tag at all. Verified
+  to discriminate, not merely to exist: a tag on `main` passes, a tag on a side branch is refused,
+  and a tag whose name disagrees with `package.json` is refused.
+
 ## [1.0.3] — 2026-08-27
 
 ### Added
