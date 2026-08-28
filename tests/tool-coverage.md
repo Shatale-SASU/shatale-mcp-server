@@ -93,3 +93,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `stdio-hardening.test.ts` | 5 | No |
 | `where-a-live-key-may-be-sent.test.ts` | 8 | No |
 | `wire-fixtures.test.ts` | 4 | No (mock upstream) |
+| `the-key-travels-only-in-the-environment.test.ts` | 3 | No |
