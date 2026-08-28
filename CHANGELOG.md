@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **internal, no behaviour change:** the filesystem sweep's skip list moved to
+  `tests/harness/repoWalk.ts` and is explained there (SHAT-2713). A sweep that descends into
+  `.claude/` reads a git worktree — a copy of this repository inside itself — and counts every
+  forbidden string in its own source as a hit; three absence checks went red on a clean `main` that
+  way. The exclusion used to live in the one test that was bitten, where the next author of a sweep
+  would never see it.
+
+### Changed
+
 - **The startup banner names the API it will talk to** (SHAT-2711). It read
   `... (demo(sandbox) mode, 19 tools)` for production and, byte for byte, the same line for a dead
   `http://127.0.0.1:9` — so the log could not answer the one question asked of it. It now carries
