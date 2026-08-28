@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
@@ -31,31 +31,24 @@ import { resolve } from "node:path";
  * install command breaks somebody else's afternoon and reports nothing back to us.
  */
 
+import { walkRepoFiles } from "../harness/repoWalk.js";
+
 const repoRoot = resolve(__dirname, "..", "..");
 
-/** Every text file we author, so a name cannot come back in a corner nobody greps. */
+/**
+ * Every text file we author, so a name cannot come back in a corner nobody greps.
+ *
+ * ⚠️ THE SKIP LIST MOVED TO tests/harness/repoWalk.ts, AND THAT IS THE POINT OF SHAT-2713. It was
+ * learned HERE, by this test going red on a clean main because it had descended into a git worktree
+ * under .claude/ and read a second copy of its own source. An exclusion that lives in the one file
+ * that was bitten protects that file; the next sweep somebody writes starts from the four obvious
+ * names again and meets the same copy.
+ */
 function authoredFiles(): string[] {
-  const out: string[] = [];
-  // ⚠️ ".claude" HOLDS GIT WORKTREES, WHICH ARE COPIES OF THIS REPOSITORY INSIDE ITSELF. An agent
-  // working in a worktree put a second copy of these very files under .claude/worktrees/, and this
-  // sweep read them as if they were the shipped tree: every forbidden string in this test's OWN
-  // source counted as a hit, and three absence checks went red on a clean main. The walk was
-  // measuring the wrong subject, not finding a defect.
-  const skipDirs = new Set(["node_modules", "dist", ".git", "coverage", ".claude"]);
-  const walk = (rel: string) => {
-    for (const entry of readdirSync(resolve(repoRoot, rel), { withFileTypes: true })) {
-      const child = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        if (!skipDirs.has(entry.name)) walk(child);
-        continue;
-      }
-      if (/\.(ts|js|mjs|json|yaml|yml|md)$/.test(entry.name) && entry.name !== "package-lock.json") {
-        out.push(child);
-      }
-    }
-  };
-  walk("");
-  return out.sort();
+  return walkRepoFiles(
+    repoRoot,
+    (name) => /\.(ts|js|mjs|json|yaml|yml|md)$/.test(name) && name !== "package-lock.json",
+  );
 }
 
 const SELF = "tests/unit/the-install-command-we-hand-out-works.test.ts";
@@ -107,6 +100,17 @@ describe("the install commands we hand to other people are real (SHAT-2527)", ()
       "the REAL package name appears nowhere, which cannot be true — package.json is named that. " +
         "The line scan is broken and every absence below is vacuous.",
     ).toBeGreaterThan(0);
+
+    // ⚠️ AND IT MUST READ THE RIGHT PLACES, NOT MERELY ENOUGH OF THEM (SHAT-2713). A count passes on
+    // twenty files from anywhere, and the fix for that ticket ADDED a skip rule — so the failure it
+    // invites is a rule one entry too wide, emptying the sweep of the very tree under test. Named
+    // directories, not a threshold.
+    expect(
+      files.some((f) => f.startsWith("src/")),
+      `the sweep found no file under src/. The shipped code is the subject, so skipping it makes ` +
+        `every absence assertion below vacuously true. ${files.length} files were seen.`,
+    ).toBe(true);
+    expect(files, "the sweep no longer reads this test's own source").toContain(SELF);
   });
 
   it("the scoped name that 404s is nowhere in the tree", () => {
