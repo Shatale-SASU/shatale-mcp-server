@@ -14,12 +14,57 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The changelog guard below asks git what this pull request changed, and a shallow clone
+          # has no base to diff against. It REFUSES an empty diff rather than passing on it, so a
+          # shallow checkout would turn the guard red rather than silently green — but red for the
+          # wrong reason is still noise, and the depth is what makes the question answerable.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci
       - run: npx tsc
+
+      # A change to src/ must say what changed. Twice now three merged pull requests reached a
+      # release with an EMPTY [Unreleased] section — once corrected after the fact by the 1.0.3
+      # release commit, once by 1.0.4. Twice is a missing instrument, not inattention.
+      #
+      # Pull requests only: on a push to main the merge has already happened and the base is not a
+      # meaningful comparison.
+      - name: A code change must say what changed
+        if: github.event_name == 'pull_request'
+        run: node scripts/a-code-change-must-say-what-changed.mjs "${{ github.event.pull_request.base.sha }}"
+
+      # ⚠️ THE SECOND HALF OF THE SAME INSTRUMENT, AND NOT A BACKUP FOR THE FIRST.
+      #
+      # The guard above runs on pull requests: it asks "did somebody just create a divergence?" It
+      # therefore cannot see one that ALREADY EXISTS — anything merged before it existed is invisible
+      # to it for ever. Tonight's defect is exactly that: three commits sat on main past the published
+      # tag, and the pull requests that made them are closed.
+      #
+      # And the two symptoms are one forgetfulness. The empty [Unreleased] section and the un-bumped
+      # version are written by the same person at the same moment and forgotten together, so closing
+      # one half does not reduce the chance of the other at all — the cause is shared.
+      - name: main must not drift past its published version
+        if: github.event_name == 'push'
+        run: node scripts/main-must-not-drift-past-its-published-version.mjs
+
+      # And it must DISCRIMINATE, not merely run. Same discipline as the README gate's controls
+      # below: a green step proves the check executes, a planted case proves it can say no.
+      - name: and the changelog guard must still discriminate
+        run: |
+          set -euo pipefail
+          if node scripts/a-code-change-must-say-what-changed.mjs --files src/client.ts >/dev/null 2>&1; then
+            echo "::error::the changelog guard passed a src/ change with no entry. It cannot refuse."
+            exit 1
+          fi
+          echo "Control held: a src/ change with no changelog entry is refused."
+          node scripts/a-code-change-must-say-what-changed.mjs --files src/client.ts CHANGELOG.md >/dev/null
+          echo "Control held: the same change WITH an entry passes."
+          node scripts/a-code-change-must-say-what-changed.mjs --files tests/unit/x.test.ts >/dev/null
+          echo "Control held: a change that ships nothing needs no entry."
 
       - name: Run public tests (no API key)
         run: npm run test:public
