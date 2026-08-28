@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **The startup banner names the API it will talk to** (SHAT-2711). It read
+  `... (demo(sandbox) mode, 19 tools)` for production and, byte for byte, the same line for a dead
+  `http://127.0.0.1:9` — so the log could not answer the one question asked of it. It now carries
+  `api=<origin>`, and marks the unset case `(default)`, because an unset variable is how a process
+  ends up talking to production without anyone deciding that it should.
+
+### Fixed
+
+- **An empty `SHATALE_API_URL` is refused in the server's own words** (SHAT-2711). `??` falls back on
+  `undefined` only, so an empty string reached `new URL('')` and threw at MODULE SCOPE — before any
+  handler existed. The parent saw a raw Node stack from a child dying during the MCP handshake, which
+  arrives as a timeout rather than an error. A value that is not a URL is refused too, by its LENGTH
+  rather than by echoing it: a URL can carry credentials in its userinfo.
+
 ## [1.0.4] — 2026-08-28
 
 > ⚠️ **1.0.3 was published without the three commits below, and the version was never raised.** The
