@@ -292,6 +292,24 @@ export class ShataleClient {
     return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}`, undefined, 'caller-id')
   }
 
+  /**
+   * Ask the API to wait, briefly, for the person to answer.
+   *
+   * ⚠️ ONE CALL OF THIS IS NOT THE WHOLE WAIT. The API bounds its own wait to well under the 30s
+   * this client allows every request (SECURITY.md promises that bound, for the stated reason that a
+   * stalled backend must not hang the agent), and answers `still_waiting` when its budget runs out.
+   * The caller loops. That is deliberate: the guarantee stays true word for word, and the tool above
+   * this one is what turns several bounded calls into one wait the agent sees.
+   */
+  async awaitPurchaseApproval(id: string): Promise<{ outcome: string; purchase?: unknown }> {
+    return this.request(
+      'GET',
+      `/v1/purchases/${encodeURIComponent(id)}/await-approval`,
+      undefined,
+      'caller-id',
+    ) as Promise<{ outcome: string; purchase?: unknown }>
+  }
+
   async cancelPurchase(id: string, reason?: string): Promise<unknown> {
     // SHAT-2633: a cancel is a state change on the money path. Without a key a retry is
     // indistinguishable from a second intent — the sentence that ticket uses to explain why this

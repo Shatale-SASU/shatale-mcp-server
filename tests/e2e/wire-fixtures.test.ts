@@ -171,6 +171,13 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_2'),
     })
 
+    await sandbox.callTool('await_purchase_approval', { purchase_id: 'pur_fixture_4' })
+    captured.push({
+      label: 'await_purchase_approval',
+      struct_hint: 'apps/api/api/v1/purchases.go await-approval route',
+      ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_4/await-approval'),
+    })
+
     await sandbox.callTool('get_credential_status', { credential_request_id: 'cred_fixture_1' })
     captured.push({
       label: 'get_credential_status',
