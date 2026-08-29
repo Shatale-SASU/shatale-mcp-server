@@ -28,9 +28,29 @@ jobs:
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
 
+      # ⚠️ THE PIPE USED TO SWALLOW THE VERDICT, AND EVERYTHING BELOW HUNG OFF IT.
+      #
+      # A runner `run:` without an explicit `shell:` is `bash -e {0}` — `-e`, but NOT `pipefail`.
+      # In `npm test | tee`, the step's exit code is tee's, and tee always succeeds. So a nightly
+      # run with failing tests exited 0 and the job went GREEN.
+      #
+      # That is not one missing alert. Every reaction in this file is gated on `if: failure()` —
+      # the server-log artifact, the Telegram message, the Jira issue — so a condition that could
+      # never become true silenced all three at once. The failure reporting looked complete and was
+      # downstream of something unreachable: the nightly suite could fail every night and the only
+      # visible trace would be a green check.
+      #
+      # Reproduced rather than reasoned: `bash -e -c 'false | tee /dev/null'` exits 0;
+      # `bash -eo pipefail -c` on the same line exits non-zero.
+      #
+      # This repo already knows the rule — ci-public.yml and publish.yml both open with
+      # `set -euo pipefail`. Nightly is the one place it was missed, and it is the one workflow
+      # where nobody is watching the run live.
       - name: Run full test suite
         id: tests
-        run: npm test -- --reporter=verbose 2>&1 | tee /tmp/test-output.txt
+        run: |
+          set -euo pipefail
+          npm test -- --reporter=verbose 2>&1 | tee /tmp/test-output.txt
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
 
