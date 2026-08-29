@@ -28,6 +28,18 @@ const requestPurchaseSchema = z.object({
 // thing that breaks them.
 export { redactPurchaseCard } from '../redact.js'
 
+/**
+ * The shortest gap this tool will leave between two calls to the API, whatever the API does.
+ *
+ * ⚠️ IT EXISTS BECAUSE THE PACE WAS SOMEBODY ELSE'S PROPERTY. The waiting endpoint holds each call
+ * for its own budget, so the loop below was paced correctly — by the far side. Measured against an
+ * upstream that answers instantly: 520,008 requests in 50 seconds, over ten thousand a second. The
+ * tool written to END tight polling became the tightest polling loop in the product, and every other
+ * assertion about it still passed. Two seconds is far below the API's own budget, so this never
+ * fires in normal operation and is the whole defence when normal operation stops.
+ */
+const MIN_POLL_INTERVAL_MS = 2_000
+
 export interface PurchaseToolOptions {
   /**
    * Whether the active key is a sandbox key. NOT USED FOR A REFUSAL — SHAT-2611.
@@ -126,6 +138,24 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         },
       },
       {
+        name: 'await_purchase_approval',
+        description:
+          'Wait for the person to answer a purchase that needs their approval, instead of polling. ' +
+          'Returns approved, declined, expired — or still_waiting, which means nobody has answered ' +
+          'yet and you may call this again. It reads the decision; calling it never changes the ' +
+          'purchase, and get_purchase_status keeps working alongside it.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            purchase_id: {
+              type: 'string',
+              description: 'The purchase request ID returned by request_purchase',
+            },
+          },
+          required: ['purchase_id'],
+        },
+      },
+      {
         name: 'cancel_purchase',
         description: 'Cancel a pending purchase request. Only works for purchases not yet executed.',
         inputSchema: {
@@ -196,14 +226,68 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         }
       },
 
+      /**
+       * ⚠️ THE WAIT THE AGENT SEES IS SEVERAL BOUNDED WAITS UNDERNEATH, AND THAT IS NOT A TRICK.
+       * The API answers within its own budget and says `still_waiting`; this loops. The 30s bound
+       * SECURITY.md promises on every API call stays true word for word, and the agent still makes
+       * ONE tool call instead of about thirty.
+       *
+       * ⚠️ HOW LONG IT MAY LOOP IS THE HOST'S DECISION, NOT OURS. A progress notification resets the
+       * client's request timeout only when the client asked for progress AND enabled
+       * `resetTimeoutOnProgress`. Without a token nobody is listening and the SDK's 60s default
+       * stands, so this finishes inside it. With one, it waits longer — and still stops, because a
+       * tool that never returns is a tool that cannot be retried.
+       *
+       * Either way it ends by RETURNING still_waiting rather than failing. The outcome is read from
+       * the purchase, never consumed, so calling again loses nothing.
+       */
+      await_purchase_approval: async (args, ctx) => {
+        const id = requireId(args, 'purchase_id')
+        if (!id.ok) return id.result
+
+        // Without a listener: stay inside the SDK's 60s default. With one: a few minutes, then hand
+        // the decision back to the agent. Neither number is a preference — the first is the host's
+        // timeout, the second is how long we are willing to hold a stdio request open.
+        const budgetMs = ctx?.hasProgressToken ? 5 * 60_000 : 50_000
+        const deadline = Date.now() + budgetMs
+
+        try {
+          for (;;) {
+            const startedAt = Date.now()
+            const result = await client.awaitPurchaseApproval(id.value)
+            if (result.outcome !== 'still_waiting') {
+              return jsonResult(result)
+            }
+            if (Date.now() >= deadline) {
+              // Not a failure: nobody has answered yet. Saying so, and being callable again, is what
+              // keeps this honest when the host gives us less time than the person takes.
+              return jsonResult(result)
+            }
+            await ctx?.reportProgress('waiting for the account holder to answer')
+
+            // The pace is OURS, not the far side's — see MIN_POLL_INTERVAL_MS above.
+            const elapsed = Date.now() - startedAt
+            if (elapsed < MIN_POLL_INTERVAL_MS) {
+              await new Promise((r) => setTimeout(r, MIN_POLL_INTERVAL_MS - elapsed))
+            }
+          }
+        } catch (err) {
+          return errorResult(err, 'await_approval_failed')
+        }
+      },
+
       get_purchase_status: async (args) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
         try {
           const result = await client.getPurchaseStatus(id.value)
-          // PCI: GET /v1/purchases/{id} advances the state machine and can itself
-          // issue a card (legacy issueCard path returns the raw PAN inline), so
-          // redact here too — never surface a raw PAN/CVV into the agent context.
+          // PCI: redaction is the client's guarantee (see redact.ts), applied inside
+          // ShataleClient.request rather than at four call sites.
+          //
+          // ⚠️ THIS COMMENT USED TO SAY THE GET "advances the state machine and can itself issue a
+          // card", AND THAT STOPPED BEING TRUE IN SHAT-2781. A read no longer moves the purchase:
+          // the approve button drives it. Corrected rather than deleted, because it was the reason
+          // this line existed and the next reader deserves to know the reason changed.
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, 'purchase_status_failed')

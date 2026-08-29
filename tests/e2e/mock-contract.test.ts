@@ -38,9 +38,9 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 19 backed tools; the two unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 20 backed tools; the two unbacked ones stay hidden', async () => {
     const res = await client.send('tools/list')
-    // 19, and every one missing is missing on purpose — a tool we advertise is a
+    // 20, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
@@ -65,12 +65,17 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // units reaching payment_ready, then GET /v1/purchases/{id}/checkout-identity answering 200
     // with billing_identity and merchant_customer_identity.
     //
+    // ⚠️ 19 → 20 is `await_purchase_approval` (SHAT-2802), and it is the `sandbox_create_user` kind
+    // of move: a tool ADDED against a route the backend now serves. Not a reason expiring — a new
+    // endpoint, GET /v1/purchases/{id}/await-approval, shipped in the API PR that precedes this one.
+    // The two withheld tools above are unchanged.
+    //
     // ⚠️ AND THIS COMMENT SAID "16" FOR A RELEASE WHILE THE ASSERTION THREE LINES DOWN SAID 17.
     // Whoever bumped the number bumped the title and the expectation and not the prose between
     // them, which is the same shape as every defect this file's neighbours were written for: the
     // count is measured, the explanation of the count is not, and a reader checking WHY the number
     // is what it is gets last release's answer. Bump all three or none.
-    expect(res.result?.tools ?? []).toHaveLength(19)
+    expect(res.result?.tools ?? []).toHaveLength(20)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).toContain('get_credential_emails')
     expect(names).not.toContain('register_user_profile')

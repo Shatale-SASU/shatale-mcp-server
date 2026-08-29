@@ -73,6 +73,10 @@ function handlerFor(name: string) {
 /** Every tool whose id becomes a URL PATH SEGMENT, and the argument it must refuse to do without. */
 const idTools: Array<{ tool: string; missing: string }> = [
   { tool: 'get_purchase_status', missing: 'purchase_id' },
+  // ⚠️ ADDED WITH THE TOOL (SHAT-2802). This list is hand-written, so a new id-taking tool is
+  // absent from it by default and the suite stays green — the absence is indistinguishable from
+  // coverage, which is the failure this file's own header describes.
+  { tool: 'await_purchase_approval', missing: 'purchase_id' },
   { tool: 'cancel_purchase', missing: 'purchase_id' },
   { tool: 'get_credential_status', missing: 'credential_request_id' },
   { tool: 'get_credential_emails', missing: 'credential_request_id' },

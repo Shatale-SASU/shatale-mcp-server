@@ -62,7 +62,28 @@ export interface ToolDefinition {
 }
 
 /** Tool handler function */
-export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolCallResult>
+/**
+ * What a long-running tool needs from the transport: a way to say "still going" and a way to know
+ * whether anyone is listening.
+ *
+ * ⚠️ `hasProgressToken` IS NOT A DETAIL. A progress notification only resets the client's request
+ * timeout when the CLIENT asked for progress by sending a token (`_meta.progressToken`) and enables
+ * `resetTimeoutOnProgress` — both are the host's choice, not ours. Without a token there is nobody to
+ * notify and the host's default 60s timeout stands, so a tool must finish inside it rather than
+ * assume it has been granted more time. Promising on the host's behalf is the failure this field
+ * exists to prevent.
+ */
+export interface ToolContext {
+  readonly hasProgressToken: boolean
+  /** Report liveness. A no-op when the client sent no progress token. */
+  reportProgress(message: string): Promise<void>
+}
+
+/**
+ * A tool handler. The second parameter is OPTIONAL so that the eight existing modules, none of which
+ * needs it, are untouched (SHAT-2802).
+ */
+export type ToolHandler = (args: Record<string, unknown>, ctx?: ToolContext) => Promise<ToolCallResult>
 
 /** MCP tool call result — compatible with SDK's CallToolResult */
 export interface ToolCallResult {

@@ -21,7 +21,7 @@ import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
 import { createCommonTools, isSandboxKey } from './tools/common.js'
-import type { ToolDefinition, ToolHandler } from './types.js'
+import type { ToolContext, ToolDefinition, ToolHandler } from './types.js'
 import { textResult } from './types.js'
 
 const apiKey = process.env.SHATALE_API_KEY ?? ''
@@ -490,7 +490,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 })
 
 // Register call_tool handler
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params
   const handler = allHandlers[name]
 
@@ -498,7 +498,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return textResult(`Unknown tool: ${name}`, true)
   }
 
-  return handler(args ?? {})
+  // ⚠️ THE PROGRESS TOKEN IS THE CLIENT'S, AND ITS ABSENCE IS INFORMATION (SHAT-2802). A progress
+  // notification resets the client's request timeout only if the client asked for progress and
+  // enabled `resetTimeoutOnProgress` — both are the host's choice. When no token arrives there is
+  // nobody to notify and the SDK's 60s default stands, so a waiting tool must finish inside it
+  // rather than assume time it was never granted.
+  const progressToken = request.params._meta?.progressToken
+  const ctx: ToolContext = {
+    hasProgressToken: progressToken !== undefined && progressToken !== null,
+    reportProgress: async (message: string) => {
+      if (progressToken === undefined || progressToken === null) return
+      await extra.sendNotification({
+        method: 'notifications/progress',
+        params: { progressToken, progress: 0, message },
+      })
+    },
+  }
+
+  return handler(args ?? {}, ctx)
 })
 
 // Register resources handlers (F-002)

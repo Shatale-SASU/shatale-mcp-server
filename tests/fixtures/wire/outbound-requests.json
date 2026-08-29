@@ -82,6 +82,12 @@
     "path": "/v1/purchases/pur_fixture_2"
   },
   {
+    "label": "await_purchase_approval",
+    "struct_hint": "apps/api/api/v1/purchases.go await-approval route",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_4/await-approval"
+  },
+  {
     "label": "get_credential_status",
     "struct_hint": "apps/api/api/v1/credentials.go status route",
     "method": "GET",
