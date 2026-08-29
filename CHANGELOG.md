@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **`await_purchase_approval`** — wait for the person to answer a purchase that needs their
+  approval, instead of polling. Returns `approved`, `declined`, `expired`, or `still_waiting`,
+  which means nobody has answered yet and the tool may be called again (SHAT-2802).
+
+  It reads the decision and never changes the purchase, and `get_purchase_status` keeps working
+  alongside it — the wait is an addition, not a replacement.
+
+  ⚠️ **How long it waits is the host's decision, not ours.** A progress notification resets the
+  client's request timeout only when the client asked for progress AND enabled
+  `resetTimeoutOnProgress`; without a token the SDK's 60s default stands, so the tool finishes
+  inside it and hands the decision back. Either way it RETURNS `still_waiting` rather than failing:
+  promising a long wait on a host that never agreed to one is a promise made at somebody else's
+  expense.
+
+  The 30s bound `SECURITY.md` states on every API call is unchanged — the wait the agent sees is
+  several bounded calls underneath, paced by this tool rather than by the server.
+
 ### Changed
 
 - **internal, no behaviour change:** the filesystem sweep's skip list moved to
