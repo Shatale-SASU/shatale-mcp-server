@@ -42,7 +42,7 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 19 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
+> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 20 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
 >
 > Two tools exist in the code and are deliberately not advertised, because a tool an agent can see is a tool it will try, and it cannot ask a follow-up question when the answer is a 404: `register_user_profile` / `get_onboarding_status` (the register→status loop cannot close on any deployed backend — the session id is never persisted, so the second step 404s forever). They return under `SHATALE_ONBOARDING_ENABLED` once that backend actually ships.
 >
@@ -112,6 +112,7 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 | `get_merchant_details` | yes | yes | yes | yes | yes | yes |
 | `request_purchase` | — | yes | yes | — | yes | yes |
 | `get_purchase_status` | — | yes | yes | — | yes | yes |
+| `await_purchase_approval` | — | yes | yes | — | yes | yes |
 | `cancel_purchase` | — | yes | yes | — | yes | yes |
 | `request_temporary_credentials` | — | yes | yes | — | yes | yes |
 | `get_credential_status` | — | yes | yes | — | yes | yes |
@@ -124,9 +125,9 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 | `get_checkout_customer` | — | yes | yes | — | yes | yes |
 | `register_user_profile` | — | — | yes | — | — | yes |
 | `get_onboarding_status` | — | — | yes | — | — | yes |
-| **total advertised** | **7** | **19** | **21** | **7** | **15** | **17** |
+| **total advertised** | **7** | **20** | **22** | **7** | **16** | **18** |
 
-Tools defined in the code: **21**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
+Tools defined in the code: **22**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
 
 #### What each tool does
 
@@ -141,6 +142,7 @@ Tools defined in the code: **21**. A tool appears in a column only if the server
 - `get_merchant_details` — Get detailed information about a specific merchant, including their MCP server configuration, available tools, rate limits, and capabilities. Use this after search_merchants to get integration details.
 - `request_purchase` — Request a purchase on behalf of a user. Shatale checks it against the spending policies and answers with a STATUS to act on — it does not complete the payment. The answer may say the user must finish onboarding, that a delegation is missing, that policy blocked it, or that it is waiting for approval. When it reaches payment_ready a card has been issued for it and paying at the merchant is the next step, yours to take.
 - `get_purchase_status` — Get the current status of a purchase request by its ID.
+- `await_purchase_approval` — Wait for the person to answer a purchase that needs their approval, instead of polling. Returns approved, declined, expired — or still_waiting, which means nobody has answered yet and you may call this again. It reads the decision; calling it never changes the purchase, and get_purchase_status keeps working alongside it.
 - `cancel_purchase` — Cancel a pending purchase request. Only works for purchases not yet executed.
 - `request_temporary_credentials` — Request temporary, short-lived merchant credentials (a relay email and a single-use relay password) for a merchant that requires an account. Raw card numbers are never returned here — card payment goes through request_purchase and the out-of-band checkout.
 - `get_credential_status` — Check the status of a temporary credential request.
