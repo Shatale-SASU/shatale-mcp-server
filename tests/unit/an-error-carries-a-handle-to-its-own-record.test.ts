@@ -23,9 +23,21 @@ import { ShataleApiError, extractRequestId } from '../../src/errors.js'
  * A pointer to a record is not the record: the detail stays where only somebody with log access can
  * read it. The leak test below is what holds that line, and it matters more than the feature.
  *
- * 1469 (audit_log_id) and 1470 (CSV export) are the same subject at other granularities and ride on
- * this plumbing — which is why they are one piece of work with three faces rather than three
- * tickets over one file.
+ * /!\ 1469 AND 1470 ARE **NOT** COVERED BY THIS FILE, AND THIS PARAGRAPH USED TO SAY THEY WERE
+ * (SHAT-3075). It read: "1469 (audit_log_id) and 1470 (CSV export) ... ride on this plumbing —
+ * which is why they are one piece of work with three faces". That is a claim, not a measurement,
+ * and it was wrong in the direction that stops the next reader from checking.
+ *
+ * Measured, in both repositories: neither `audit_log_id` nor `audit_log_url` is served, read or
+ * defined ANYWHERE. In the monorepo the only hit for either name is prose in
+ * docs/Discussions/2026-06-09-council-SHAT-1463-1465-backend-review.md; in this repository the only
+ * hit was the sentence above. The positive control that says the search worked rather than the
+ * searcher: the same greps for `request_id` return real code — src/errors.ts, src/client.ts,
+ * apps/api/api/v1/authorizations.go.
+ *
+ * What this file DOES cover is `request_id`, and only that. SHAT-1469 is OPEN: what would ride on
+ * this plumbing is a second field that does not exist yet, and until it is served there is nothing
+ * here to carry it.
  */
 
 let server: Server | undefined
