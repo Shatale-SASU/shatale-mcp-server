@@ -79,30 +79,25 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
 
-      - name: Create Jira issue on failure
+      # ⚠️ ONE TICKET PER DEFECT, NOT ONE PER NIGHT (SHAT-3141). This step used to POST a new issue
+      # with a date in its summary on every failure, which produced SHAT-3141, 3074, 2970, 2882, 2835
+      # and 2811 — six rows, six nights, ONE defect, all still open. The decision now lives in a
+      # script with its own controls, because a decision written inline in YAML is a decision nothing
+      # can run.
+      - name: Report to Jira (failure)
         if: failure()
-        run: |
-          # Extract failure summary
-          SUMMARY="MCP Nightly E2E failure $(date +%Y-%m-%d)"
-          BODY="Nightly E2E tests failed.\n\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\nCheck artifacts for server logs."
+        run: node scripts/nightly-jira.mjs --outcome=failed --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          JIRA_URL: ${{ secrets.JIRA_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
-          curl -s -X POST \
-            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${JIRA_URL}/rest/api/3/issue" \
-            -d "{
-              \"fields\": {
-                \"project\": {\"key\": \"SHAT\"},
-                \"issuetype\": {\"id\": \"10008\"},
-                \"summary\": \"${SUMMARY}\",
-                \"description\": {
-                  \"type\": \"doc\",
-                  \"version\": 1,
-                  \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"${BODY}\"}]}]
-                },
-                \"labels\": [\"nightly\", \"e2e\", \"auto-created\"]
-              }
-            }" >/dev/null 2>&1 || true
+      # And the other half: when the nightly passes and a report is open, say so THERE. A ticket that
+      # only ever grows becomes permanent. It comments; it does not close — whether the cause was
+      # understood is a person's judgement, and a green run is not that judgement.
+      - name: Report to Jira (recovery)
+        if: success()
+        run: node scripts/nightly-jira.mjs --outcome=passed --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           JIRA_URL: ${{ secrets.JIRA_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}

@@ -8,7 +8,7 @@
     "SECURITY.md",
     "CHANGELOG.md"
   ],
-  "description": "MCP server for Shatale \u2014 AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (18 tools with a sandbox key; the per-mode matrix is in the README)",
+  "description": "MCP server for Shatale — AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (18 tools with a sandbox key; the per-mode matrix is in the README)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,7 +28,8 @@
     "gate:readme:controls": "node scripts/readme-tools-gate.controls.mjs && node scripts/readme-tools-gate.exec-control.mjs",
     "pretest:public": "tsc",
     "test:public": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gate:nightly-jira:controls": "node scripts/nightly-jira.controls.mjs"
   },
   "keywords": [
     "mcp",
