@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { McpTestClient } from '../harness/mcpClient'
 import { testId, testEmail } from '../harness/testIds'
+import { rosterByMode } from '../harness/toolRoster'
 
 const TEST_KEY = process.env.SHATALE_TEST_KEY
 const describeIfKey = TEST_KEY ? describe : describe.skip
@@ -16,7 +17,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists the 17 backed tools in sandbox mode (the onboarding pair stays withheld)', async () => {
+  test('lists exactly what sandbox mode advertises (the onboarding pair stays withheld)', async () => {
     const tools = await client.listTools()
     // 17. Two tools are withheld because their flow cannot complete on any deployed backend:
     // the register→status onboarding pair (the session id is never persisted, SHAT-1662).
@@ -41,7 +42,10 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     // The count is reachable WITHOUT a live key, because the roster is decided by the key's PREFIX
     // and the env flags before any request is made (src/tools/common.ts isSandboxKey). Measured with
     // SHATALE_TEST_KEY=sk_sandbox_<anything>: 17, and this assertion failed at 15.
-    expect(tools).toHaveLength(17)
+    // 🔴 SHAT-2674: the count is replaced by the roster measured from the running server for this
+    // mode. Every repair of this number so far was the number itself, which buys silence until the
+    // next tool — and the comment above records it going wrong three times in a row.
+    expect([...tools].sort()).toEqual(await rosterByMode('sandbox'))
 
     // Guest tools
     expect(tools).toContain('explain_shatale')
