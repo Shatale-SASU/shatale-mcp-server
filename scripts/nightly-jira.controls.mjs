@@ -15,12 +15,23 @@
 // ⚠️ THE LAST ONE IS A CONTROL, NOT A CASE. If "nothing" were ever an action, the script would post
 // "still fine" every morning — the same noise it exists to end, wearing a friendlier face.
 //
+// ⚠️ HOW THIS FILE FAILS, SAID AT THE TOP BECAUSE IT IS NOT VISIBLE FROM THE CHECKS. Every check
+// below only PRINTS and increments a counter; the process exits non-zero once, at the end. Read
+// quickly, eight calls with no throw look like a script that reports and carries on — that is, like a
+// control that cannot fail. It can: `process.exit(bad === 0 ? 0 : 1)` is the last line, and CI reads
+// exactly that. Named here after a reviewer had to reach the bottom of the file to be sure.
+//
+// ⚠️ AND THE COUNT IS PRINTED WITH THE VERDICT, so a SHRUNKEN set cannot pass as a healthy one.
+// "controls: all passed" is true of zero checks; "controls: 12 checks, all passed" is not.
+//
 // Run: node scripts/nightly-jira.controls.mjs
 
 import { chooseAction, searchJql } from './nightly-jira.mjs'
 
 let bad = 0
+let ran = 0
 const check = (why, got, want) => {
+  ran++
   const g = JSON.stringify(got)
   const w = JSON.stringify(want)
   if (g !== w) {
@@ -104,5 +115,13 @@ if (/\d{4}-\d{2}-\d{2}/.test(jql)) {
   bad++
 }
 
-console.log(bad === 0 ? 'controls: all passed' : `controls: ${bad} FAILED`)
+// A floor on the file itself: every assertion here is "for this case …", and no cases at all
+// satisfies all of them. If a future edit leaves the checks unreachable, this is what says so.
+if (ran < 8) {
+  console.error(`control FAILED: only ${ran} case(s) ran; this file defines more, so something above ` +
+    `stopped executing and "all passed" would be a verdict about nothing`)
+  bad++
+}
+
+console.log(bad === 0 ? `controls: ${ran} checks, all passed` : `controls: ${bad} FAILED of ${ran}`)
 process.exit(bad === 0 ? 0 : 1)
