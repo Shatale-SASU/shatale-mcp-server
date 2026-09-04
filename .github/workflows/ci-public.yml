@@ -84,6 +84,13 @@ jobs:
       - name: and the gate must still discriminate (negative controls)
         run: npm run gate:readme:controls
 
+      # ⚠️ THE NIGHTLY'S REPORTER DECIDES WHETHER A DEFECT GETS ONE TICKET OR SIX, AND UNTIL NOW THAT
+      # DECISION LIVED INLINE IN nightly.yml — where nothing could run it (SHAT-3141). Its controls run
+      # here, on every pull request, because a decision nobody can execute is a decision nobody checks.
+      # They need no network and no secrets: they drive the pure branch chooser.
+      - name: the nightly reporter files one ticket per defect, not one per night
+        run: npm run gate:nightly-jira:controls
+
       - name: Upload server logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
