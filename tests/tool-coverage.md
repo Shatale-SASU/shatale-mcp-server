@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-08-27 (SHAT-2698)
+Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
 
 > ⚠️ **THIS IS A HAND-MAINTAINED SNAPSHOT, AND IT HAD DRIFTED BY THREE TOOLS.** The matrix listed
 > 17 rows and reported "Happy path 17/17 (100%)" while the code defined **20** tools. The three it
@@ -56,19 +56,20 @@ Last updated: 2026-08-27 (SHAT-2698)
 | 20 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
 | 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 | 22 | `await_purchase_approval` | ✅ | ✅ | - | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
+| 23 | `reveal_card` | ✅ | - | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` was **blocked when a sandbox key is set** — no longer true since SHAT-2373 made `/v1/purchases` serve sandbox keys deliberately (environment stamped from the key). The client-side refusal was removed in SHAT-2611; `sandbox_simulate_authorization` remains the narrower tool for a policy decision without a purchase.
 
 ## Coverage Summary
 
-- **Tools defined in code**: 22
-- **Happy path**: 22/22
-- **Input validation**: 6/22 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Tools defined in code**: 23
+- **Happy path**: 23/23
+- **Input validation**: 6/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 28 refusal cases plus 2 positive
   controls), which this table predates.
-- **Contract (Zod)**: 11/22
-- **Security edge cases**: 4/22 + global injection/leak tests + `request_purchase` sandbox-guard
+- **Contract (Zod)**: 12/23
+- **Security edge cases**: 5/23 + global injection/leak tests + `request_purchase` sandbox-guard
 
 > These four fractions are no longer hand-maintained claims: `tool-coverage-matches-the-roster.test.ts`
 > counts the ✅ in each column and the live roster, and fails if either half of a fraction drifts.
