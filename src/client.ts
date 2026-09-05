@@ -420,6 +420,27 @@ export class ShataleClient {
   // Returns the two honest identities for a purchase's checkout: billing_identity (Shatale, the
   // cardholder on the pool card) and merchant_customer_identity (the end-user / buyer). Live money
   // path (agent-scoped by the API key's publisher); no card credentials here.
+  // The reveal path the redaction allowlist has been holding open since SHAT-2610. `redact.ts:71`
+  // lists it with the comment "for when the client learns to call it" — this is the client learning.
+  //
+  // ⚠️ WHY THIS GOES THROUGH `request` LIKE EVERYTHING ELSE, AND MUST. The PCI scrub is applied ONCE,
+  // in `request` (client.ts:277), and it decides by PROVENANCE: `pathReturnsOurCard(path)`. A method
+  // that fetched this path any other way — its own fetch, a different helper — would return the PAN
+  // having passed no boundary at all, and nothing in the type system would say so. The scrub is not a
+  // filter this method opts into; it is the door this method must not walk around.
+  //
+  // The endpoint is agent-scoped and journalled: every call writes card_credential_access_logs
+  // (apps/api/internal/purchases/pgx/card_reveal_repo.go:149). It returns this card's PAN, expiry and
+  // CVV and NOT `three_ds_password` — that removal is the point of SHAT-2323, because one pool 3DS
+  // password is shared by every card in the pool and revealing it once discloses it for all of them.
+  async getCardCredentials(id: string): Promise<unknown> {
+    return this.request(
+      'GET',
+      `/v1/purchases/${encodeURIComponent(id)}/card-credentials`,
+      undefined,
+    )
+  }
+
   async getCheckoutIdentity(id: string): Promise<unknown> {
     // The id sits in the MIDDLE and the path ends in a noun — the shape that fooled the old
     // heuristic in both of its incarnations. It is still a caller's id.
