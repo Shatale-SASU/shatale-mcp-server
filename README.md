@@ -42,7 +42,7 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 20 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
+> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 21 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674 and the card reveal (`reveal_card`) added by SHAT-3023. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
 >
 > Two tools exist in the code and are deliberately not advertised, because a tool an agent can see is a tool it will try, and it cannot ask a follow-up question when the answer is a 404: `register_user_profile` / `get_onboarding_status` (the register→status loop cannot close on any deployed backend — the session id is never persisted, so the second step 404s forever). They return under `SHATALE_ONBOARDING_ENABLED` once that backend actually ships.
 >
@@ -123,11 +123,12 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 | `sandbox_approve_purchase` | — | yes | yes | — | — | — |
 | `get_checkout_cardholder` | — | yes | yes | — | yes | yes |
 | `get_checkout_customer` | — | yes | yes | — | yes | yes |
+| `reveal_card` | — | yes | yes | — | yes | yes |
 | `register_user_profile` | — | — | yes | — | — | yes |
 | `get_onboarding_status` | — | — | yes | — | — | yes |
-| **total advertised** | **7** | **20** | **22** | **7** | **16** | **18** |
+| **total advertised** | **7** | **21** | **23** | **7** | **17** | **19** |
 
-Tools defined in the code: **22**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
+Tools defined in the code: **23**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
 
 #### What each tool does
 
@@ -153,6 +154,7 @@ Tools defined in the code: **22**. A tool appears in a column only if the server
 - `sandbox_approve_purchase` — Manually approve a sandbox purchase that is pending user/admin approval (simulates the human-in-the-loop approval beat).
 - `get_checkout_cardholder` — The CARDHOLDER / billing identity to put in a merchant's cardholder and billing-address fields: Shatale (the legal owner of the card being used). This is NOT the buyer — use get_checkout_customer for the buyer/customer fields. This returns an IDENTITY only: the card number, expiry and CVV are NOT returned here; card entry is handled out-of-band.
 - `get_checkout_customer` — The BUYER / customer identity to put in a merchant's name, email and customer/donor fields: the end-user this purchase is for. This is NOT the cardholder — use get_checkout_cardholder for the cardholder/billing fields.
+- `reveal_card` — Reveal the card credentials (number, expiry, CVV) of the Shatale card issued for THIS purchase, so the agent can complete a merchant checkout that has no out-of-band path. Only the card WE issued for this purchase is ever returned — a customer's own instrument is not available here and is stripped from any other response. Use get_checkout_cardholder and get_checkout_customer for the identity fields; this tool is only for the card fields. Every call is recorded in the credential access log.
 - `register_user_profile` — Submit user profile data to Shatale for a new user. The user will receive a verification link to confirm their identity and data. This does NOT create an active account — the user must verify. Use this when you have user details but no immediate purchase intent, or to pre-register before purchasing.
 - `get_onboarding_status` — Check the status of a user onboarding/registration session. Returns whether the user has verified their email, completed their profile, and granted any required consents.
 <!-- END-generated:shatale-tool-matrix -->
