@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **`reveal_card`** — reveal the card credentials (number, expiry, CVV) of the Shatale card issued for
+  a given purchase, so an agent can complete a merchant checkout that has no out-of-band path
+  (SHAT-3023). Only the card **we** issued for that purchase is ever returned; a customer's own
+  instrument is not available here and is stripped from every other response.
+
+  ⚠️ **The redaction boundary is unchanged, and the tool holds none of it.** The PCI scrub runs once,
+  inside `ShataleClient.request`, and decides by the PATH the client used — the allowlist in
+  `src/redact.ts` has listed `/v1/purchases/{id}/card-credentials` since SHAT-2610, with the comment
+  "for when the client learns to call it". This release is the client learning; nothing was widened to
+  admit it. A tool wired to a neighbouring URL would return a redacted body, which is the failure this
+  design intends.
+
+  It does **not** return `three_ds_password`: one static 3DS password is shared by every card in the
+  pool, and the endpoint stopped returning it under SHAT-2323. Every call is recorded server-side in
+  the credential access log — the agent cannot suppress the record by how it calls.
+
+  Registered wherever the checkout tools are — sandbox, and live behind the same explicit money-GO that
+  already gates purchases and credentials.
+
 - **`await_purchase_approval`** — wait for the person to answer a purchase that needs their
   approval, instead of polling. Returns `approved`, `declined`, `expired`, or `still_waiting`,
   which means nobody has answered yet and the tool may be called again (SHAT-2802).

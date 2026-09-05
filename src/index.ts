@@ -17,6 +17,7 @@ import { createGuestTools } from './tools/guest.js'
 import { createPurchaseTools } from './tools/purchase.js'
 import { createCredentialTools } from './tools/credentials.js'
 import { createCheckoutTools } from './tools/checkout.js'
+import { createRevealTools } from './tools/reveal.js'
 import { createSandboxTools } from './tools/sandbox.js'
 import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
@@ -287,12 +288,17 @@ if (!isGuest) {
     // The route is mounted in the ordinary purchases group behind RequireAPIKeyScope only — no
     // SandboxOnly, no live-only middleware (main.go:5448).
     registerModule(createCheckoutTools(client))
+    // reveal_card goes wherever the checkout tools go, because it completes the SAME job: the
+    // fields of a merchant form. Splitting them by mode would leave an agent able to read the
+    // cardholder and not the card — a checkout it can start and cannot finish.
+    registerModule(createRevealTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
     // live mode is onboarding-only (can drive registration, cannot move money).
     registerModule(createPurchaseTools(client, { isSandbox: false }))
     registerModule(createCredentialTools(client))
     registerModule(createCheckoutTools(client))
+    registerModule(createRevealTools(client))
   }
 }
 

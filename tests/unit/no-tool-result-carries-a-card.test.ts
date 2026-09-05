@@ -7,6 +7,7 @@ import { createCredentialTools } from '../../src/tools/credentials.js'
 import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
 import { createCheckoutTools } from '../../src/tools/checkout.js'
+import { createRevealTools } from '../../src/tools/reveal.js'
 import { createSandboxTools } from '../../src/tools/sandbox.js'
 import { createCommonTools } from '../../src/tools/common.js'
 import type { ToolModule } from '../../src/types.js'
@@ -67,6 +68,7 @@ beforeAll(async () => {
     createOnboardingTools(client, { enabled: true }),
     createCatalogTools(client),
     createCheckoutTools(client),
+    createRevealTools(client),
     createSandboxTools(client),
     createCommonTools(client, {
       isGuest: false,
@@ -91,6 +93,7 @@ const args: Record<string, Record<string, unknown>> = {
     publisher_user_id: 'u', agent_id: 'a', merchant: 'm', amount: 2.5, currency: 'EUR', description: 'd',
   },
   get_purchase_status: { purchase_id: 'p_1' },
+  reveal_card: { purchase_id: 'p_1' },
   cancel_purchase: { purchase_id: 'p_1', reason: 'r' },
   request_temporary_credentials: {
     publisher_user_id: 'u', agent_id: 'a', merchant_domain: 'example.com', purpose: 'p',
@@ -139,7 +142,7 @@ describe('no tool result carries a card (SHAT-1463 / PCI)', () => {
   // So the exception is BY TOOL and written down. Everything not named keeps the old rule, and a
   // tool added tomorrow is covered by default — the list is an allowlist, and its absence is a
   // refusal.
-  const REVEALS_OUR_ISSUED_CARD = new Set(['sandbox_approve_purchase'])
+  const REVEALS_OUR_ISSUED_CARD = new Set(['reveal_card', 'sandbox_approve_purchase'])
 
   it('every tool that calls out returns no PAN and no CVV, except where we hand over our own card', async () => {
     const leaked: string[] = []
