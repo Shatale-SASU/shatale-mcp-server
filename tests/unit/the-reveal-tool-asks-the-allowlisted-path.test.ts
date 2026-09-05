@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { redactPurchaseCard, pathReturnsOurCard } from '../../src/redact.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
-import type { ShataleClient } from '../../src/client.js'
+import { ShataleClient } from '../../src/client.js'
+import type { ShataleClient as ShataleClientType } from '../../src/client.js'
 
 // SHAT-3023. The redaction allowlist has held `/v1/purchases/{id}/card-credentials` open since
 // SHAT-2610, with the comment "for when the client learns to call it" (redact.ts:71). This is the
@@ -30,22 +31,42 @@ const revealed = {
   card: { number: '4242424242424242', cvv: '123', exp_month: '12', exp_year: '27' },
 }
 
+const BASE = 'https://api.example.test'
+
+// ⚠️ THE DOUBLE MUST NOT BE THE SUBJECT. A fake client that BUILDS the path itself and hands it back
+// tests the fake: point the real method at a neighbouring URL and such a test stays green. Measured —
+// the first version of this file did exactly that, and the mutant survived it. So the real client runs
+// and `fetch` is what gets stubbed, because the URL that reaches fetch is the only URL that exists.
+function captureFetch() {
+  const fn = vi.fn(async () =>
+    new Response(JSON.stringify(revealed), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
+const pathOf = (fn: ReturnType<typeof captureFetch>, i = 0) =>
+  new URL(String(fn.mock.calls[i][0])).pathname
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('the reveal tool asks the path the allowlist was holding open', () => {
-  it('the path the tool causes to be requested is the allowlisted one', async () => {
-    const asked: string[] = []
-    const client = {
-      getCardCredentials: async (id: string) => {
-        asked.push(`/v1/purchases/${encodeURIComponent(id)}/card-credentials`)
-        return revealed
-      },
-    } as unknown as ShataleClient
+  it('the URL that reaches fetch is one the scrub lets through', async () => {
+    const fn = captureFetch()
+    const client = new ShataleClient(BASE, 'sk_sandbox_abc')
 
-    const mod = createRevealTools(client)
-    await mod.handlers.reveal_card({ purchase_id: PURCHASE })
+    await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE })
 
-    expect(asked).toHaveLength(1)
-    // The assertion is not "the string looks right" but "the scrub would let this through".
-    expect(pathReturnsOurCard(asked[0])).toBe(true)
+    expect(fn).toHaveBeenCalledTimes(1)
+    // Not "the string looks right" but "the scrub would let this through" — the same predicate the
+    // client itself consults, asked of the URL that actually went out.
+    expect(pathOf(fn)).toBe(REVEAL)
+    expect(pathReturnsOurCard(pathOf(fn))).toBe(true)
   })
 
   it('a body from that path keeps the card the agent was given to pay with', () => {
@@ -68,13 +89,13 @@ describe('the reveal tool asks the path the allowlist was holding open', () => {
   })
 
   it('an empty reveal is refused rather than returned as a success', async () => {
-    const client = { getCardCredentials: async () => ({}) } as unknown as ShataleClient
+    const client = { getCardCredentials: async () => ({}) } as unknown as ShataleClientType
     const res = await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE })
     expect(JSON.stringify(res)).toContain('card_credentials_unavailable')
   })
 
   it('the tool is declared once, and its name is the one the epic asked for', () => {
-    const client = { getCardCredentials: async () => revealed } as unknown as ShataleClient
+    const client = { getCardCredentials: async () => revealed } as unknown as ShataleClientType
     const names = createRevealTools(client).tools.map((t) => t.name)
     expect(names).toEqual(['reveal_card'])
   })
