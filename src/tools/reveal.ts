@@ -1,8 +1,8 @@
-import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
+import { requireId } from '../validate.js'
 
 // reveal_card — the agent-scoped reveal of the card Shatale issued for THIS purchase (SHAT-3023).
 //
@@ -26,9 +26,11 @@ import { errorResult, refusal } from '../errors.js'
 // (apps/api/internal/purchases/pgx/card_reveal_repo.go:149), not by this server. The agent cannot
 // suppress the record by choosing how it calls.
 
-const purchaseIdSchema = z.object({
-  purchase_id: z.string().min(1, 'purchase_id is required'),
-})
+// ⚠️ requireId, NOT a bare `.min(1)`. validate.ts says why in its own words: «"   " is not an id, and
+// it survives a bare .min(1) while producing a URL with an encoded space where a key should be». This
+// tool shipped with the bare form and sent GET /v1/purchases/%20%20%20/card-credentials — measured by
+// execution, not by reading. The neighbour it was copied from (checkout.ts:13) carries the same defect
+// and predates this change; copying a sibling copies its bugs, and the sibling is not the spec.
 
 function hasCard(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && Object.keys(v as object).length > 0
@@ -61,15 +63,10 @@ export function createRevealTools(client: ShataleClient): ToolModule {
     ],
     handlers: {
       reveal_card: async (args) => {
-        const parsed = purchaseIdSchema.safeParse(args)
-        if (!parsed.success) {
-          return textResult(
-            `Invalid input: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
-            true,
-          )
-        }
+        const id = requireId(args, 'purchase_id')
+        if (!id.ok) return id.result
         try {
-          const data = await client.getCardCredentials(parsed.data.purchase_id)
+          const data = await client.getCardCredentials(id.value)
           // Fail loud rather than hand back an empty-but-successful reveal. An agent given `{}` at a
           // live checkout form fills nothing and reports success, and the purchase stalls with no cause
           // recorded anywhere. The usual reason is that the purchase is not payment_ready yet.

@@ -56,7 +56,7 @@ Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
 | 20 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
 | 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 | 22 | `await_purchase_approval` | ✅ | ✅ | - | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
-| 23 | `reveal_card` | ✅ | - | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued |
+| 23 | `reveal_card` | ✅ | ✅ | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` was **blocked when a sandbox key is set** — no longer true since SHAT-2373 made `/v1/purchases` serve sandbox keys deliberately (environment stamped from the key). The client-side refusal was removed in SHAT-2611; `sandbox_simulate_authorization` remains the narrower tool for a policy decision without a purchase.
 
@@ -64,7 +64,7 @@ Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
 
 - **Tools defined in code**: 23
 - **Happy path**: 23/23
-- **Input validation**: 6/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Input validation**: 7/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 28 refusal cases plus 2 positive
   controls), which this table predates.

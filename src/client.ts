@@ -438,6 +438,10 @@ export class ShataleClient {
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/card-credentials`,
       undefined,
+      // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
+      // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's
+      // purchase id) would answer with a sentence that admits both causes instead of naming one.
+      'caller-id',
     )
   }
 
