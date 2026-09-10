@@ -23,8 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   design intends.
 
   It does **not** return `three_ds_password`: one static 3DS password is shared by every card in the
-  pool, and the endpoint stopped returning it under SHAT-2323. Every call is recorded server-side in
-  the credential access log — the agent cannot suppress the record by how it calls.
+  pool, and the endpoint stopped returning it under SHAT-2323. Every SUCCESSFUL reveal is recorded
+  server-side in the credential access log — the agent cannot suppress the record by how it calls.
+  A refused reveal discloses nothing and is therefore not in that log; it is recorded separately
+  server-side (SHAT-3288), because a log of disclosures that also held refusals would stop
+  answering the one question it exists for: who holds this secret.
 
   Registered wherever the checkout tools are — sandbox, and live behind the same explicit money-GO that
   already gates purchases and credentials.
