@@ -46,15 +46,26 @@ jobs:
       # This repo already knows the rule — ci-public.yml and publish.yml both open with
       # `set -euo pipefail`. Nightly is the one place it was missed, and it is the one workflow
       # where nobody is watching the run live.
-      # SHAT-3340 — the live purchase chain is DEFERRED, and a skip nobody sees is a pass.
-      # This run does pass --reporter=verbose, so the skipped suite's name (which carries the same
-      # sentence) is in the log — but buried in it. A ::notice:: surfaces in the run summary, which
-      # is where a nightly failure is actually read. Conditional, so it stops claiming the block is
-      # off the moment somebody enables it.
+      # SHAT-3340 — the live purchase chain is STILL OFF HERE, and the reason has CHANGED.
+      #
+      # 🔴 THE OLD REASON IS NO LONGER TRUE, AND LEAVING IT WOULD BE WORSE THAN LEAVING NOTHING: it
+      # said the account owning SHATALE_TEST_KEY has zero agents. The secret was replaced on
+      # 2026-09-14 with a key whose account owns agents, and ci-sandbox.yml now runs the chain. A
+      # recorded reason that has expired gets repeated; an absent one gets asked about.
+      #
+      # ▌THE REASON IT IS OFF HERE IS THE ACCOUNT, NOT THE KEY. The replacement key belongs to a
+      # PERSON'S sandbox account. This workflow runs unattended every night, so enabling the chain
+      # here would create purchases every night in an account somebody works in by hand. That is a
+      # decision about whose sandbox we spend, and it is the owner's — asked, not assumed. Either
+      # answer removes this block: a separate account with an agent, or a yes to sharing.
+      #
+      # This run passes --reporter=verbose, so a skipped suite's name is in the log — buried in it.
+      # A ::notice:: surfaces in the run summary, which is where a nightly failure is actually read.
+      # Conditional, so it stops claiming the block is off the moment somebody enables it.
       - name: The live purchase chain is deferred, not passing
         if: env.SHATALE_E2E_LIVE_CHAIN != '1'
         run: |
-          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run. Enable with SHATALE_E2E_LIVE_CHAIN=1 once SHAT-3340 is closed: the account owning SHATALE_TEST_KEY has zero agents, and no API key can create one. The deferral is registered in shatale-api (.github/workflows/deferral-conditions.yml), which will REPORT when SHAT-3340 closes - it cannot lift this skip from another repository."
+          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run in this NIGHTLY. It does run on demand in ci-sandbox.yml, which sets SHATALE_E2E_LIVE_CHAIN=1 (SHAT-3340: the secret was replaced on 2026-09-14 with a key whose account owns an agent - the old one owned zero, and no API key can create one). It is off HERE because that key is a person's sandbox account and this workflow is unattended: purchases every night in an account somebody works in by hand is the owner's decision, not the pipeline's."
 
       - name: Run full test suite
         id: tests

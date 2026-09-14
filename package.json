@@ -29,7 +29,8 @@
     "pretest:public": "tsc",
     "test:public": "vitest run",
     "test:watch": "vitest",
-    "gate:nightly-jira:controls": "node scripts/nightly-jira.controls.mjs"
+    "gate:nightly-jira:controls": "node scripts/nightly-jira.controls.mjs",
+    "gate:live-chain:controls": "node scripts/live-chain-executed.controls.mjs"
   },
   "keywords": [
     "mcp",

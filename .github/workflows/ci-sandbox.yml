@@ -10,6 +10,25 @@ jobs:
   sandbox-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    # SHAT-3340 — THE LIVE CHAIN IS ON HERE, AND THIS IS THE LINE THAT TURNS IT ON.
+    #
+    # The blocker is gone: measured across two dispatches, the key in Actions secrets saw ZERO
+    # agents while a working key saw TWO on the same host — one secret name, two sandbox accounts,
+    # and no API key can create an agent by design. The secret was replaced on 2026-09-14 with a key
+    # whose account owns agents (its timestamp moved 2026-05-11 -> 2026-09-14).
+    #
+    # ⚠️ AND REMOVING THE CAUSE DOES NOT REMOVE THE MECHANISM. The chain was held off by this
+    # separate opt-in, which the fixed key does not touch: a deferral whose reason has expired but
+    # whose switch nobody flips is a test that never runs. Hence the flag here, and hence the count
+    # below — this workflow must not be able to report the chain green without it having run.
+    #
+    # ▌NOT SET IN nightly.yml, ON PURPOSE: that key is a PERSON'S sandbox account, so an unattended
+    # nightly would create purchases in an account somebody works in by hand. Enabling it there is
+    # the owner's decision, asked rather than assumed.
+    env:
+      SHATALE_E2E_LIVE_CHAIN: '1'
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,19 +47,34 @@ jobs:
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
 
-      # SHAT-3340 — the live purchase chain is DEFERRED, and a skip nobody sees is a pass.
-      # The default vitest reporter prints neither skipped test names nor logs from passing tests
-      # (both measured 2026-09-14), so the notice is printed here, in the channel this run is read
-      # in. Conditional, so it stops claiming the block is off the moment somebody enables it.
+      # ⚠️ THE NOTICE STAYS AS A FALLBACK, AND IT IS NOT LEFTOVER TEXT. It is conditional on the env
+      # variable, so with the opt-in set above it never prints — and the day somebody removes that
+      # line, this run says so in the channel it is read in instead of passing quietly. The default
+      # vitest reporter prints neither skipped test names nor logs from passing tests (both measured
+      # 2026-09-14), which is why a removed opt-in would otherwise look exactly like a green run.
       - name: The live purchase chain is deferred, not passing
         if: env.SHATALE_E2E_LIVE_CHAIN != '1'
         run: |
-          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run. Enable with SHATALE_E2E_LIVE_CHAIN=1 once SHAT-3340 is closed: the account owning SHATALE_TEST_KEY has zero agents, and no API key can create one. The deferral is registered in shatale-api (.github/workflows/deferral-conditions.yml), which will REPORT when SHAT-3340 closes - it cannot lift this skip from another repository."
+          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run, because SHATALE_E2E_LIVE_CHAIN is not 1 in this run - this job sets it, so seeing this notice means the opt-in was removed. SHAT-3340 (the blocker that once justified it) is closed: the secret was replaced on 2026-09-14 with a key whose account owns an agent. Restore the job-level env, or say here why the chain must stay off."
 
       - name: Run all tests (public + sandbox)
-        run: npm test
+        run: npm test -- --reporter=default --reporter=json --outputFile=/tmp/vitest-sandbox.json
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
+
+      # 🔴 THE ACCEPTANCE IS A NUMBER, NOT THE COLOUR OF THE STEP ABOVE. A skipped vitest suite makes
+      # the run PASS: for months this workflow was green while the live chain did not execute, and
+      # nothing in the run said so. This reads the run's own JSON report and answers with a count —
+      # how many cases of the live suite executed — with three distinct exit codes, because "it was
+      # skipped" (1) and "I could not read the report" (2) are different facts and one non-zero
+      # would merge them.
+      #
+      # ⚠️ `if: always()` ON PURPOSE. If the suite FAILS, the step above is already red — but the
+      # question "did it run at all" still has to be answered, or a failure elsewhere hides a chain
+      # that never started. The controls for this script run in ci-public.yml on every pull request.
+      - name: The live chain must have EXECUTED, not been skipped
+        if: always()
+        run: node scripts/live-chain-executed.mjs /tmp/vitest-sandbox.json
 
       - name: Upload server logs on failure
         if: failure()

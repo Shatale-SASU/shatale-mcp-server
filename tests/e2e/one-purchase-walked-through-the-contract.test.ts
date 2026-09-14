@@ -28,24 +28,26 @@ import { MockUpstream } from '../harness/mockUpstream'
 
 const TEST_KEY = process.env.SHATALE_TEST_KEY
 
-// ⚠️ SHAT-3340 — THE LIVE CHAIN IS OFF BY AN OPT-IN, AND THAT OPT-IN IS DEFERRED, NOT FORGOTTEN.
+// ⚠️ SHAT-3340 — THE OPT-IN IS NOW SET WHERE THE RUN IS WATCHED, AND DELIBERATELY NOT WHERE IT IS NOT.
 //
-// Measured 2026-09-14 across two ci-sandbox dispatches: the key in Actions secrets sees ZERO agents
-// while a working key sees TWO on the same host — one secret name, two sandbox accounts. No API key
-// can create an agent by design, so nothing in this repository can fix it; the live chain cannot
-// pass until somebody seeds an agent on the account that owns the secret, or swaps the secret.
+// The blocker is GONE, and what it was is recorded because the reason a skip existed is the first
+// thing a later reader needs: measured 2026-09-14 across two ci-sandbox dispatches, the key in
+// Actions secrets saw ZERO agents while a working key saw TWO on the same host — one secret name,
+// two sandbox accounts, and no API key can create an agent by design. The secret was replaced on
+// 2026-09-14 with a key whose account owns agents (timestamp moved 2026-05-11 → 2026-09-14), so
+// the chain CAN pass from here now.
 //
-// 🔴 BOTH OBVIOUS ANSWERS WERE WRONG, AND FOR REASONS THIS REPOSITORY HAS ALREADY PAID FOR:
-//   · leaving it red nightly teaches readers not to read the workflow, and other checks live in it;
-//   · a bare opt-in nobody will ever set is a test that never runs — green by inability.
-// The opt-in's only hole is a skip nobody is obliged to lift. So the skip is REGISTERED as a
-// deferral whose flip condition is the state of another ticket (SHAT-3340): when 3340 closes, the
-// deferral registry in shatale-api reddens by itself and says the deferred work is undone.
+// ▌ci-sandbox.yml sets SHATALE_E2E_LIVE_CHAIN=1. nightly.yml does NOT, and that is a decision
+// rather than an omission: the replacement key is a PERSON'S sandbox account, so an unattended
+// nightly would create purchases in an account somebody works in by hand. Enabling it there is the
+// owner's call — asked, not assumed — and until it is answered nightly.yml carries the true reason
+// instead of the old one.
 //
-// ⚠️ THE REGISTRY CANNOT LIFT THIS SKIP, AND THAT IS DELIBERATE, NOT HALF-BUILT. It lives in
-// `shatale-api/.github/workflows/deferral-conditions.yml` and this block lives here; a guard in one
-// repository does not edit another. It REPORTS that the moment has come. Said in both places, so
-// the registry's red is not read as "something is undone in shatale-api" by whoever sees it first.
+// 🔴 AND A LIFTED OPT-IN IS NOT A LIFTED SKIP, WHICH IS WHY THE CHECK BELOW IS NOT THE COLOUR OF
+// THE RUN. A skipped vitest suite makes the run PASS, and the default reporter prints neither
+// skipped suite names nor logs from passing tests (both measured). So the acceptance is a COUNT,
+// read from the run's own JSON report by scripts/live-chain-executed.mjs: how many cases of this
+// suite executed. It answers 1 for "skipped", 2 for "could not measure", and 0 only with a number.
 const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
 
 /**
@@ -55,19 +57,20 @@ const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
  * permanent. Asserted by a test that always runs, below.
  */
 const LIVE_CHAIN_DISABLED =
-  'DISABLED, NOT PASSED — set SHATALE_E2E_LIVE_CHAIN=1 (and SHATALE_TEST_KEY) to run it. ' +
-  'Deferred by SHAT-3340: the key in Actions secrets owns zero agents, and no API key can create ' +
-  'one, so the chain cannot pass from here. The deferral is registered in shatale-api ' +
-  '(.github/workflows/deferral-conditions.yml) and will REPORT when SHAT-3340 closes — it cannot ' +
-  'lift this skip from another repository. The deferred work belongs to SHAT-3023; the condition is ' +
-  'SHAT-3340, which is why that registration is a deferral and not a ring.'
+  'DISABLED, NOT PASSED — this block did not run. Set SHATALE_E2E_LIVE_CHAIN=1 with a ' +
+  'SHATALE_TEST_KEY whose account owns an agent. ci-sandbox.yml sets it (SHAT-3340: the secret was ' +
+  'replaced on 2026-09-14 with such a key; the old one owned zero agents and no API key can create ' +
+  'one). nightly.yml deliberately does not: that key is a person\'s sandbox account, and an ' +
+  'unattended nightly would create purchases in an account somebody works in by hand — the ' +
+  'owner\'s call, asked rather than assumed. Seeing this sentence in a ci-sandbox run means the ' +
+  'opt-in was removed, not that the chain is still blocked.'
 
 const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
 
 // A test that always runs, because everything above is prose the moment nothing reads it — and prose
 // is exactly what a deleted opt-in leaves behind looking correct. It does not assert the block is
-// disabled (it is, by default, and saying so would go red the day somebody legitimately enables it);
-// it asserts that the sentence a reader is given still names the way out and the ticket.
+// disabled (ci-sandbox.yml now enables it, and asserting otherwise would go red on the very change
+// that fixed the ticket); it asserts that the sentence a reader is given still names the way out.
 describe('the live chain says it is disabled rather than passed', () => {
   test('the reason names what enables it and the ticket that ends the deferral', () => {
     // ⚠️ WHETHER THE SENTENCE ABOVE REACHES ANYONE DEPENDS ON THE RUNNER, AND THE TWO DISAGREE —
@@ -78,8 +81,19 @@ describe('the live chain says it is disabled rather than passed', () => {
     // it as a `::notice::` of their own, and the test below is what stops the texts drifting.
     expect(LIVE_CHAIN_DISABLED).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
     expect(LIVE_CHAIN_DISABLED).toMatch(/SHAT-3340/)
-    // The cross-repository split is the part a later reader gets wrong first.
-    expect(LIVE_CHAIN_DISABLED).toMatch(/shatale-api/)
+    // ⚠️ THE PIN ON `shatale-api` IS GONE BECAUSE THE FACT IS GONE, and that is the point rather
+    // than a loosening: the deferral registration in shatale-api is REMOVED in the same change that
+    // lifts this opt-in — the deferred work is done, and a registry entry describing an undone thing
+    // reddens by design. A test pinning a sentence to a repository that no longer holds anything
+    // about this would be prose outliving its subject, asserted.
+    //
+    // What replaces it is the pin that now carries the decision: the sentence must name WHICH
+    // workflow turns the chain on and which deliberately does not, because "it is off" without
+    // "off where" is what sent the last reader looking in the wrong file.
+    expect(LIVE_CHAIN_DISABLED, 'the sentence must say where the opt-in IS set').toMatch(
+      /ci-sandbox\.yml/,
+    )
+    expect(LIVE_CHAIN_DISABLED, 'and where it is deliberately not set').toMatch(/nightly\.yml/)
     expect(LIVE_CHAIN_DISABLED, 'a skip that reads as a pass is the whole failure').toMatch(
       /DISABLED, NOT PASSED/,
     )
@@ -102,11 +116,28 @@ describe('the live chain says it is disabled rather than passed', () => {
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
   })
 
+  // ⚠️ ci-sandbox.yml NOW ENABLES THE CHAIN, AND THE NOTICE STAYS THERE AS A FALLBACK. Its step is
+  // conditional on the env variable, so it prints only if somebody removes the opt-in — which is
+  // exactly the day a green run would otherwise mean nothing. Asserting the text is still present
+  // is asserting that removing the flag cannot pass silently.
+  //
+  // 🔴 AND THE COLOUR IS NOT THE ACCEPTANCE. The same file must run the chain and then MEASURE that
+  // it ran: a skipped suite makes the run green, so the count comes from the JSON report through
+  // scripts/live-chain-executed.mjs. A workflow that enables the opt-in and does not check the
+  // number is back to believing a colour.
   test('ci-sandbox.yml prints the notice itself', () => {
     const body = workflowNotice('ci-sandbox.yml')
-    expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
+    expect(body, 'the fallback notice is gone — removing the opt-in would then read as a pass').toMatch(
+      /DISABLED, NOT PASSED/,
+    )
     expect(body).toMatch(/SHAT-3340/)
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+    expect(body, 'the opt-in is not actually set in the workflow that is supposed to set it').toMatch(
+      /SHATALE_E2E_LIVE_CHAIN:\s*['"]?1/,
+    )
+    expect(body, 'the run is green whether or not the chain ran unless the count is read').toMatch(
+      /live-chain-executed\.mjs/,
+    )
   })
 })
 
@@ -297,7 +328,20 @@ async function resolveSandboxAgentId(): Promise<string> {
   return id
 }
 
-describeIfKey(`SHAT-3023: one purchase, walked through the contract (live sandbox) [${LIVE_CHAIN_DISABLED}]`, () => {
+// 🔴 THE SUFFIX IS CONDITIONAL, AND THE UNCONDITIONAL FORM WAS A REAL DEFECT THE MOMENT THE OPT-IN
+// WAS LIFTED. Measured on a real report before this change: the suite's `fullName` carried the
+// whole "DISABLED, NOT PASSED — set SHATALE_E2E_LIVE_CHAIN=1 …" sentence, so a verbose reporter and
+// the JSON report would both have shown an EXECUTING suite whose own name says it did not run. The
+// label was written for the disabled world and read as true in the other one.
+//
+// ⚠️ The marker `(live sandbox)` stays in BOTH forms on purpose: scripts/live-chain-executed.mjs
+// finds the suite by it, and answers "could not measure" — never "executed" — if it is renamed past
+// that. A conditional name must not be conditional about the part an instrument keys on.
+const LIVE_SUITE_NAME = LIVE_CHAIN_OPT_IN
+  ? 'SHAT-3023: one purchase, walked through the contract (live sandbox)'
+  : `SHAT-3023: one purchase, walked through the contract (live sandbox) [${LIVE_CHAIN_DISABLED}]`
+
+describeIfKey(LIVE_SUITE_NAME, () => {
   let client: McpTestClient
   let agentId: string
 
