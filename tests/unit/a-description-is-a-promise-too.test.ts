@@ -21,6 +21,7 @@
 
 import { describe, test, expect } from 'vitest'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
+import { createSandboxTools } from '../../src/tools/sandbox.js'
 import { mapHttpError } from '../../src/errors.js'
 import type { ShataleClient } from '../../src/client.js'
 
@@ -78,5 +79,63 @@ describe('auth advice depends on what the caller is running with', () => {
       )
       expect(e.suggested_fix).toMatch(/scope|belong/i)
     }
+  })
+})
+
+// SHAT-2530 — the third text, and the one that cost the most by saying the least.
+//
+// `sandbox_complete_onboarding`'s parameter said "The test user ID to complete onboarding for". The
+// API resolved it as Shatale's INTERNAL user id, which no tool, endpoint or response in this server
+// ever hands out — so the call could not be made correctly, and answered 404. A 404 reads as "your
+// user does not exist", not as "you cannot express which user you mean", and that is why the route
+// sat unreachable rather than reported broken.
+//
+// ⚠️ THE SHAPE IS THE SAME AS THE TWO ABOVE AND ONE STEP EARLIER: not a sentence written for the
+// common case, but a sentence that named the RIGHT THING AMBIGUOUSLY. "The test user ID" is true of
+// both ids. An agent reading it cannot be wrong, and cannot be right either.
+describe('sandbox_complete_onboarding says which id it wants', () => {
+  function onboardingTool() {
+    const mod = createSandboxTools({} as ShataleClient)
+    const tool = mod.tools.find((t) => t.name === 'sandbox_complete_onboarding')
+    expect(tool, 'sandbox_complete_onboarding is not in this module — the test is out of date').toBeDefined()
+    return tool!
+  }
+
+  function paramDescription(): string {
+    const schema = onboardingTool().inputSchema as { properties: { user_id: { description: string } } }
+    return schema.properties.user_id.description
+  }
+
+  // ⚠️ TWO ASSERTIONS, NOT ONE OVER BOTH TEXTS — MEASURED. The first version of this test matched
+  // `description + parameter` as one string, and deleting the reference from the TOOL description
+  // left it green: the parameter satisfied the claim on the description's behalf. An agent reads the
+  // two at different moments (one to choose the tool, one to fill the call), so each has to say it.
+  test('the tool description points at where the caller got the id', () => {
+    expect(onboardingTool().description).toMatch(/sandbox_create_user/)
+  })
+
+  test('and so does the parameter, which is what gets filled in', () => {
+    expect(paramDescription()).toMatch(/sandbox_create_user/)
+  })
+
+  // ⚠️ THE POSITIVE CONTROL FOR THE REFERENCE ABOVE: sandbox_create_user is where the id comes from,
+  // and its own PARAMETER is what says so. Matching its tool description instead was the same
+  // mistake again — "Create one of YOUR OWN sandbox users" satisfies /your own/ while the sentence
+  // about the id is gone. So this reads the field the reference actually points at.
+  test('the id is described at its source as the caller\'s own', () => {
+    const create = createSandboxTools({} as ShataleClient).tools.find((x) => x.name === 'sandbox_create_user')!
+    const param = (create.inputSchema as { properties: { user_id: { description: string } } }).properties.user_id.description
+    expect(param, 'the reference in sandbox_complete_onboarding points nowhere without this').toMatch(
+      /you choose|your own identifier/i,
+    )
+  })
+
+  test('and it names the failure against an older API rather than leaving a bare 404', () => {
+    const param = paramDescription()
+    // The server this tool talks to is deployed separately from the tool, so "pass the external id"
+    // is advice that is wrong for exactly as long as the deployment is behind. Saying what a 404
+    // means there is what keeps the text true whichever version the caller is pointed at.
+    expect(param).toMatch(/404/)
+    expect(param).toMatch(/internal/i)
   })
 })

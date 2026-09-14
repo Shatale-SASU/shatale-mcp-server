@@ -226,13 +226,23 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     {
       name: 'sandbox_complete_onboarding',
       description:
-        'Mark a sandbox test user as fully onboarded (KYC passed, wallet funded). Skips real verification steps.',
+        'Mark a sandbox test user as fully onboarded (KYC passed, wallet funded). Skips real ' +
+        'verification steps. Pass the SAME user_id you gave sandbox_create_user — your own ' +
+        'identifier for the person, which is the only one you have.',
       inputSchema: {
         type: 'object',
         properties: {
+          // ⚠️ "The test user ID" was what this said, and the ambiguity is the whole of SHAT-2530:
+          // the API resolved this parameter as Shatale's INTERNAL user id, which no tool, endpoint or
+          // response ever hands out. So the call was impossible to make correctly and answered 404,
+          // which reads as "your user does not exist" rather than "you cannot express which user you
+          // mean". Naming which id it wants is the half of the fix that lives here.
           user_id: {
             type: 'string',
-            description: 'The test user ID to complete onboarding for',
+            description:
+              'The id you chose in sandbox_create_user — your own identifier for this person. ' +
+              'If this answers 404 for a user you just created, the API is older than SHAT-2530 ' +
+              'and wants an internal id nothing gives you; nothing you pass here will work.',
           },
         },
         required: ['user_id'],
