@@ -101,22 +101,37 @@ describe('sandbox_complete_onboarding says which id it wants', () => {
     return tool!
   }
 
-  test('the id is named by where the caller got it, not as "the user id"', () => {
-    const t = onboardingTool()
-    const param = (t.inputSchema as { properties: { user_id: { description: string } } }).properties.user_id.description
-    const both = `${t.description}\n${param}`
-    expect(both, 'it must point at the id the caller actually holds').toMatch(/sandbox_create_user/)
-    // ⚠️ THE POSITIVE CONTROL FOR THIS FILE'S OTHER HALF: sandbox_create_user is where the id comes
-    // from, and it already says so. If that sentence ever goes, the reference above points nowhere.
+  function paramDescription(): string {
+    const schema = onboardingTool().inputSchema as { properties: { user_id: { description: string } } }
+    return schema.properties.user_id.description
+  }
+
+  // ⚠️ TWO ASSERTIONS, NOT ONE OVER BOTH TEXTS — MEASURED. The first version of this test matched
+  // `description + parameter` as one string, and deleting the reference from the TOOL description
+  // left it green: the parameter satisfied the claim on the description's behalf. An agent reads the
+  // two at different moments (one to choose the tool, one to fill the call), so each has to say it.
+  test('the tool description points at where the caller got the id', () => {
+    expect(onboardingTool().description).toMatch(/sandbox_create_user/)
+  })
+
+  test('and so does the parameter, which is what gets filled in', () => {
+    expect(paramDescription()).toMatch(/sandbox_create_user/)
+  })
+
+  // ⚠️ THE POSITIVE CONTROL FOR THE REFERENCE ABOVE: sandbox_create_user is where the id comes from,
+  // and its own PARAMETER is what says so. Matching its tool description instead was the same
+  // mistake again — "Create one of YOUR OWN sandbox users" satisfies /your own/ while the sentence
+  // about the id is gone. So this reads the field the reference actually points at.
+  test('the id is described at its source as the caller\'s own', () => {
     const create = createSandboxTools({} as ShataleClient).tools.find((x) => x.name === 'sandbox_create_user')!
-    expect(create.description, 'the id must still be described as the caller\'s own choice there').toMatch(
-      /your own|you choose|yours to choose/i,
+    const param = (create.inputSchema as { properties: { user_id: { description: string } } }).properties.user_id.description
+    expect(param, 'the reference in sandbox_complete_onboarding points nowhere without this').toMatch(
+      /you choose|your own identifier/i,
     )
   })
 
   test('and it names the failure against an older API rather than leaving a bare 404', () => {
-    const t = onboardingTool()
-    const param = (t.inputSchema as { properties: { user_id: { description: string } } }).properties.user_id.description
+    const param = paramDescription()
     // The server this tool talks to is deployed separately from the tool, so "pass the external id"
     // is advice that is wrong for exactly as long as the deployment is behind. Saying what a 404
     // means there is what keeps the text true whichever version the caller is pointed at.
