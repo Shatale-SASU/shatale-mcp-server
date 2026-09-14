@@ -37,15 +37,75 @@ const liveCase = (status) => ({
   status,
 })
 
+// A report whose live-chain FILE failed while the case inside it came out `skipped` — the exact
+// shape vitest produces when `beforeAll` throws. Measured on the first real dispatch and reproduced
+// locally, both times: file status `failed`, case status `skipped`, zero failureMessages, and
+// `numFailedTests: 0`.
+const reportOfSetupFailure = (fillerCount = 25) => ({
+  numFailedTestSuites: 1,
+  numFailedTests: 0,
+  testResults: [
+    {
+      name: 'tests/e2e/one-purchase-walked-through-the-contract.test.ts',
+      status: 'failed',
+      message: '',
+      assertionResults: [liveCase('skipped')],
+    },
+    { name: 'tests/other.test.ts', status: 'passed', assertionResults: filler(fillerCount) },
+  ],
+})
+
 console.log('live-chain-executed controls:')
 
 // ── POSITIVE: the whole point. If this ever fails, the check has stopped being able to say yes.
 check('a report where the live chain PASSED is accepted', verdict(reportOf([liveCase('passed')])), 0)
 
 // ── The defect this check exists for: green run, skipped chain.
-check('a skipped live chain is refused as NOT EXECUTED', verdict(reportOf([liveCase('skipped')])), 1)
-check('a pending live chain is refused as NOT EXECUTED', verdict(reportOf([liveCase('pending')])), 1)
+check('a skipped live chain is refused as NOT EXECUTED', verdict(reportOf([liveCase('skipped')]), { optIn: false }), 1)
+check('a pending live chain is refused as NOT EXECUTED', verdict(reportOf([liveCase('pending')]), { optIn: false }), 1)
 check('a failing live chain is refused', verdict(reportOf([liveCase('failed')])), 1)
+
+// 🔴 THE TWO CAUSES OF A SKIPPED CASE, AND THE FIRST REAL RUN PROVED THIS CHECK CONFUSED THEM.
+// The suite was invited (the opt-in WAS set), its beforeAll threw because the key's account owns no
+// agent, and this script printed "set SHATALE_E2E_LIVE_CHAIN=1" — a remedy already applied, two
+// lines under a run whose env block showed the flag at 1. The verdict was right and the reason was
+// wrong, which costs more: a reader who follows an instrument's stated remedy spends the day on the
+// wrong thing.
+check('an invited chain whose SETUP failed is still code 1', verdict(reportOfSetupFailure()), 1)
+{
+  const v = verdict(reportOfSetupFailure())
+  const saysInvited = /WAS invited|setup|beforeAll/i.test(v.why)
+  const wronglyAsksForTheFlag = /set SHATALE_E2E_LIVE_CHAIN=1/.test(v.why)
+  if (!saysInvited || wronglyAsksForTheFlag) {
+    failures++
+    console.error(
+      `  FAIL a setup failure must be named as one, not as "nobody switched it on"\n       ${v.why}`,
+    )
+  } else {
+    console.log('  ok   a setup failure is named as one, and does not ask for a flag that is set')
+  }
+}
+
+// ⚠️ AND THE ADVICE MUST FOLLOW THE FLAG AS THE RUN SAW IT. With the opt-in already set, telling
+// the reader to set it is how an instrument teaches people to stop believing it.
+{
+  const v = verdict(reportOf([liveCase('skipped')]), { optIn: true })
+  if (/set SHATALE_E2E_LIVE_CHAIN=1/.test(v.why) || !/already 1/.test(v.why)) {
+    failures++
+    console.error(`  FAIL with the opt-in set, the reason still names setting the opt-in\n       ${v.why}`)
+  } else {
+    console.log('  ok   with the opt-in set, the reason points at the KEY instead of the flag')
+  }
+}
+{
+  const v = verdict(reportOf([liveCase('skipped')]), { optIn: false })
+  if (!/set SHATALE_E2E_LIVE_CHAIN=1/.test(v.why)) {
+    failures++
+    console.error(`  FAIL with the opt-in unset, the reason no longer names the flag\n       ${v.why}`)
+  } else {
+    console.log('  ok   with the opt-in unset, the reason names the flag')
+  }
+}
 
 // ── Could not measure: says nothing about the chain, and must not read as either answer.
 check('an empty report cannot measure', verdict({ testResults: [] }), 2)

@@ -37,11 +37,36 @@ const MIN_TOTAL_TESTS = 20
 
 const NOT_EXECUTED = new Set(['pending', 'skipped', 'todo'])
 
-export function verdict(report, { minTotal = MIN_TOTAL_TESTS, marker = LIVE_SUITE_MARKER } = {}) {
+/**
+ * 🔴 A SKIPPED CASE HAS TWO CAUSES AND THE FIRST REAL RUN PROVED THIS CHECK CONFUSED THEM.
+ *
+ * Measured 2026-09-14 on the first dispatch with the opt-in set: the suite's `beforeAll` threw (the
+ * key's account owns no agent), and vitest reported the FILE as `failed` while the CASE inside it
+ * came out `skipped` — status `skipped`, zero failureMessages, and `numFailedTests: 0`. This script
+ * saw "skipped" and printed "set SHATALE_E2E_LIVE_CHAIN=1", a remedy that WAS ALREADY APPLIED and
+ * printed two lines under a run whose own env block showed the flag set to 1.
+ *
+ * The verdict (1, not executed) was right and the reason was wrong, which is the more expensive of
+ * the two: a reader who follows an instrument's stated remedy spends the day on the wrong thing.
+ *
+ * ⇒ So the file's status is carried alongside each case. `skipped` inside a FAILED file means the
+ * chain was invited and did not get to run; `skipped` inside a passing file means nobody invited it.
+ * The report carries no error text for a setup failure (the file-level `message` is empty — also
+ * measured), so this points at the step's log rather than inventing a cause.
+ */
+export function verdict(report, {
+  minTotal = MIN_TOTAL_TESTS,
+  marker = LIVE_SUITE_MARKER,
+  // The flag as the RUN saw it. Used only to decide whether "set the flag" is honest advice: an
+  // instrument that names a remedy already in place teaches the reader to distrust it.
+  optIn = process.env.SHATALE_E2E_LIVE_CHAIN === '1',
+} = {}) {
   if (!report || typeof report !== 'object' || !Array.isArray(report.testResults)) {
     return { code: 2, why: 'the report has no testResults array — this is not a vitest JSON report' }
   }
-  const cases = report.testResults.flatMap((f) => (Array.isArray(f.assertionResults) ? f.assertionResults : []))
+  const cases = report.testResults.flatMap((f) =>
+    (Array.isArray(f.assertionResults) ? f.assertionResults : []).map((c) => ({ ...c, fileStatus: f.status })),
+  )
   if (cases.length === 0) {
     return { code: 2, why: 'the report contains no test cases at all — nothing ran, or the reporter wrote nothing' }
   }
@@ -63,11 +88,29 @@ export function verdict(report, { minTotal = MIN_TOTAL_TESTS, marker = LIVE_SUIT
   const executed = live.filter((c) => !NOT_EXECUTED.has(c.status))
   const failed = live.filter((c) => c.status === 'failed')
   if (executed.length === 0) {
+    const states = [...new Set(live.map((c) => c.status))].join('/')
+    // Invited and broken before it could run — a failed FILE with skipped cases inside it.
+    if (live.some((c) => c.fileStatus === 'failed')) {
+      return {
+        code: 1,
+        why: `all ${live.length} live-chain case(s) are ${states}, and the file they live in FAILED — ` +
+          'so the chain WAS invited and did not get to run: the suite broke in setup (beforeAll), ' +
+          'before the first beat. The JSON report carries no error text for that (the file-level ' +
+          'message is empty), so read the test step\'s log — the throw names the premise that was ' +
+          'missing. This is not "nobody switched it on"',
+        executed: 0,
+        total: cases.length,
+      }
+    }
     return {
       code: 1,
-      why: `all ${live.length} live-chain case(s) are ${[...new Set(live.map((c) => c.status))].join('/')} — ` +
-        'SKIPPED, not passed. The run is green and the chain did not run: set SHATALE_E2E_LIVE_CHAIN=1 ' +
-        'and give the job a SHATALE_TEST_KEY whose account owns an agent',
+      why: `all ${live.length} live-chain case(s) are ${states} — SKIPPED, not passed. The run is ` +
+        'green and the chain did not run: ' +
+        (optIn
+          ? 'SHATALE_E2E_LIVE_CHAIN is already 1 in this run, so what is missing is a SHATALE_TEST_KEY ' +
+            'the suite accepts — the gate is `TEST_KEY && opt-in`, and an absent or empty key skips it ' +
+            'just as quietly'
+          : 'set SHATALE_E2E_LIVE_CHAIN=1 and give the job a SHATALE_TEST_KEY whose account owns an agent'),
       executed: 0,
       total: cases.length,
     }
