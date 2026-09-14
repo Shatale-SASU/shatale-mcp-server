@@ -46,6 +46,16 @@ jobs:
       # This repo already knows the rule — ci-public.yml and publish.yml both open with
       # `set -euo pipefail`. Nightly is the one place it was missed, and it is the one workflow
       # where nobody is watching the run live.
+      # SHAT-3340 — the live purchase chain is DEFERRED, and a skip nobody sees is a pass.
+      # This run does pass --reporter=verbose, so the skipped suite's name (which carries the same
+      # sentence) is in the log — but buried in it. A ::notice:: surfaces in the run summary, which
+      # is where a nightly failure is actually read. Conditional, so it stops claiming the block is
+      # off the moment somebody enables it.
+      - name: The live purchase chain is deferred, not passing
+        if: env.SHATALE_E2E_LIVE_CHAIN != '1'
+        run: |
+          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run. Enable with SHATALE_E2E_LIVE_CHAIN=1 once SHAT-3340 is closed: the account owning SHATALE_TEST_KEY has zero agents, and no API key can create one. The deferral is registered in shatale-api (.github/workflows/deferral-conditions.yml), which will REPORT when SHAT-3340 closes - it cannot lift this skip from another repository."
+
       - name: Run full test suite
         id: tests
         run: |

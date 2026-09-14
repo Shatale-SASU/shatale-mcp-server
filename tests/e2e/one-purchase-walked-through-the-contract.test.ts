@@ -21,12 +21,78 @@
  * what a broken path looks like. #69 pinned that at the URL; this pins it at the response, at the end
  * of a chain.
  */
+import { readFileSync } from 'node:fs'
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { McpTestClient } from '../harness/mcpClient'
 import { MockUpstream } from '../harness/mockUpstream'
 
 const TEST_KEY = process.env.SHATALE_TEST_KEY
-const describeIfKey = TEST_KEY ? describe : describe.skip
+
+// ⚠️ SHAT-3340 — THE LIVE CHAIN IS OFF BY AN OPT-IN, AND THAT OPT-IN IS DEFERRED, NOT FORGOTTEN.
+//
+// Measured 2026-09-14 across two ci-sandbox dispatches: the key in Actions secrets sees ZERO agents
+// while a working key sees TWO on the same host — one secret name, two sandbox accounts. No API key
+// can create an agent by design, so nothing in this repository can fix it; the live chain cannot
+// pass until somebody seeds an agent on the account that owns the secret, or swaps the secret.
+//
+// 🔴 BOTH OBVIOUS ANSWERS WERE WRONG, AND FOR REASONS THIS REPOSITORY HAS ALREADY PAID FOR:
+//   · leaving it red nightly teaches readers not to read the workflow, and other checks live in it;
+//   · a bare opt-in nobody will ever set is a test that never runs — green by inability.
+// The opt-in's only hole is a skip nobody is obliged to lift. So the skip is REGISTERED as a
+// deferral whose flip condition is the state of another ticket (SHAT-3340): when 3340 closes, the
+// deferral registry in shatale-api reddens by itself and says the deferred work is undone.
+//
+// ⚠️ THE REGISTRY CANNOT LIFT THIS SKIP, AND THAT IS DELIBERATE, NOT HALF-BUILT. It lives in
+// `shatale-api/.github/workflows/deferral-conditions.yml` and this block lives here; a guard in one
+// repository does not edit another. It REPORTS that the moment has come. Said in both places, so
+// the registry's red is not read as "something is undone in shatale-api" by whoever sees it first.
+const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
+
+/**
+ * ⚠️ NOT "skipped" — the word vitest prints is the one this repository has been bitten by twice.
+ * This sentence is what a reader of the summary gets instead, so it has to carry: that the block is
+ * OFF rather than passing, what turns it on, and the ticket that will make the skip stop being
+ * permanent. Asserted by a test that always runs, below.
+ */
+const LIVE_CHAIN_DISABLED =
+  'DISABLED, NOT PASSED — set SHATALE_E2E_LIVE_CHAIN=1 (and SHATALE_TEST_KEY) to run it. ' +
+  'Deferred by SHAT-3340: the key in Actions secrets owns zero agents, and no API key can create ' +
+  'one, so the chain cannot pass from here. The deferral is registered in shatale-api ' +
+  '(.github/workflows/deferral-conditions.yml) and will REPORT when SHAT-3340 closes — it cannot ' +
+  'lift this skip from another repository, so lifting it is a step of closing 3340.'
+
+const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
+
+// A test that always runs, because everything above is prose the moment nothing reads it — and prose
+// is exactly what a deleted opt-in leaves behind looking correct. It does not assert the block is
+// disabled (it is, by default, and saying so would go red the day somebody legitimately enables it);
+// it asserts that the sentence a reader is given still names the way out and the ticket.
+describe('the live chain says it is disabled rather than passed', () => {
+  test('the reason names what enables it and the ticket that ends the deferral', () => {
+    // ⚠️ WHETHER THE SENTENCE ABOVE REACHES ANYONE DEPENDS ON THE RUNNER, AND THE TWO DISAGREE —
+    // measured 2026-09-14. A skipped suite's NAME is printed by `--reporter=verbose`, which
+    // nightly.yml passes, and NOT by the plain `npm test` in ci-sandbox.yml or in a local run. A
+    // `console.log` from a passing test is swallowed by both (written, measured, removed). So the
+    // sentence alone is a notice whose visibility is an accident of the caller; the workflows print
+    // it as a `::notice::` of their own, and the test below is what stops the texts drifting.
+    expect(LIVE_CHAIN_DISABLED).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+    expect(LIVE_CHAIN_DISABLED).toMatch(/SHAT-3340/)
+    // The cross-repository split is the part a later reader gets wrong first.
+    expect(LIVE_CHAIN_DISABLED).toMatch(/shatale-api/)
+    expect(LIVE_CHAIN_DISABLED, 'a skip that reads as a pass is the whole failure').toMatch(
+      /DISABLED, NOT PASSED/,
+    )
+  })
+
+  // 🔴 THE NOTICE HAS TO BE WHERE THE RUN IS READ. Both workflows that execute the live suite print
+  // it themselves, and this is what stops one of the three texts from being edited alone.
+  test.each(['nightly.yml', 'ci-sandbox.yml'])('%s prints the notice itself', (wf) => {
+    const body = readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8')
+    expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
+    expect(body).toMatch(/SHAT-3340/)
+    expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+  })
+})
 
 const text = (result: any): string => {
   expect(result.content?.[0]?.type).toBe('text')
@@ -215,11 +281,21 @@ async function resolveSandboxAgentId(): Promise<string> {
   return id
 }
 
-describeIfKey('SHAT-3023: one purchase, walked through the contract (live sandbox)', () => {
+describeIfKey(`SHAT-3023: one purchase, walked through the contract (live sandbox) [${LIVE_CHAIN_DISABLED}]`, () => {
   let client: McpTestClient
   let agentId: string
 
   beforeAll(async () => {
+    // ⚠️ THE OTHER DIRECTION OF THE SAME LIE. The workflow's notice is conditional on the ENV
+    // VARIABLE and this suite is gated in CODE, so if the gate ever loses the opt-in, the chain runs
+    // while the run summary says it is disabled — and this file's other tests would all still pass.
+    // A running block asserting it was invited is the one control that catches that, and it can only
+    // ever be reached when the block is running.
+    expect(
+      LIVE_CHAIN_OPT_IN,
+      'this suite ran without SHATALE_E2E_LIVE_CHAIN=1, while both workflows print that it is ' +
+        'DISABLED (SHAT-3340). One of the two is wrong, and the notice is the one a reader believes.',
+    ).toBe(true)
     agentId = await resolveSandboxAgentId()
     client = new McpTestClient({ SHATALE_API_KEY: TEST_KEY! }, 'purchase-chain-live')
     await client.initialize()
