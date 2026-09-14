@@ -58,6 +58,66 @@ export class ShataleApiError extends Error {
  * plain non-empty string, so a hostile or malformed body cannot smuggle an object or a novel through
  * this field.
  */
+/**
+ * SHAT-3362: КОДЫ ЧУЖИХ ОТКАЗОВ, КОТОРЫЕ МЫ СОГЛАСИЛИСЬ ДОНОСИТЬ ДОСЛОВНО.
+ *
+ * Почему это НЕ расширение белого списка из шапки файла. Правило там — «деталь чужой ошибки
+ * никогда не доходит до агента», и оно про СОДЕРЖИМОЕ: message, detail, прозу, которую сервер не
+ * собирался публиковать. Код — не содержимое. Это значение из ЗАКРЫТОГО списка, о котором обе
+ * стороны договорились заранее, и переслать его можно, не прочитав ни одного чужого предложения.
+ *
+ * /!\ И СПИСОК ЗАКРЫТ ИМЕННО ПОЭТОМУ. Код, которого здесь нет, отбрасывается — вместе со всем
+ * телом, как и раньше. Пропусти мы любой код, и сервер (или тот, кто им притворился) получил бы
+ * канал в сообщение агента, а это ровно та утечка, которую закрывает publicErrorMessage.
+ *
+ * 🔴 И ВТОРОЕ, ЧТО ОБЯЗАНО СТОЯТЬ ЗДЕСЬ, А НЕ ВЫЯСНЯТЬСЯ ПОТОМ: СЛОВАРЬ ЖИВЁТ В ТРЁХ МЕСТАХ,
+ * И НИЧТО НЕ ПРОВЕРЯЕТ, ЧТО ОНИ СОВПАДАЮТ. Здесь (FORWARDED_CODES), в перечне Error.code
+ * спецификации API и в её же error_redact.go. Половины лежат в РАЗНЫХ РЕПОЗИТОРИЯХ, поэтому
+ * «прогнать пару» нечем: добавят код на стороне API, забудут здесь — и отказ МОЛЧА вернётся в
+ * общий конверт «проверь id», а ОБА репозитория останутся зелёными, потому что каждый честно
+ * меряет свою половину. Заведено отдельным тикетом, а не залатано на месте.
+ *
+ * ⚠️ И ТЕКСТ СОВЕТА НИЖЕ — ВТОРАЯ КОПИЯ. У API для того же кода своя формулировка, и на этом пути
+ * побеждает ЭТА: клиент не пересылает чужую прозу по построению. Тексты различаются НАМЕРЕННО —
+ * серверный отвечает человеку, читающему JSON, здешний отвечает агенту, выбирающему следующий
+ * вызов. Пересылать серверный нельзя, это вернуло бы утечку. Но безымянная вторая копия — то, из-за
+ * чего сегодня дважды разъехался гид издателя, поэтому она названа здесь. ПРАВИТЬ ОБА.
+ *
+ * Первый житель списка: песочная покупка не раскрывает PAN. Отказ написан по имени намеренно
+ * (SHAT-2373), потому что голое «не найдено» читается как сломанная интеграция и отправляет
+ * песочного интегратора повторять на ЖИВОМ ключе. Наш собственный конверт «проверь id в пути»
+ * уничтожал это предупреждение и отправлял читателя ровно туда, где всё было верно.
+ */
+const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }> = {
+  sandbox_no_pan: {
+    message: 'A sandbox purchase does not reveal a PAN.',
+    suggested_fix:
+      'Use the last4 returned by the create call. Do NOT retry this on a live key — the sandbox ' +
+      'refuses on purpose, and the id in your path is correct.',
+  },
+}
+
+/**
+ * Pull the upstream error CODE out of a body, and only if it is one we agreed to forward.
+ *
+ * Same discipline as {@link extractRequestId}: one field by name, everything else dropped unread,
+ * and a value that is not a plain string in the closed list yields undefined.
+ */
+export function extractForwardedCode(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const code = (body as Record<string, unknown>).code
+  if (typeof code !== 'string') return undefined
+  return Object.prototype.hasOwnProperty.call(FORWARDED_CODES, code) ? code : undefined
+}
+
+export function forwardedRefusal(code: string, requestId?: string): ShataleApiError | undefined {
+  const known = FORWARDED_CODES[code]
+  if (!known) return undefined
+  const e: StructuredError = { code, message: known.message, suggested_fix: known.suggested_fix }
+  if (requestId) e.request_id = requestId
+  return new ShataleApiError(e)
+}
+
 export function extractRequestId(body: unknown): string | undefined {
   if (typeof body !== 'object' || body === null) return undefined
   const id = (body as Record<string, unknown>).request_id

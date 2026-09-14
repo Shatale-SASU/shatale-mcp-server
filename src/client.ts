@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 
 /**
@@ -239,11 +239,26 @@ export class ShataleClient {
         //
         // The read cannot itself become a failure: a body that is empty, truncated or not JSON makes
         // this undefined, and the error is thrown exactly as it was before.
+        //
+        // SHAT-3362: И ВТОРОЕ ПОЛЕ ПО ИМЕНИ — `code`, но только из ЗАКРЫТОГО списка. Тело читается
+        // ОДИН раз: повторный res.json() бросил бы на уже вычитанном потоке, и отказ превратился
+        // бы в исключение о клиенте вместо отказа сервера.
         let requestId: string | undefined
+        let forwarded: string | undefined
         try {
-          requestId = extractRequestId(await res.json())
+          const body = await res.json()
+          requestId = extractRequestId(body)
+          forwarded = extractForwardedCode(body)
         } catch {
           requestId = undefined
+          forwarded = undefined
+        }
+        // Согласованный отказ доносится ДОСЛОВНО и НЕ попадает в наш конверт. Иначе именованное
+        // предупреждение «не повторяй на живом ключе» становится «проверь id в пути» — то есть
+        // указанием смотреть ровно не туда.
+        if (forwarded) {
+          const named = forwardedRefusal(forwarded, requestId)
+          if (named) throw named
         }
         throw mapHttpError(res.status, method, path, requestId, { addressing, keyKind: this.keyKind() })
       }
