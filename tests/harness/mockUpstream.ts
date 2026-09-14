@@ -104,6 +104,24 @@ export class MockUpstream {
         merchant_customer_identity: { name: 'Fixture User', email: 'fixture@test.shatale.com' },
       })
     }
+    // Ordered BEFORE the generic /v1/purchases/ read, for the reason the checkout-identity branch
+    // above already records: that branch's startsWith would swallow this path and answer with a
+    // purchase-shaped body, so the reveal would look successful while returning no card at all.
+    //
+    // ⚠️ THE VALUES ARE SENTINELS, NOT A CARD. `card_number` here carries no digits on purpose: a
+    // PAN-shaped literal in a fixture is a PAN-shaped literal in the repository, and the scanners
+    // that exist for exactly that reason cannot tell a fixture from a leak. What the test needs is
+    // not a realistic number — it is a value it can recognise AFTER the redaction layer has had its
+    // chance, which is what makes "the allowlisted path was used" observable.
+    if (method === 'GET' && /\/v1\/purchases\/[^/]+\/card-credentials$/.test(path)) {
+      return ok({
+        card_number: 'MOCK-CARD-NUMBER-NOT-A-PAN',
+        expiry_month: 12,
+        expiry_year: 2031,
+        cvv: 'MOCK-CVV',
+        cardholder_name: 'Shatale Fixture',
+      })
+    }
     if (method === 'GET' && path.startsWith('/v1/purchases/')) {
       return ok({ purchase_id: path.split('/').pop(), status: 'pending' })
     }

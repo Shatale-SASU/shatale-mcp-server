@@ -97,3 +97,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `wire-fixtures.test.ts` | 4 | No (mock upstream) |
 | `the-key-travels-only-in-the-environment.test.ts` | 3 | No |
 | `the-banner-says-where-it-points.test.ts` | 4 | No |
+| `one-purchase-walked-through-the-contract.test.ts` | 6 | Partial |

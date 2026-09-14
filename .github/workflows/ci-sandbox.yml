@@ -28,6 +28,15 @@ jobs:
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
 
+      # SHAT-3340 — the live purchase chain is DEFERRED, and a skip nobody sees is a pass.
+      # The default vitest reporter prints neither skipped test names nor logs from passing tests
+      # (both measured 2026-09-14), so the notice is printed here, in the channel this run is read
+      # in. Conditional, so it stops claiming the block is off the moment somebody enables it.
+      - name: The live purchase chain is deferred, not passing
+        if: env.SHATALE_E2E_LIVE_CHAIN != '1'
+        run: |
+          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run. Enable with SHATALE_E2E_LIVE_CHAIN=1 once SHAT-3340 is closed: the account owning SHATALE_TEST_KEY has zero agents, and no API key can create one. The deferral is registered in shatale-api (.github/workflows/deferral-conditions.yml), which will REPORT when SHAT-3340 closes - it cannot lift this skip from another repository."
+
       - name: Run all tests (public + sandbox)
         run: npm test
         env:
