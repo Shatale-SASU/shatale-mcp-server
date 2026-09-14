@@ -51,6 +51,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **internal, no behaviour change:** the mock upstream answers
+  `GET /v1/purchases/{id}/card-credentials` (SHAT-3023), so the purchase chain — request, approve,
+  status, reveal — can be walked in CI with no live key. The values are sentinels and carry no
+  digits: a PAN-shaped literal in a fixture is a PAN-shaped literal in the repository, and the
+  scanners that exist for that reason cannot tell a fixture from a leak. Ordered before the generic
+  `/v1/purchases/` read, which would otherwise swallow the path and answer with a purchase-shaped
+  body — making a reveal that returned no card look successful.
+
 - **internal, no behaviour change:** the onboarding gate's recorded REASON was corrected
   (SHAT-2622). `register_user_profile` and `get_onboarding_status` stay OFF and the switch is
   untouched; what changed is why. The comment named a backend defect — "RegisterUserProfile mints
