@@ -52,9 +52,21 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
   })
 
   test('the id from request_purchase reaches approve, status and reveal', async () => {
+    // ⚠️ THE FIRST LINK, ADDED AFTER THE LIVE RUN REFUSED THE CHAIN WITHOUT IT. request_purchase
+    // needs a publisher_user_id that HAS AN ACTIVE DELEGATION, and sandbox_create_user is the only
+    // thing in the contract that makes one — its own description says so: "This is the first step".
+    // The mock answers 200 to anything, so the mock chain could never have told me: only the live
+    // dispatch could, and it did, with HTTP 400 on step one.
+
+    const provisioned = await client.callTool('sandbox_create_user', {
+      user_id: 'usr_chain_1',
+      agent_id: 'agt_chain_1',
+    })
+    expect(provisioned.isError).toBeFalsy()
+
     const created = await client.callTool('request_purchase', {
-      publisher_user_id: 'pub-1',
-      agent_id: 'agent-1',
+      publisher_user_id: 'usr_chain_1',
+      agent_id: 'agt_chain_1',
       merchant: 'amazon.com',
       amount: 49.99,
       currency: 'EUR',
@@ -78,6 +90,10 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     expect(revealed.isError, `reveal_card refused: ${text(revealed)}`).toBeFalsy()
 
     // ── the joins, which are the subject ──────────────────────────────────────────────────────────
+    const provision = mock.lastRequest('POST', '/v1/sandbox/users')
+    expect(provision, 'no sandbox user was provisioned — the chain skipped its own first link')
+      .toBeDefined()
+
     const approve = mock.lastRequest('POST', '/v1/sandbox/purchases/')
     expect(approve, 'no approval request reached the upstream').toBeDefined()
     expect(approve!.path, 'the approval was sent for a different purchase than the one created')
@@ -114,37 +130,95 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
 
 // ── the same chain against the LIVE sandbox ──────────────────────────────────────────────────────
 //
-// 🔴 NOT EXECUTED BY ITS AUTHOR, AND SAID HERE RATHER THAN DISCOVERED LATER. There is no
-// SHATALE_TEST_KEY on the machine this was written on, so this block was never run: it is written
-// from the tool schemas and the outbound shapes the mock chain proves, and its first real execution
-// will be in ci-sandbox.yml (workflow_dispatch) or the nightly run. A test that has not run is not
-// evidence — that is the rule this file is trying to satisfy, so it must not be broken by the file
-// itself.
+// 🔴 IT RAN, AND IT REFUSED THE CHAIN — which is the whole reason a dispatch was asked for. Run
+// 34825051118 (ci-sandbox, 2026-09-14): 44 files passed, this one failed, and it failed on STEP ONE
+// with `request_purchase` → HTTP 400. The mock could not have told me: it answers 200 to anything.
 //
-// ⚠️ AND A SKIP IS NOT A PASS. Without a key this whole block is `describe.skip`, and the summary
-// prints skipped and passed on the same line. This repository has been bitten by that twice in
-// sandbox-tools.test.ts, where a stale roster count sat green-by-skip through two changes.
+// THE CAUSE WAS A MISSING FIRST LINK, NOT A BROKEN TOOL. request_purchase needs a publisher_user_id
+// that HAS AN ACTIVE DELEGATION, and `sandbox_create_user` is the only thing in the contract that
+// makes one — its own description says "This is the first step … nothing else here creates one".
 //
-// ⚠️ THE ASSERTION IS THE CHAIN, AND THE REVEAL HAS TWO LEGITIMATE ENDINGS. Whether the sandbox
-// issues a card for an approved purchase is not something this tree can answer — reveal_card returns
-// the card when the purchase is payment_ready and holds one, and refuses with the NAMED code
-// `card_credentials_unavailable` when it does not. Both are the door working; what would be a defect
-// is any OTHER failure, or a refusal with no name. So the outcome is required to be one of the two,
-// which is a weaker claim than "a card comes back" and a true one.
+// ⚠️ AND ONE PRECONDITION CANNOT COME FROM THE CONTRACT AT ALL, BY DESIGN. The same description:
+// "agent_id must be an agent YOU created by hand in the publisher console; no API key can create an
+// agent, so if you do not have one, ask the person for it rather than inventing an id." So the agent
+// is obtained the way the publish gate obtains it — `GET /v1/agents` with the same key, a READ —
+// and that step is a PREMISE, not part of the walk. The walk itself is the five tool calls.
+//
+// ⚠️ A MISSING AGENT IS A LOUD FAILURE, NEVER A SKIP, and that is the neighbouring gate's rule for
+// the same premise: "an unverified premise is how a test ends up asserting nothing". The remedy is
+// named in the message — set `SHATALE_GATE_AGENT_ID` (the variable publish.yml already uses) or seed
+// one agent in the console — so the red says what to do rather than only that something is wrong.
+//
+// ⚠️ AND A SKIP IS NOT A PASS. Without a key the whole block is `describe.skip`, and the summary
+// prints skipped and passed on the same line. This repository has been bitten twice by
+// green-by-skip in sandbox-tools.test.ts.
+//
+// ⚠️ THE LIVE REVEAL HAS TWO LEGITIMATE ENDINGS. Whether the sandbox issues a card for an approved
+// purchase is not answerable from this tree: reveal_card returns the card when the purchase is
+// payment_ready and holds one, and refuses with the NAMED code `card_credentials_unavailable` when
+// it does not. Both are the door working; any other failure, or a refusal with no name, is not.
+const API_BASE = process.env.SHATALE_API_URL ?? 'https://api.shatale.com'
+
+/** The premise, read the way publish-gate.mjs reads it. Read-only: GET /v1/agents. */
+async function resolveSandboxAgentId(): Promise<string> {
+  const pinned = process.env.SHATALE_GATE_AGENT_ID
+  const headers = { Authorization: `Bearer ${TEST_KEY}`, Accept: 'application/json' }
+  if (pinned) {
+    const probe = await fetch(`${API_BASE}/v1/agents/${encodeURIComponent(pinned)}`, { headers })
+    if (!probe.ok) {
+      throw new Error(
+        `SHATALE_GATE_AGENT_ID=${pinned} does not resolve on ${API_BASE} (HTTP ${probe.status}). ` +
+          'A chain pointed at a non-existent agent can only produce the 400 it cannot distinguish ' +
+          'from a real refusal.',
+      )
+    }
+    return pinned
+  }
+  const res = await fetch(`${API_BASE}/v1/agents`, { headers })
+  if (!res.ok) {
+    throw new Error(
+      `GET /v1/agents answered HTTP ${res.status} on ${API_BASE}, so the chain has no agent to walk ` +
+        'with. Set SHATALE_GATE_AGENT_ID (publish.yml already uses that variable) or seed one agent ' +
+        'in the publisher console — no API key can create one, which is why this cannot be fixed in ' +
+        'the test.',
+    )
+  }
+  const body = (await res.json()) as { agents?: Array<{ id?: string }> }
+  const id = body.agents?.find((a) => typeof a.id === 'string' && a.id.length > 0)?.id
+  if (!id) {
+    throw new Error(
+      `GET /v1/agents returned no agent on ${API_BASE}. The chain needs one that a person created ` +
+        'in the publisher console; set SHATALE_GATE_AGENT_ID or seed one.',
+    )
+  }
+  return id
+}
+
 describeIfKey('SHAT-3023: one purchase, walked through the contract (live sandbox)', () => {
   let client: McpTestClient
+  let agentId: string
 
   beforeAll(async () => {
+    agentId = await resolveSandboxAgentId()
     client = new McpTestClient({ SHATALE_API_KEY: TEST_KEY! }, 'purchase-chain-live')
     await client.initialize()
   })
 
   afterAll(() => client.close())
 
-  test('request → approve → status → reveal, on the same purchase', async () => {
+  test('provision → request → approve → status → reveal, on the same purchase', async () => {
+    const userId = `shat3023-${Date.now()}`
+
+    // The first link, through the contract: the delegation request_purchase needs.
+    const provisioned = await client.callTool('sandbox_create_user', {
+      user_id: userId,
+      agent_id: agentId,
+    })
+    expect(provisioned.isError, `sandbox_create_user failed: ${text(provisioned)}`).toBeFalsy()
+
     const created = await client.callTool('request_purchase', {
-      publisher_user_id: `shat3023-${Date.now()}`,
-      agent_id: 'shat3023-agent',
+      publisher_user_id: userId,
+      agent_id: agentId,
       merchant: 'amazon.com',
       amount: 12.34,
       currency: 'EUR',
@@ -152,20 +226,19 @@ describeIfKey('SHAT-3023: one purchase, walked through the contract (live sandbo
     })
     expect(created.isError, `request_purchase failed: ${text(created)}`).toBeFalsy()
 
-    const body = JSON.parse(text(created))
-    const purchaseId = body.purchase_id as string
+    const purchaseId = (JSON.parse(text(created)) as { purchase_id?: string }).purchase_id
     expect(purchaseId, `no purchase_id in ${text(created)}`).toBeTruthy()
 
     // The approval beat is only meaningful when the purchase is actually waiting for one; a purchase
-    // that came back payment_ready needs no approval and asking for one is not a failure either.
-    const approved = await client.callTool('sandbox_approve_purchase', { purchase_id: purchaseId })
+    // that came back payment_ready needs no approval, and asking for one is not a failure either.
+    const approved = await client.callTool('sandbox_approve_purchase', { purchase_id: purchaseId! })
     expect(approved.content?.[0]?.text, 'the approval answered nothing at all').toBeDefined()
 
-    const status = await client.callTool('get_purchase_status', { purchase_id: purchaseId })
+    const status = await client.callTool('get_purchase_status', { purchase_id: purchaseId! })
     expect(status.isError, `get_purchase_status failed: ${text(status)}`).toBeFalsy()
-    expect(text(status), 'the status read answered about a different purchase').toContain(purchaseId)
+    expect(text(status), 'the status read answered about a different purchase').toContain(purchaseId!)
 
-    const revealed = await client.callTool('reveal_card', { purchase_id: purchaseId })
+    const revealed = await client.callTool('reveal_card', { purchase_id: purchaseId! })
     const answer = text(revealed)
     const cardArrived = answer.includes('card_number') || answer.includes('"number"')
     const namedRefusal = answer.includes('card_credentials_unavailable')
