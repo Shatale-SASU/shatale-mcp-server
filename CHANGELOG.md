@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`sandbox_complete_onboarding`** now says WHICH id it wants: the one you chose in
+  `sandbox_create_user`. It said "The test user ID", and that ambiguity was the whole of SHAT-2530 —
+  the API resolved the parameter as Shatale's internal user id, which no tool, endpoint or response
+  ever hands out, so the call could not be made correctly and answered 404. A 404 reads as "your user
+  does not exist", not as "you cannot express which user you mean", which is why it went unnoticed.
+
+  The parameter description also names the failure against an older API, so the text is true whichever
+  version a caller is pointed at rather than true only after the server change lands.
+
 ### Added
 
 - **`reveal_card`** — reveal the card credentials (number, expiry, CVV) of the Shatale card issued for
