@@ -19,19 +19,60 @@ const registerUserProfileSchema = z.object({
 })
 
 // SHAT-1662. These two tools are OFF unless SHATALE_ONBOARDING_ENABLED=true, and the
-// flip condition is not "the backend flag is on" — it is "Funnel B is merged AND
-// deployed". Review traced the loop at the source and it cannot close even with the
-// backend flag enabled:
+// flip condition is not "the backend flag is on" — it is "the funnel can close".
 //
-//   RegisterUserProfile mints sessionID = ulid.New() and never persists it — main.go
-//   says so in as many words — then returns it as `claim_set_id`, while this tool's
-//   description promised a `session_id`. GET /v1/onboarding/sessions/{that id} 404s
-//   forever, because there is no row to find.
+// ⚠️ THE CAUSE THIS COMMENT USED TO NAME HAS BEEN CURED, AND THE CONCLUSION STILL
+// STANDS FOR A DIFFERENT ONE (SHAT-2622, measured 2026-09-14 against shatale-api
+// origin/main fb9b983bc). It read:
+//
+//   "RegisterUserProfile mints sessionID = ulid.New() and never persists it … then
+//    returns it as `claim_set_id`. GET /v1/onboarding/sessions/{that id} 404s
+//    forever, because there is no row to find."
+//
+// That was true when written and it is FALSE NOW, in the code rather than in prose:
+//   api/v1/onboarding_api.go:161  returns `claim_set_id` from res.ClaimSetID — the
+//                                 resolver's row — and :154 REFUSES when it is empty
+//                                 rather than handing out a minted id
+//   api/v1/onboarding_api.go:242  GetSessionStatus does
+//                                 `SELECT status, user_id, created_at FROM
+//                                  publisher_user_links WHERE id = $1`
+//   and api/v1/the_claim_set_funnel_reaches_step_two_db_test.go walks exactly that,
+//   against a database, and passes.
+//
+// 🔴 WHY THE PAIR STAYS OFF ANYWAY: the id register hands out and the id the LATER
+// steps read live in different tables. Read in the handlers, not in a comment about
+// them:
+//   POST /v1/onboarding/register                → publisher_user_links  (the id)
+//   GET  /v1/onboarding/sessions/{id}           → publisher_user_links  (finds it)
+//   POST /v1/onboarding/sessions/{id}/profile   → enrollment_sessions   (onboarding_api.go:203)
+//   POST /v1/onboarding/sessions/{id}/send-code → enrollment_sessions   (onboarding_send_code_handler.go:78)
+//   POST …/verify-code                          → enrollment_sessions   (main.go:2003)
+//   POST …/complete                             → enrollment_sessions   (onboarding_complete_handler.go:52)
+// So with both flags on, an agent CAN register and CAN poll status, and the four
+// steps after that answer "session not found" for the only id it was ever given.
+// SHAT-2722 owns that defect; SHAT-2011 names a second blocker (its own supports are
+// worth re-reading — GetSessionStatus is no longer the stub it describes).
+//
+// Control on that reading, because "every step reads enrollment_sessions" would be
+// the same answer from a broken reader: the same reading finds TWO steps that agree
+// with each other (register and status, both publisher_user_links). It is a
+// mismatch between halves, not one table everywhere.
+//
+// ⇒ AND THIS CORRECTION IS THE POINT, not tidiness. A reader who checked the cause
+// this comment used to name would find it fixed, conclude the condition was met, and
+// flip the flag straight into four 404s on an identity path. A stale reason under a
+// right conclusion is more dangerous than no reason at all: it tells the next person
+// exactly which wrong thing to verify. The same shape, from the other direction, is
+// recorded beside get_credential_emails (SHAT-2527): there the condition HAD been
+// met and the sentence outlived the measurement for seventeen days.
+//
+// THE FLIP CONDITION, RESTATED SO IT CAN BE MEASURED: the four later steps read the
+// row the register step writes. Check the handlers' tables, not this comment.
 //
 // So this was not flag-dark, it was unwired: two tools advertised in every client's
-// tool list, describing a two-step flow whose second step could never succeed. An
-// agent cannot ask a follow-up question — a tool that is visible is a tool it will
-// try, and a promise it will build on.
+// tool list, describing a flow whose later steps could never succeed. An agent
+// cannot ask a follow-up question — a tool that is visible is a tool it will try,
+// and a promise it will build on.
 //
 // Same shape as get_credential_emails: the gate removes the HANDLER as well as the
 // listing, because CallTool dispatches on handlers, and a merely-unlisted tool stays

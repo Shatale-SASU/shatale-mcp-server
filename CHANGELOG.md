@@ -29,6 +29,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **internal, no behaviour change:** the onboarding gate's recorded REASON was corrected
+  (SHAT-2622). `register_user_profile` and `get_onboarding_status` stay OFF and the switch is
+  untouched; what changed is why. The comment named a backend defect — "RegisterUserProfile mints
+  sessionID = ulid.New() and never persists it" — which has since been fixed, so a reader who
+  checked the stated cause would find it gone, conclude the flip condition was met, and turn on an
+  identity path whose four later steps answer 404 for the only id they are ever given. A stale
+  reason under a right conclusion is more dangerous than no reason: it tells the next person exactly
+  which wrong thing to verify. The live blocker (the register step and the later steps read
+  different tables) is named instead, with the ticket that owns it, and the flip condition is
+  restated so it can be measured.
+
 - **internal, no behaviour change:** the filesystem sweep's skip list moved to
   `tests/harness/repoWalk.ts` and is explained there (SHAT-2713). A sweep that descends into
   `.claude/` reads a git worktree — a copy of this repository inside itself — and counts every
