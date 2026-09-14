@@ -28,24 +28,31 @@ import { MockUpstream } from '../harness/mockUpstream'
 
 const TEST_KEY = process.env.SHATALE_TEST_KEY
 
-// ⚠️ SHAT-3340 — THE LIVE CHAIN IS OFF BY AN OPT-IN, AND THAT OPT-IN IS DEFERRED, NOT FORGOTTEN.
+// ⚠️ SHAT-3340 — THE OPT-IN IS NOW SET WHERE THE RUN IS WATCHED, AND DELIBERATELY NOT WHERE IT IS NOT.
 //
-// Measured 2026-09-14 across two ci-sandbox dispatches: the key in Actions secrets sees ZERO agents
-// while a working key sees TWO on the same host — one secret name, two sandbox accounts. No API key
-// can create an agent by design, so nothing in this repository can fix it; the live chain cannot
-// pass until somebody seeds an agent on the account that owns the secret, or swaps the secret.
+// What the blocker was BELIEVED to be, and why that belief is retracted: "across two ci-sandbox
+// dispatches the Actions key saw ZERO agents while a working key saw TWO on the same host — one
+// secret name, two sandbox accounts". The secret was replaced on that reading (its timestamp moved
+// 2026-05-11 → 2026-09-14).
 //
-// 🔴 BOTH OBVIOUS ANSWERS WERE WRONG, AND FOR REASONS THIS REPOSITORY HAS ALREADY PAID FOR:
-//   · leaving it red nightly teaches readers not to read the workflow, and other checks live in it;
-//   · a bare opt-in nobody will ever set is a test that never runs — green by inability.
-// The opt-in's only hole is a skip nobody is obliged to lift. So the skip is REGISTERED as a
-// deferral whose flip condition is the state of another ticket (SHAT-3340): when 3340 closes, the
-// deferral registry in shatale-api reddens by itself and says the deferred work is undone.
+// 🔴 BOTH DISPATCHES RAN THROUGH A READER THAT COULD NOT SEE AN AGENT UNDER ANY KEY: it parsed
+// `{ agents: [...] }` and GET /v1/agents returns a BARE ARRAY (fixed below, with the three places
+// that measure the shape). So the zero was a fact about the reader; the "two" came from a curl.
+// ⇒ Whether the account owns an agent is UNKNOWN until the fixed reader runs. It is not claimed
+// here either way, and the deferral was not lifted on that claim — it was lifted because the
+// deferred WORK (the opt-in, and a run that proves execution by a number) is done.
 //
-// ⚠️ THE REGISTRY CANNOT LIFT THIS SKIP, AND THAT IS DELIBERATE, NOT HALF-BUILT. It lives in
-// `shatale-api/.github/workflows/deferral-conditions.yml` and this block lives here; a guard in one
-// repository does not edit another. It REPORTS that the moment has come. Said in both places, so
-// the registry's red is not read as "something is undone in shatale-api" by whoever sees it first.
+// ▌ci-sandbox.yml sets SHATALE_E2E_LIVE_CHAIN=1. nightly.yml does NOT, and that is a decision
+// rather than an omission: the replacement key is a PERSON'S sandbox account, so an unattended
+// nightly would create purchases in an account somebody works in by hand. Enabling it there is the
+// owner's call — asked, not assumed — and until it is answered nightly.yml carries the true reason
+// instead of the old one.
+//
+// 🔴 AND A LIFTED OPT-IN IS NOT A LIFTED SKIP, WHICH IS WHY THE CHECK BELOW IS NOT THE COLOUR OF
+// THE RUN. A skipped vitest suite makes the run PASS, and the default reporter prints neither
+// skipped suite names nor logs from passing tests (both measured). So the acceptance is a COUNT,
+// read from the run's own JSON report by scripts/live-chain-executed.mjs: how many cases of this
+// suite executed. It answers 1 for "skipped", 2 for "could not measure", and 0 only with a number.
 const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
 
 /**
@@ -55,19 +62,20 @@ const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
  * permanent. Asserted by a test that always runs, below.
  */
 const LIVE_CHAIN_DISABLED =
-  'DISABLED, NOT PASSED — set SHATALE_E2E_LIVE_CHAIN=1 (and SHATALE_TEST_KEY) to run it. ' +
-  'Deferred by SHAT-3340: the key in Actions secrets owns zero agents, and no API key can create ' +
-  'one, so the chain cannot pass from here. The deferral is registered in shatale-api ' +
-  '(.github/workflows/deferral-conditions.yml) and will REPORT when SHAT-3340 closes — it cannot ' +
-  'lift this skip from another repository. The deferred work belongs to SHAT-3023; the condition is ' +
-  'SHAT-3340, which is why that registration is a deferral and not a ring.'
+  'DISABLED, NOT PASSED — this block did not run. Set SHATALE_E2E_LIVE_CHAIN=1 with a ' +
+  'SHATALE_TEST_KEY whose account owns an agent. ci-sandbox.yml sets it (SHAT-3340: the secret was ' +
+  'replaced on 2026-09-14 with such a key; the old one owned zero agents and no API key can create ' +
+  'one). nightly.yml deliberately does not: that key is a person\'s sandbox account, and an ' +
+  'unattended nightly would create purchases in an account somebody works in by hand — the ' +
+  'owner\'s call, asked rather than assumed. Seeing this sentence in a ci-sandbox run means the ' +
+  'opt-in was removed, not that the chain is still blocked.'
 
 const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
 
 // A test that always runs, because everything above is prose the moment nothing reads it — and prose
 // is exactly what a deleted opt-in leaves behind looking correct. It does not assert the block is
-// disabled (it is, by default, and saying so would go red the day somebody legitimately enables it);
-// it asserts that the sentence a reader is given still names the way out and the ticket.
+// disabled (ci-sandbox.yml now enables it, and asserting otherwise would go red on the very change
+// that fixed the ticket); it asserts that the sentence a reader is given still names the way out.
 describe('the live chain says it is disabled rather than passed', () => {
   test('the reason names what enables it and the ticket that ends the deferral', () => {
     // ⚠️ WHETHER THE SENTENCE ABOVE REACHES ANYONE DEPENDS ON THE RUNNER, AND THE TWO DISAGREE —
@@ -78,8 +86,19 @@ describe('the live chain says it is disabled rather than passed', () => {
     // it as a `::notice::` of their own, and the test below is what stops the texts drifting.
     expect(LIVE_CHAIN_DISABLED).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
     expect(LIVE_CHAIN_DISABLED).toMatch(/SHAT-3340/)
-    // The cross-repository split is the part a later reader gets wrong first.
-    expect(LIVE_CHAIN_DISABLED).toMatch(/shatale-api/)
+    // ⚠️ THE PIN ON `shatale-api` IS GONE BECAUSE THE FACT IS GONE, and that is the point rather
+    // than a loosening: the deferral registration in shatale-api is REMOVED in the same change that
+    // lifts this opt-in — the deferred work is done, and a registry entry describing an undone thing
+    // reddens by design. A test pinning a sentence to a repository that no longer holds anything
+    // about this would be prose outliving its subject, asserted.
+    //
+    // What replaces it is the pin that now carries the decision: the sentence must name WHICH
+    // workflow turns the chain on and which deliberately does not, because "it is off" without
+    // "off where" is what sent the last reader looking in the wrong file.
+    expect(LIVE_CHAIN_DISABLED, 'the sentence must say where the opt-in IS set').toMatch(
+      /ci-sandbox\.yml/,
+    )
+    expect(LIVE_CHAIN_DISABLED, 'and where it is deliberately not set').toMatch(/nightly\.yml/)
     expect(LIVE_CHAIN_DISABLED, 'a skip that reads as a pass is the whole failure').toMatch(
       /DISABLED, NOT PASSED/,
     )
@@ -102,11 +121,28 @@ describe('the live chain says it is disabled rather than passed', () => {
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
   })
 
+  // ⚠️ ci-sandbox.yml NOW ENABLES THE CHAIN, AND THE NOTICE STAYS THERE AS A FALLBACK. Its step is
+  // conditional on the env variable, so it prints only if somebody removes the opt-in — which is
+  // exactly the day a green run would otherwise mean nothing. Asserting the text is still present
+  // is asserting that removing the flag cannot pass silently.
+  //
+  // 🔴 AND THE COLOUR IS NOT THE ACCEPTANCE. The same file must run the chain and then MEASURE that
+  // it ran: a skipped suite makes the run green, so the count comes from the JSON report through
+  // scripts/live-chain-executed.mjs. A workflow that enables the opt-in and does not check the
+  // number is back to believing a colour.
   test('ci-sandbox.yml prints the notice itself', () => {
     const body = workflowNotice('ci-sandbox.yml')
-    expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
+    expect(body, 'the fallback notice is gone — removing the opt-in would then read as a pass').toMatch(
+      /DISABLED, NOT PASSED/,
+    )
     expect(body).toMatch(/SHAT-3340/)
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+    expect(body, 'the opt-in is not actually set in the workflow that is supposed to set it').toMatch(
+      /SHATALE_E2E_LIVE_CHAIN:\s*['"]?1/,
+    )
+    expect(body, 'the run is green whether or not the chain ran unless the count is read').toMatch(
+      /live-chain-executed\.mjs/,
+    )
   })
 })
 
@@ -267,14 +303,59 @@ async function resolveSandboxAgentId(): Promise<string> {
         'the test.',
     )
   }
-  const body = (await res.json()) as { agents?: Array<{ id?: string }> }
-  const id = body.agents?.find((a) => typeof a.id === 'string' && a.id.length > 0)?.id
+  // 🔴 THIS PARSE WAS THE DEFECT, AND ITS MESSAGE ACCUSED THE ACCOUNT FOR IT. It read
+  // `body.agents?.find(…)` — an object with an `agents` field — and GET /v1/agents returns a BARE
+  // JSON ARRAY. Measured in three independent places rather than guessed:
+  //
+  //   · apps/api/api/v1/agents.go: ListAgents ends in `writeJSON(w, 200, agents)` where `agents` is
+  //     a slice, and writeJSON's listsAreNeverNull only turns a nil slice into an empty one — it
+  //     adds no envelope;
+  //   · scripts/publish-gate.mjs, THE OTHER READER OF THE SAME ENDPOINT IN THIS REPOSITORY, parses
+  //     `Array.isArray(res.json) ? res.json : []`;
+  //   · the elements embed `Agent`, so `id` is a top-level field of each.
+  //
+  // So `body.agents` was ALWAYS undefined and the throw below said "THIS KEY HAS ZERO AGENTS" — a
+  // claim about the PARSER, printed as a claim about somebody's sandbox account. The comment above
+  // even said this reads "the way publish-gate.mjs reads it"; it did not.
+  //
+  // ⚠️ BOTH SHAPES ARE ACCEPTED NOW, AND THAT IS ONLY SAFE BECAUSE THE THIRD OUTCOME EXISTS. A
+  // tolerant parse with two outcomes rebuilds the same defect: an unreadable answer would fall into
+  // "zero agents" again. So an unrecognised shape is its own refusal, and it says it is about the
+  // reader.
+  const raw = (await res.json()) as unknown
+  const list = Array.isArray(raw)
+    ? (raw as Array<{ id?: string; status?: string }>)
+    : Array.isArray((raw as { agents?: unknown })?.agents)
+      ? (raw as { agents: Array<{ id?: string; status?: string }> }).agents
+      : null
+  if (list === null) {
+    throw new Error(
+      `GET /v1/agents on ${API_BASE} answered 200 with a shape this test cannot read: neither a ` +
+        'JSON array nor { agents: [...] }. ⚠️ THIS IS A STATEMENT ABOUT THE READER, NOT ABOUT THE ' +
+        'ACCOUNT — do not conclude the key has no agents from it. First 200 characters of the body: ' +
+        JSON.stringify(raw).slice(0, 200),
+    )
+  }
+  // Active first, like publish-gate.mjs, because a suspended agent fails later with a worse
+  // message; any agent is still better than none.
+  const usable =
+    list.find((a) => typeof a.id === 'string' && a.id.length > 0 && a.status === 'active') ??
+    list.find((a) => typeof a.id === 'string' && a.id.length > 0)
+  const id = usable?.id
   if (!id) {
-    // 🔴 THE MESSAGE NAMES THE DISCRIMINATOR, BECAUSE THE CHANNEL DOES NOT CARRY ONE. Measured
-    // 2026-09-14 across two ci-sandbox dispatches: this key sees ZERO agents while a working key
-    // sees TWO — on the SAME host. So `SHATALE_TEST_KEY` in Actions and `SHATALE_TEST_KEY` on a
-    // developer's machine are DIFFERENT KEYS, i.e. different sandbox accounts under one name, and
-    // the deployment is not involved at all.
+    // 🔴 THE MESSAGE NAMES THE DISCRIMINATOR, BECAUSE THE CHANNEL DOES NOT CARRY ONE.
+    //
+    // ⚠️ AND THE MEASUREMENT THAT USED TO STAND HERE IS RETRACTED, NOT EDITED FOR TONE. It read:
+    // "across two ci-sandbox dispatches this key sees ZERO agents while a working key sees TWO on
+    // the SAME host, so they are two different sandbox accounts under one name". Both dispatches
+    // ran through the reader below, which parsed `{ agents: [...] }` against an endpoint that
+    // returns a BARE ARRAY — so it could not see an agent under ANY key. The "two" came from a
+    // curl, a different instrument. One number from a broken reader and one from a working one,
+    // compared as if they shared a scale.
+    //
+    // ⇒ The conclusion it produced — a secret rotation — was acted on. What the zero actually
+    // licensed was "this reader cannot answer", and nothing about the account. Re-measure with the
+    // code below before repeating it.
     //
     // The first version of this message offered two remedies — set the variable, or seed an agent —
     // and was silent about the likeliest one. A guard's message is followed LITERALLY: pinning an
@@ -283,10 +364,14 @@ async function resolveSandboxAgentId(): Promise<string> {
     // "wrong key" from "empty account", and nothing in the tool surface can answer it: none of the
     // 22 tools lists a publisher's agents (measured 2026-09-10 by role, not by name).
     throw new Error(
-      `GET /v1/agents returned no agent on ${API_BASE}, so THIS KEY HAS ZERO AGENTS. ` +
-        'Check WHICH ACCOUNT the key belongs to, not which deployment it addresses: measured on ' +
-        '2026-09-14, the key in Actions secrets saw zero agents while a working key saw two on this ' +
-        'same host — one name, two sandbox accounts. Remedies, in the order that actually applies: ' +
+      `GET /v1/agents returned a list of ${list.length} on ${API_BASE} with no usable agent in ` +
+        'it, so THIS KEY HAS ZERO AGENTS — and this time the list was actually READ, which the ' +
+        'old wording could not claim. ' +
+        'Check WHICH ACCOUNT the key belongs to, not which deployment it addresses. ' +
+        '⚠️ AND DO NOT INHERIT THE OLD MEASUREMENT HERE: the claim that "the Actions key sees zero ' +
+        'agents while a working key sees two on the same host, so they are two accounts" was made ' +
+        'THROUGH THE BROKEN READER above, which could never see an agent at all. It is retracted ' +
+        'until re-measured with this code. Remedies, in the order that actually applies: ' +
         '(1) seed one agent in the publisher console on the account that owns THIS key — no API key ' +
         'can create an agent, by design; (2) replace the secret with a key of an account that ' +
         'already has agents; (3) only if you know the id belongs to THIS account, pin it with ' +
@@ -297,7 +382,20 @@ async function resolveSandboxAgentId(): Promise<string> {
   return id
 }
 
-describeIfKey(`SHAT-3023: one purchase, walked through the contract (live sandbox) [${LIVE_CHAIN_DISABLED}]`, () => {
+// 🔴 THE SUFFIX IS CONDITIONAL, AND THE UNCONDITIONAL FORM WAS A REAL DEFECT THE MOMENT THE OPT-IN
+// WAS LIFTED. Measured on a real report before this change: the suite's `fullName` carried the
+// whole "DISABLED, NOT PASSED — set SHATALE_E2E_LIVE_CHAIN=1 …" sentence, so a verbose reporter and
+// the JSON report would both have shown an EXECUTING suite whose own name says it did not run. The
+// label was written for the disabled world and read as true in the other one.
+//
+// ⚠️ The marker `(live sandbox)` stays in BOTH forms on purpose: scripts/live-chain-executed.mjs
+// finds the suite by it, and answers "could not measure" — never "executed" — if it is renamed past
+// that. A conditional name must not be conditional about the part an instrument keys on.
+const LIVE_SUITE_NAME = LIVE_CHAIN_OPT_IN
+  ? 'SHAT-3023: one purchase, walked through the contract (live sandbox)'
+  : `SHAT-3023: one purchase, walked through the contract (live sandbox) [${LIVE_CHAIN_DISABLED}]`
+
+describeIfKey(LIVE_SUITE_NAME, () => {
   let client: McpTestClient
   let agentId: string
 

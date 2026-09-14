@@ -91,6 +91,14 @@ jobs:
       - name: the nightly reporter files one ticket per defect, not one per night
         run: npm run gate:nightly-jira:controls
 
+      # SHAT-3340. The check that turns "the sandbox run was green" into "the live chain executed"
+      # is itself only worth its verdict if it can say BOTH yes and no — and the easy failure is a
+      # check that always refuses: it goes red, somebody appends `|| true`, and from then on the
+      # pipeline reports a chain that never runs. So the controls assert the positive case first,
+      # then each refusal, and they keep "skipped" (1) apart from "could not measure" (2).
+      - name: and the live-chain check must accept an executed chain and refuse a skipped one
+        run: npm run gate:live-chain:controls
+
       - name: Upload server logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
