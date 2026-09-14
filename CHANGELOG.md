@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **A named refusal from the API now survives our envelope** (SHAT-3362). Every 404 was mapped into
+  the client's own `not_found` with "Verify the id in the path", and the upstream body was discarded
+  unread. That is deliberate — upstream error DETAIL must never reach a calling agent — but it also
+  destroyed refusals the API writes BY NAME precisely because a generic answer is harmful: a sandbox
+  purchase does not reveal a PAN, and a bare "not found" reads as a broken integration and sends a
+  sandbox integrator to retry **on a live key**, which is the exact move that refusal exists to
+  prevent.
+  The fix is NOT a wider whitelist: free upstream text is still never forwarded, because widening it
+  re-opens the leak `publicErrorMessage` closes. It is a **closed vocabulary** — a `code` is not
+  content, it is a value from a list both sides agreed on in advance, and forwarding it reads none of
+  the server's own prose. A code outside the list is dropped together with the whole body, as before.
+  First entry: `sandbox_no_pan`.
+  ⚠️ The first version of the test proved the vocabulary worked and said nothing about the client
+  USING it — a mutant disabling the forwarding branch survived four green assertions. A function is
+  not its call. Two assertions now drive the real request path with a stubbed `fetch`, and the
+  control asserts a 404 WITHOUT an agreed code still receives the client's own envelope.
+
 - **`sandbox_complete_onboarding`** now says WHICH id it wants: the one you chose in
   `sandbox_create_user`. It said "The test user ID", and that ambiguity was the whole of SHAT-2530 —
   the API resolved the parameter as Shatale's internal user id, which no tool, endpoint or response
