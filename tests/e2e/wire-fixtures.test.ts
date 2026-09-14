@@ -266,6 +266,17 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_3/checkout-identity'),
     })
 
+    // reveal_card (SHAT-3023). Its route is the one the redaction allowlist has held open since
+    // SHAT-2610; the fixture is what records that the URL sent is that route and not a neighbour, in
+    // the file a Go-side replay reads. A tool wired to `/credentials` or `/card` answers 200 and comes
+    // back scrubbed, and nothing but the URL says why.
+    await live.callTool('reveal_card', { purchase_id: 'pur_fixture_5' })
+    captured.push({
+      label: 'reveal_card (LIVE + money-GO and sandbox; the allowlisted reveal route)',
+      struct_hint: 'apps/api/api/v1/purchases.go card-credentials route',
+      ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_5/card-credentials'),
+    })
+
     await live.callTool('get_checkout_customer', { purchase_id: 'pur_fixture_4' })
     captured.push({
       label: 'get_checkout_customer (LIVE + money-GO only; same route, different half of the response)',

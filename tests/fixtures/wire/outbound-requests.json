@@ -151,6 +151,12 @@
     "path": "/v1/purchases/pur_fixture_3/checkout-identity"
   },
   {
+    "label": "reveal_card (LIVE + money-GO and sandbox; the allowlisted reveal route)",
+    "struct_hint": "apps/api/api/v1/purchases.go card-credentials route",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_5/card-credentials"
+  },
+  {
     "label": "get_checkout_customer (LIVE + money-GO only; same route, different half of the response)",
     "struct_hint": "apps/api/api/v1/purchases.go checkout-identity route",
     "method": "GET",

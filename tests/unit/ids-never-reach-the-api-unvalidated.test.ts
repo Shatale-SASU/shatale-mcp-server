@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { MockUpstream } from '../harness/mockUpstream.js'
 import { ShataleClient } from '../../src/client.js'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
+import { createRevealTools } from '../../src/tools/reveal.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
 import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
@@ -48,6 +49,7 @@ beforeAll(async () => {
   const client = new ShataleClient(upstream.url, 'sk_sandbox_test')
   modules = {
     purchase: createPurchaseTools(client, { isSandbox: false }),
+    reveal: createRevealTools(client),
     credentials: createCredentialTools(client, { emailsEnabled: true }),
     onboarding: createOnboardingTools(client, { enabled: true }),
     catalog: createCatalogTools(client),
@@ -82,6 +84,11 @@ const idTools: Array<{ tool: string; missing: string }> = [
   { tool: 'get_credential_emails', missing: 'credential_request_id' },
   { tool: 'get_onboarding_status', missing: 'session_id' },
   { tool: 'get_merchant_details', missing: 'merchant_id' },
+  // ⚠️ ADDED WITH THE TOOL (SHAT-3023), and the comment above says why it has to be: reveal_card
+  // shipped with a bare `.min(1)` and sent GET /v1/purchases/%20%20%20/card-credentials. This file
+  // was already asserting that no id-taking tool does that, and it was TRUE only of the tools
+  // somebody remembered to list.
+  { tool: 'reveal_card', missing: 'purchase_id' },
   { tool: 'sandbox_approve_purchase', missing: 'purchase_id or request_id' },
   { tool: 'sandbox_complete_onboarding', missing: 'user_id' },
 ]
