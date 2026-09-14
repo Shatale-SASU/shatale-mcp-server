@@ -30,12 +30,17 @@ const TEST_KEY = process.env.SHATALE_TEST_KEY
 
 // ⚠️ SHAT-3340 — THE OPT-IN IS NOW SET WHERE THE RUN IS WATCHED, AND DELIBERATELY NOT WHERE IT IS NOT.
 //
-// The blocker is GONE, and what it was is recorded because the reason a skip existed is the first
-// thing a later reader needs: measured 2026-09-14 across two ci-sandbox dispatches, the key in
-// Actions secrets saw ZERO agents while a working key saw TWO on the same host — one secret name,
-// two sandbox accounts, and no API key can create an agent by design. The secret was replaced on
-// 2026-09-14 with a key whose account owns agents (timestamp moved 2026-05-11 → 2026-09-14), so
-// the chain CAN pass from here now.
+// What the blocker was BELIEVED to be, and why that belief is retracted: "across two ci-sandbox
+// dispatches the Actions key saw ZERO agents while a working key saw TWO on the same host — one
+// secret name, two sandbox accounts". The secret was replaced on that reading (its timestamp moved
+// 2026-05-11 → 2026-09-14).
+//
+// 🔴 BOTH DISPATCHES RAN THROUGH A READER THAT COULD NOT SEE AN AGENT UNDER ANY KEY: it parsed
+// `{ agents: [...] }` and GET /v1/agents returns a BARE ARRAY (fixed below, with the three places
+// that measure the shape). So the zero was a fact about the reader; the "two" came from a curl.
+// ⇒ Whether the account owns an agent is UNKNOWN until the fixed reader runs. It is not claimed
+// here either way, and the deferral was not lifted on that claim — it was lifted because the
+// deferred WORK (the opt-in, and a run that proves execution by a number) is done.
 //
 // ▌ci-sandbox.yml sets SHATALE_E2E_LIVE_CHAIN=1. nightly.yml does NOT, and that is a decision
 // rather than an omission: the replacement key is a PERSON'S sandbox account, so an unattended
@@ -298,14 +303,59 @@ async function resolveSandboxAgentId(): Promise<string> {
         'the test.',
     )
   }
-  const body = (await res.json()) as { agents?: Array<{ id?: string }> }
-  const id = body.agents?.find((a) => typeof a.id === 'string' && a.id.length > 0)?.id
+  // 🔴 THIS PARSE WAS THE DEFECT, AND ITS MESSAGE ACCUSED THE ACCOUNT FOR IT. It read
+  // `body.agents?.find(…)` — an object with an `agents` field — and GET /v1/agents returns a BARE
+  // JSON ARRAY. Measured in three independent places rather than guessed:
+  //
+  //   · apps/api/api/v1/agents.go: ListAgents ends in `writeJSON(w, 200, agents)` where `agents` is
+  //     a slice, and writeJSON's listsAreNeverNull only turns a nil slice into an empty one — it
+  //     adds no envelope;
+  //   · scripts/publish-gate.mjs, THE OTHER READER OF THE SAME ENDPOINT IN THIS REPOSITORY, parses
+  //     `Array.isArray(res.json) ? res.json : []`;
+  //   · the elements embed `Agent`, so `id` is a top-level field of each.
+  //
+  // So `body.agents` was ALWAYS undefined and the throw below said "THIS KEY HAS ZERO AGENTS" — a
+  // claim about the PARSER, printed as a claim about somebody's sandbox account. The comment above
+  // even said this reads "the way publish-gate.mjs reads it"; it did not.
+  //
+  // ⚠️ BOTH SHAPES ARE ACCEPTED NOW, AND THAT IS ONLY SAFE BECAUSE THE THIRD OUTCOME EXISTS. A
+  // tolerant parse with two outcomes rebuilds the same defect: an unreadable answer would fall into
+  // "zero agents" again. So an unrecognised shape is its own refusal, and it says it is about the
+  // reader.
+  const raw = (await res.json()) as unknown
+  const list = Array.isArray(raw)
+    ? (raw as Array<{ id?: string; status?: string }>)
+    : Array.isArray((raw as { agents?: unknown })?.agents)
+      ? (raw as { agents: Array<{ id?: string; status?: string }> }).agents
+      : null
+  if (list === null) {
+    throw new Error(
+      `GET /v1/agents on ${API_BASE} answered 200 with a shape this test cannot read: neither a ` +
+        'JSON array nor { agents: [...] }. ⚠️ THIS IS A STATEMENT ABOUT THE READER, NOT ABOUT THE ' +
+        'ACCOUNT — do not conclude the key has no agents from it. First 200 characters of the body: ' +
+        JSON.stringify(raw).slice(0, 200),
+    )
+  }
+  // Active first, like publish-gate.mjs, because a suspended agent fails later with a worse
+  // message; any agent is still better than none.
+  const usable =
+    list.find((a) => typeof a.id === 'string' && a.id.length > 0 && a.status === 'active') ??
+    list.find((a) => typeof a.id === 'string' && a.id.length > 0)
+  const id = usable?.id
   if (!id) {
-    // 🔴 THE MESSAGE NAMES THE DISCRIMINATOR, BECAUSE THE CHANNEL DOES NOT CARRY ONE. Measured
-    // 2026-09-14 across two ci-sandbox dispatches: this key sees ZERO agents while a working key
-    // sees TWO — on the SAME host. So `SHATALE_TEST_KEY` in Actions and `SHATALE_TEST_KEY` on a
-    // developer's machine are DIFFERENT KEYS, i.e. different sandbox accounts under one name, and
-    // the deployment is not involved at all.
+    // 🔴 THE MESSAGE NAMES THE DISCRIMINATOR, BECAUSE THE CHANNEL DOES NOT CARRY ONE.
+    //
+    // ⚠️ AND THE MEASUREMENT THAT USED TO STAND HERE IS RETRACTED, NOT EDITED FOR TONE. It read:
+    // "across two ci-sandbox dispatches this key sees ZERO agents while a working key sees TWO on
+    // the SAME host, so they are two different sandbox accounts under one name". Both dispatches
+    // ran through the reader below, which parsed `{ agents: [...] }` against an endpoint that
+    // returns a BARE ARRAY — so it could not see an agent under ANY key. The "two" came from a
+    // curl, a different instrument. One number from a broken reader and one from a working one,
+    // compared as if they shared a scale.
+    //
+    // ⇒ The conclusion it produced — a secret rotation — was acted on. What the zero actually
+    // licensed was "this reader cannot answer", and nothing about the account. Re-measure with the
+    // code below before repeating it.
     //
     // The first version of this message offered two remedies — set the variable, or seed an agent —
     // and was silent about the likeliest one. A guard's message is followed LITERALLY: pinning an
@@ -314,10 +364,14 @@ async function resolveSandboxAgentId(): Promise<string> {
     // "wrong key" from "empty account", and nothing in the tool surface can answer it: none of the
     // 22 tools lists a publisher's agents (measured 2026-09-10 by role, not by name).
     throw new Error(
-      `GET /v1/agents returned no agent on ${API_BASE}, so THIS KEY HAS ZERO AGENTS. ` +
-        'Check WHICH ACCOUNT the key belongs to, not which deployment it addresses: measured on ' +
-        '2026-09-14, the key in Actions secrets saw zero agents while a working key saw two on this ' +
-        'same host — one name, two sandbox accounts. Remedies, in the order that actually applies: ' +
+      `GET /v1/agents returned a list of ${list.length} on ${API_BASE} with no usable agent in ` +
+        'it, so THIS KEY HAS ZERO AGENTS — and this time the list was actually READ, which the ' +
+        'old wording could not claim. ' +
+        'Check WHICH ACCOUNT the key belongs to, not which deployment it addresses. ' +
+        '⚠️ AND DO NOT INHERIT THE OLD MEASUREMENT HERE: the claim that "the Actions key sees zero ' +
+        'agents while a working key sees two on the same host, so they are two accounts" was made ' +
+        'THROUGH THE BROKEN READER above, which could never see an agent at all. It is retracted ' +
+        'until re-measured with this code. Remedies, in the order that actually applies: ' +
         '(1) seed one agent in the publisher console on the account that owns THIS key — no API key ' +
         'can create an agent, by design; (2) replace the secret with a key of an account that ' +
         'already has agents; (3) only if you know the id belongs to THIS account, pin it with ' +
