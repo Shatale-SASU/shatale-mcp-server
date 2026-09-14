@@ -86,8 +86,23 @@ describe('the live chain says it is disabled rather than passed', () => {
 
   // 🔴 THE NOTICE HAS TO BE WHERE THE RUN IS READ. Both workflows that execute the live suite print
   // it themselves, and this is what stops one of the three texts from being edited alone.
-  test.each(['nightly.yml', 'ci-sandbox.yml'])('%s prints the notice itself', (wf) => {
-    const body = readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8')
+  // ⚠️ TWO PLAIN CALLS RATHER THAN `test.each`, AND THE REASON IS AN INSTRUMENT IN THIS REPOSITORY.
+  // tests/tool-coverage.md carries a per-file test COUNT, and the guard that checks it counts
+  // `test(`/`it(` at line starts — `test.each` is invisible to it. So an each-table of two would
+  // have made the document under-report by one while the guard called it correct: a number that no
+  // longer means what its column header says.
+  const workflowNotice = (wf: string): string =>
+    readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8')
+
+  test('nightly.yml prints the notice itself', () => {
+    const body = workflowNotice('nightly.yml')
+    expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
+    expect(body).toMatch(/SHAT-3340/)
+    expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+  })
+
+  test('ci-sandbox.yml prints the notice itself', () => {
+    const body = workflowNotice('ci-sandbox.yml')
     expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
     expect(body).toMatch(/SHAT-3340/)
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
