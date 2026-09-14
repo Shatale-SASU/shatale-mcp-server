@@ -169,7 +169,9 @@ async function resolveSandboxAgentId(): Promise<string> {
       throw new Error(
         `SHATALE_GATE_AGENT_ID=${pinned} does not resolve on ${API_BASE} (HTTP ${probe.status}). ` +
           'A chain pointed at a non-existent agent can only produce the 400 it cannot distinguish ' +
-          'from a real refusal.',
+          'from a real refusal. ⚠️ And an id that exists on ANOTHER account resolves to 404 here ' +
+          'exactly like an id that exists nowhere: the pin must name an agent of the account this ' +
+          'key belongs to.',
       )
     }
     return pinned
@@ -186,9 +188,28 @@ async function resolveSandboxAgentId(): Promise<string> {
   const body = (await res.json()) as { agents?: Array<{ id?: string }> }
   const id = body.agents?.find((a) => typeof a.id === 'string' && a.id.length > 0)?.id
   if (!id) {
+    // 🔴 THE MESSAGE NAMES THE DISCRIMINATOR, BECAUSE THE CHANNEL DOES NOT CARRY ONE. Measured
+    // 2026-09-14 across two ci-sandbox dispatches: this key sees ZERO agents while a working key
+    // sees TWO — on the SAME host. So `SHATALE_TEST_KEY` in Actions and `SHATALE_TEST_KEY` on a
+    // developer's machine are DIFFERENT KEYS, i.e. different sandbox accounts under one name, and
+    // the deployment is not involved at all.
+    //
+    // The first version of this message offered two remedies — set the variable, or seed an agent —
+    // and was silent about the likeliest one. A guard's message is followed LITERALLY: pinning an
+    // id from the wrong account would only change the text of the red, which is what fixing a
+    // symptom looks like. "Which account does the secret belong to" is the question that separates
+    // "wrong key" from "empty account", and nothing in the tool surface can answer it: none of the
+    // 22 tools lists a publisher's agents (measured 2026-09-10 by role, not by name).
     throw new Error(
-      `GET /v1/agents returned no agent on ${API_BASE}. The chain needs one that a person created ` +
-        'in the publisher console; set SHATALE_GATE_AGENT_ID or seed one.',
+      `GET /v1/agents returned no agent on ${API_BASE}, so THIS KEY HAS ZERO AGENTS. ` +
+        'Check WHICH ACCOUNT the key belongs to, not which deployment it addresses: measured on ' +
+        '2026-09-14, the key in Actions secrets saw zero agents while a working key saw two on this ' +
+        'same host — one name, two sandbox accounts. Remedies, in the order that actually applies: ' +
+        '(1) seed one agent in the publisher console on the account that owns THIS key — no API key ' +
+        'can create an agent, by design; (2) replace the secret with a key of an account that ' +
+        'already has agents; (3) only if you know the id belongs to THIS account, pin it with ' +
+        'SHATALE_GATE_AGENT_ID. Pinning an id from another account changes the wording of this ' +
+        'failure and nothing else.',
     )
   }
   return id
