@@ -59,7 +59,8 @@ const LIVE_CHAIN_DISABLED =
   'Deferred by SHAT-3340: the key in Actions secrets owns zero agents, and no API key can create ' +
   'one, so the chain cannot pass from here. The deferral is registered in shatale-api ' +
   '(.github/workflows/deferral-conditions.yml) and will REPORT when SHAT-3340 closes — it cannot ' +
-  'lift this skip from another repository, so lifting it is a step of closing 3340.'
+  'lift this skip from another repository. The deferred work belongs to SHAT-3023; the condition is ' +
+  'SHAT-3340, which is why that registration is a deferral and not a ring.'
 
 const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
 
