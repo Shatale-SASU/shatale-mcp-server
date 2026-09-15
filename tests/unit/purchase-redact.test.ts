@@ -1,15 +1,56 @@
 /**
- * PCI regression: request_purchase must NEVER surface a raw PAN/CVV into the
- * agent reasoning context. The backend purchase response embeds them under
- * payment.card (purchases.go purchaseToJSON); redactPurchaseCard strips them to
- * last4 + constraints before the tool result is returned.
+ * PCI regression: no raw PAN/CVV reaches the agent reasoning context from a path we have not
+ * deliberately allowed.
+ *
+ * 🔴 THE HEADER THAT STOOD HERE, AND THE FIXTURE UNDER IT, DESCRIBED A RESPONSE THAT NO LONGER
+ * EXISTS (SHAT-3346). It said the backend purchase response "embeds them under payment.card
+ * (purchases.go purchaseToJSON)", and the fixture modelled that block as
+ * `{number, exp_month, exp_year, cvv}` with `constraints.merchant_locked`.
+ *
+ * Measured on apps/api origin/main, 2026-09-15: that block is `last4`, plus `card_ref` when the
+ * issued_cards row exists. The raw card was taken off this response by SHAT B-1; `merchant_locked`
+ * was removed by SHAT-2710. FOUR of the five names in the old fixture are not sent, and the fifth
+ * was deleted.
+ *
+ * ⚠️ AND THE TEST WAS GREEN THROUGHOUT, WHICH IS THE POINT. It checked the redactor against its OWN
+ * fixture, so it could not notice that the fixture had stopped describing anything: a test whose
+ * input is an invention certifies the invention, and does it for ever. A fixture is a claim about
+ * ANOTHER system, and only that system can check it — apps/api holds
+ * TestThePurchaseCardBlockCarriesOnlyAReferenceAndLast4, which pins the block's key set where the
+ * block is written.
+ *
+ * ⇒ SO THE TWO CASES ARE NOW SEPARATE, because they are different claims:
+ *
+ *   CONTRACT_PURCHASE  — what the API actually returns today. The redactor must pass it through
+ *                        UNCHANGED: there is nothing to cut, and over-redaction would take away the
+ *                        last4 an agent needs to tell two cards apart.
+ *   HYPOTHETICAL_CARD  — a card-ish shape this API does NOT send, kept because the defence exists
+ *                        for the day something does. It is labelled a hypothesis rather than dressed
+ *                        up as a response, which is the whole difference between a fixture and a
+ *                        claim.
  */
 import { createCredentialTools } from '../../src/tools/credentials.js'
 import { describe, test, expect } from 'vitest'
 import { redactPurchaseCard } from '../../src/tools/purchase.js'
 import type { ShataleClient } from '../../src/client.js'
 
-const withCard = {
+// What apps/api returns today (purchases.go, the `resp.Card != nil` branch): a reference and last4,
+// and constraints that actually hold. Kept in this shape ON PURPOSE — if it drifts from the backend
+// again, the guard named in the header is what should catch it, not a comment here.
+const CONTRACT_PURCHASE = {
+  purchase_id: 'p_1',
+  status: 'payment_ready',
+  payment: {
+    type: 'virtual_card',
+    card: { last4: '4242', card_ref: 'ic_01H8' },
+    constraints: { amount_limit: 250, currency: 'EUR', single_use: true },
+  },
+}
+
+// NOT a response this API sends. A card-ish shape the redactor must still handle, because the
+// defence exists for a path or a build that starts carrying one. Named as a hypothesis so nobody
+// reads it as a contract — which is precisely how the old fixture misled every reader it had.
+const HYPOTHETICAL_CARD = {
   purchase_id: 'p_1',
   status: 'payment_ready',
   payment: {
@@ -20,13 +61,13 @@ const withCard = {
       exp_year: '2030',
       cvv: '123',
     },
-    constraints: { merchant_locked: true, amount_limit: 250, single_use: true },
+    constraints: { amount_limit: 250, currency: 'EUR', single_use: true },
   },
 }
 
 describe('redactPurchaseCard', () => {
   test('removes raw PAN and CVV, keeps last4', () => {
-    const out = redactPurchaseCard(withCard) as any
+    const out = redactPurchaseCard(HYPOTHETICAL_CARD) as any
     const card = out.payment.card
     expect(card.number).toBeUndefined()
     expect(card.cvv).toBeUndefined()
@@ -36,16 +77,36 @@ describe('redactPurchaseCard', () => {
   })
 
   test('never leaks the full PAN anywhere in the serialized result', () => {
-    const out = redactPurchaseCard(withCard)
+    const out = redactPurchaseCard(HYPOTHETICAL_CARD)
     expect(JSON.stringify(out)).not.toContain('4111111111114242')
     expect(JSON.stringify(out)).not.toContain('123')
   })
 
   test('preserves constraints and top-level fields', () => {
-    const out = redactPurchaseCard(withCard) as any
+    const out = redactPurchaseCard(HYPOTHETICAL_CARD) as any
     expect(out.purchase_id).toBe('p_1')
     expect(out.status).toBe('payment_ready')
     expect(out.payment.constraints.amount_limit).toBe(250)
+  })
+
+  // 🔴 THE CASE THAT WAS MISSING ENTIRELY, AND IT IS THE ONE THAT HAPPENS. Every test above drives a
+  // shape the API does not send; none of them asked what the redactor does to the RESPONSE IT
+  // ACTUALLY MEETS. The answer must be "nothing": there is no PAN to cut, and taking last4 or
+  // card_ref away would remove the only handles an agent has for telling two cards apart and for
+  // joining this purchase to the issued card.
+  //
+  // ⚠️ And `toEqual` on the whole object rather than a field check, deliberately: a redactor that
+  // added `_note` to a block with nothing sensitive in it would still pass a per-field assertion,
+  // while telling the agent its clean response had been censored.
+  test('passes the REAL purchase response through untouched', () => {
+    expect(redactPurchaseCard(CONTRACT_PURCHASE)).toEqual(CONTRACT_PURCHASE)
+  })
+
+  // And the same response on the reveal path, which is allowlisted: the two must agree, or the
+  // behaviour would depend on which door a clean body came through.
+  test('the real response is untouched on an allowlisted path too', () => {
+    const out = redactPurchaseCard(CONTRACT_PURCHASE, '/v1/purchases/p_1/card-credentials')
+    expect(out).toEqual(CONTRACT_PURCHASE)
   })
 
   test('passes through a response with no card (onboarding_required / blocked)', () => {

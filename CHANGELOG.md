@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **The PCI redactor's justification described a response that no longer exists** (SHAT-3346).
+  Internal: comments and test fixtures only, **no behaviour change** — the scrub itself is untouched.
+  The opening paragraph of `src/redact.ts` stated, naming `apps/api purchases.go purchaseToJSON`,
+  that the backend's purchase response "embeds the raw pool-card PAN + CVV under `payment.card`".
+  Measured on apps/api at 2026-09-15: that block is `last4`, plus `card_ref` when the issued card
+  row exists. The raw card came off this response in SHAT B-1 and lives only on the reveal endpoint;
+  `merchant_locked` was removed by SHAT-2710.
+  The claim also contradicted this file's own allowlist: that reveal path is in `OUR_CARD_PATHS` and
+  is passed through deliberately (SHAT-2610), so the named subject carried no PAN while the response
+  that does carry one is not scrubbed at all.
+  **There was no leak** — the scrub had nothing to cut on that path. What was wrong was knowledge: a
+  false statement about another system's contract, written as a fact with an address, inside the
+  component that guards a card surface. The test fixture modelled the same invention and was green
+  throughout, because it checked the redactor against its own input. The fixtures are now split into
+  the contract shape and a shape labelled a hypothesis, and apps/api pins that contract where it is
+  produced.
+
 - **A named refusal from the API now survives our envelope** (SHAT-3362). Every 404 was mapped into
   the client's own `not_found` with "Verify the id in the path", and the upstream body was discarded
   unread. That is deliberate — upstream error DETAIL must never reach a calling agent — but it also
