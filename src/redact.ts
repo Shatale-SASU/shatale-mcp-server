@@ -1,8 +1,40 @@
 /**
- * Defense-in-depth PCI guard. The backend's purchase response embeds the raw pool-card PAN + CVV
- * under `payment.card` when a card is issued (apps/api purchases.go purchaseToJSON). That raw card
- * MUST NOT flow into the LLM reasoning context / MCP-host logs / chat history — it belongs only in
- * the out-of-band checkout executor via the dedicated reveal path.
+ * Defense-in-depth PCI guard: no card-ish shape reaches the LLM reasoning context, the MCP host's
+ * logs or the chat history from a path we have not deliberately allowed.
+ *
+ * 🔴 THE PARAGRAPH THAT STOOD HERE DESCRIBED A RESPONSE THAT NO LONGER EXISTS, AND NAMED A FILE TO
+ * PROVE IT (SHAT-3346). It read: "The backend's purchase response embeds the raw pool-card PAN + CVV
+ * under `payment.card` when a card is issued (apps/api purchases.go purchaseToJSON)."
+ *
+ * Measured on apps/api origin/main, 2026-09-15 — purchases.go builds that block as
+ *
+ *     cardBlock := map[string]any{"last4": last4(resp.Card.PAN)}
+ *     if resp.Card.CardID != "" { cardBlock["card_ref"] = resp.Card.CardID }
+ *
+ * and nothing else. The raw PAN/CVV/expiry were taken off this response by SHAT B-1 and live only on
+ * GET /v1/purchases/{id}/card-credentials. `merchant_locked` was removed by SHAT-2710.
+ *
+ * ⚠️ AND THE CLAIM CONTRADICTED THIS FILE'S OWN LATER SECTION. That reveal path is in
+ * OUR_CARD_PATHS below — we pass it through deliberately, because the card is one WE issued and
+ * withholding its digits removes the only way to use the thing we gave the agent (SHAT-2610). So the
+ * opening sentence said the scrub's subject was a response that carries no PAN, while the file's
+ * own allowlist said the response that does carry one is not scrubbed at all.
+ *
+ * ⇒ DIRECTION OF THE HARM, STATED SO IT IS NOT READ AS WORSE THAN IT IS: THERE WAS NO LEAK. The
+ * scrub had nothing to cut on the purchase path and passed it through. What was wrong was KNOWLEDGE
+ * — a false statement about another system's contract, written as a fact with an address, inside the
+ * reasoning of the component that guards a card surface. A defence described as load-bearing and
+ * inert in fact is what somebody leans on tomorrow ("the PAN gets stripped on the way anyway").
+ *
+ * 📌 WHAT THIS GUARD IS ACTUALLY FOR, now that the subject is named correctly: a card-ish shape on
+ * ANY path that is not on the allowlist — the customer's own instrument, which is never ours to
+ * show; a future response that starts carrying card data; a tool added tomorrow that nobody thought
+ * about. It is cheap precisely because it is inert today.
+ *
+ * 📌 THE OTHER HALF OF THIS FACT IS PINNED WHERE IT IS PRODUCED. apps/api holds
+ * TestThePurchaseCardBlockCarriesOnlyAReferenceAndLast4 (api/v1), which asserts that block's key set
+ * by name and fails if a PAN returns to it. A fixture here is a claim about THAT system and cannot
+ * check itself — which is exactly how the paragraph above stayed wrong while its test stayed green.
  *
  * /!\ THIS FILE EXISTS BECAUSE THE INVARIANT WAS A PROPERTY OF FOUR CALL SITES, NOT OF THE SYSTEM.
  *
