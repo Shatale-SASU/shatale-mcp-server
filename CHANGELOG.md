@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **`request_temporary_credentials` no longer tells the model the credentials are short-lived**
+  (SHAT-3443, backend SHAT-3428). **Behaviour change for the agent**, not a comment: a tool
+  description is read before the tool is chosen and acted on after.
+  The backend cancelled the term on saved credentials — the user/agent/merchant pairing lives until
+  the person revokes it, the column that held an expiry is NULL for every row minted since, and the
+  API no longer accepts `ttl_seconds`. The description still said "temporary, short-lived", and an
+  agent that believes it re-requests credentials on every attempt, which is exactly what the durable
+  pairing exists to avoid. It now says they live until revoked and that the same pairing is reused.
+  ⚠️ **The tool NAME is unchanged** and keeps the word "temporary": a name is public MCP surface, and
+  renaming it breaks every prompt that calls it by name, for a word. A test asserts the name is still
+  there, so a future rename is a deliberate act rather than tidying.
+  Also corrected: `DERIVED_KEY_WINDOW_MS` documented itself as MIRRORING `credentials/service.go:
+  defaultTTL = 1 hour` while warning in the same paragraph that the coupling was one-directional —
+  "nothing here notices if the backend changes it". That constant has been deleted. The window stays
+  at one hour for a reason of its own (how long this process holds a derived key in memory), now
+  stated. **No behaviour change** in the key cache.
+  ⚠️ And the same stale word stood in TWO SIBLING descriptions and one field hint — `get_credential_status`
+  ("the status of a *temporary* credential request"), `get_credential_emails` ("a *temporary*
+  credential's relay address") and the `purpose` hint. Found by grepping the subject rather than by
+  remembering what had been edited: fixing one of three is how a claim survives its own repair.
+
 - **The PCI redactor's justification described a response that no longer exists** (SHAT-3346).
   Internal: comments and test fixtures only, **no behaviour change** — the scrub itself is untouched.
   The opening paragraph of `src/redact.ts` stated, naming `apps/api purchases.go purchaseToJSON`,

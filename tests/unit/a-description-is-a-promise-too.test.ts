@@ -21,6 +21,7 @@
 
 import { describe, test, expect } from 'vitest'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
+import { createCredentialTools } from '../../src/tools/credentials.js'
 import { createSandboxTools } from '../../src/tools/sandbox.js'
 import { mapHttpError } from '../../src/errors.js'
 import type { ShataleClient } from '../../src/client.js'
@@ -46,6 +47,42 @@ describe('request_purchase does not promise a completed payment', () => {
     expect(d).toMatch(/onboarding/i)
     expect(d).toMatch(/approval/i)
     expect(d, 'it must say the payment itself is still the caller\'s step').toMatch(/payment_ready|next step/i)
+  })
+})
+
+function credentialsDescription(): string {
+  const mod = createCredentialTools({} as ShataleClient)
+  const tool = mod.tools.find((t) => t.name === 'request_temporary_credentials')
+  expect(tool, 'request_temporary_credentials is not in this module — the test is out of date').toBeDefined()
+  return tool!.description
+}
+
+// SHAT-3443, and the same shape as the two cases above: a sentence written for a mechanism, kept
+// after the mechanism went. The owner cancelled the term on saved credentials — the user/agent/
+// merchant pairing lives until the person revokes it (SHAT-3428) — and this description told the
+// model they were "temporary, short-lived". An agent that believes that re-requests credentials on
+// every attempt, which is exactly what the durable pairing exists to avoid.
+describe('request_temporary_credentials does not promise a term', () => {
+  test('the description does not call them short-lived or temporary', () => {
+    const d = credentialsDescription()
+    expect(d, 'the credential has no term since SHAT-3428; a description that gives it one is read ' +
+      'by the model before it chooses the tool').not.toMatch(/short-lived|temporary|expire/i)
+  })
+
+  test('and it says what replaced the term, so the sentence is not merely shorter', () => {
+    const d = credentialsDescription()
+    // The positive half. Deleting two adjectives would satisfy the case above and leave the model
+    // knowing nothing about reuse — and reuse is the behaviour the owner's decision is FOR.
+    expect(d, 'it must say the credentials live until revoked').toMatch(/until .*revoke/i)
+    expect(d, 'and that the same pairing is reused rather than re-issued').toMatch(/reuse|reused/i)
+  })
+
+  test('the tool NAME is left alone, and that is deliberate', () => {
+    const mod = createCredentialTools({} as ShataleClient)
+    // A tool name is public MCP surface: renaming it breaks every prompt that calls it by name, for
+    // a word. This case exists so a future reader does not "finish the job" by renaming it, and so
+    // that if the rename is ever made it is made on purpose, against this line.
+    expect(mod.tools.some((t) => t.name === 'request_temporary_credentials')).toBe(true)
   })
 })
 
