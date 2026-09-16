@@ -142,15 +142,21 @@ export class ShataleClient {
   private readonly credentialKeys = new Map<string, { key: string; expiresAt: number }>()
 
   /**
-   * How long a derived key is reused. It MIRRORS the backend's default credential lifetime
-   * (credentials/service.go: defaultTTL = 1 hour) and is deliberately not longer: reusing a key
-   * past the credential's life would replay something already expired, which is the defect the
-   * original bucket existed to avoid.
+   * How long a derived key is reused. One hour, and since SHAT-3428 that is a LOCAL choice rather
+   * than a mirror of anything.
    *
-   * /!\ THIS IS A COUPLING TO A CONSTANT IN ANOTHER REPOSITORY, and it is one-directional — nothing
-   * here notices if the backend changes it. The API takes ttl_seconds but does not RETURN the
-   * effective lifetime in a form this client asks for, and CredentialInput has no ttl_seconds
-   * field to send. Named so the next person finds the assumption instead of the symptom.
+   * 🔴 IT USED TO SAY IT MIRRORED `credentials/service.go: defaultTTL = 1 hour`, AND THAT CONSTANT
+   * NO LONGER EXISTS. The owner cancelled the term: a credential lives until it is revoked, the
+   * column that held an expiry is NULL for every row minted since (migration 283), and the API no
+   * longer accepts `ttl_seconds` at all. So the stated reason — "reusing a key past the
+   * credential's life would replay something already expired" — describes a life that no longer
+   * ends, and the note named the very thing it warned about: a ONE-DIRECTIONAL coupling to another
+   * repository's constant, which nothing here would notice being deleted. It was deleted.
+   *
+   * ⚠️ THE WINDOW STAYS AT ONE HOUR ANYWAY, AND FOR A REASON OF ITS OWN: it bounds how long this
+   * process holds a derived key in memory, which is a property of THIS client and not of the
+   * credential. Lengthening it because the credential now lives longer would be following the old
+   * comment's logic after its premise died.
    */
   private static readonly DERIVED_KEY_WINDOW_MS = 60 * 60 * 1000
 
