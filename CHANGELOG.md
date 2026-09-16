@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   "nothing here notices if the backend changes it". That constant has been deleted. The window stays
   at one hour for a reason of its own (how long this process holds a derived key in memory), now
   stated. **No behaviour change** in the key cache.
+  ⚠️ And the same stale word stood in TWO SIBLING descriptions and one field hint — `get_credential_status`
+  ("the status of a *temporary* credential request"), `get_credential_emails` ("a *temporary*
+  credential's relay address") and the `purpose` hint. Found by grepping the subject rather than by
+  remembering what had been edited: fixing one of three is how a claim survives its own repair.
 
 - **The PCI redactor's justification described a response that no longer exists** (SHAT-3346).
   Internal: comments and test fixtures only, **no behaviour change** — the scrub itself is untouched.
