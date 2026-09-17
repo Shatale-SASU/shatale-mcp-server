@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **The nightly run executes the live purchase chain, and a sandbox refusal is no longer counted as
+  a failure** (SHAT-3340 / SHAT-3023). `reveal_card` has THREE legitimate outcomes, not two: a
+  sandbox purchase does not reveal a PAN and the API says so by name (`sandbox_no_pan`, forwarded
+  through our envelope since SHAT-2373 precisely so a sandbox integrator does not read it as a broken
+  integration). The walk called that refusal a failure, so the chain could not be green in the only
+  environment it runs in. `nightly.yml` now sets `SHATALE_E2E_LIVE_CHAIN=1`, asks vitest for a JSON
+  report and runs `scripts/live-chain-executed.mjs` — a skipped suite makes a run PASS, so the count
+  is the acceptance rather than the colour. The secret now holds the sandbox key of the `ci-nightly`
+  publisher, an account that belongs to the pipeline rather than to a person, which is what made the
+  unattended run the owner's to allow.
+- **The tool description no longer claims that no API key can create an agent** — it said so, and it
+  was false; the first correction ("only a sandbox key can") was false too. Measured on the API tree:
+  `POST /v1/agents` creates one for a LIVE key (`agents:write`, behind the middleware that refuses a
+  sandbox key) and `POST /v1/sandbox/agents` for a sandbox one. What is true, and all this contract
+  depends on, is that **no tool here creates an agent** — so an agent id is a precondition an
+  assistant cannot manufacture. The generated README matrix carries the corrected sentence.
+
 - **`request_temporary_credentials` no longer tells the model the credentials are short-lived**
   (SHAT-3443, backend SHAT-3428). **Behaviour change for the agent**, not a comment: a tool
   description is read before the tool is chosen and acted on after.
