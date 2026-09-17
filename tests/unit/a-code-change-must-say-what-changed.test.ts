@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 // @ts-expect-error — plain .mjs script, no types, deliberately shared rather than reimplemented here.
-import { verdict } from '../../scripts/a-code-change-must-say-what-changed.mjs'
+import { verdict, emptyDiffCause } from '../../scripts/a-code-change-must-say-what-changed.mjs'
 
 // The controls for the changelog guard.
 //
@@ -120,5 +120,40 @@ describe('main must not drift past its published version', () => {
     const base = { latestTagVersion: '1.0.3', shippedChangedSinceTag: 1 }
     expect(driftVerdict({ ...base, packageVersion: '1.0.3' }).ok).toBe(false)
     expect(driftVerdict({ ...base, packageVersion: '1.0.4' }).ok).toBe(true)
+  })
+})
+
+// SHAT-3456. An empty diff is refused either way — these cases pin that the refusal names the cause
+// it MEASURED. The old single cause ("almost certainly a shallow checkout") sent a ticket to the
+// checkout while the real cause was a pull request whose content was already squash-merged.
+describe('an empty diff names the cause it measured', () => {
+  test('base absent from the clone → a checkout or base-ref problem', () => {
+    const c = emptyDiffCause({ baseExists: false, treeChanges: 0 })
+    expect(c.cause).toBe('missing-base')
+    expect(c.message).toMatch(/shallow checkout or a wrong base ref/)
+  })
+
+  test('base present and the trees equal → the pull request changes nothing (the #77 case)', () => {
+    const c = emptyDiffCause({ baseExists: true, treeChanges: 0 })
+    expect(c.cause).toBe('nothing-changes')
+    // ⚠️ AND IT MUST NOT BLAME THE CHECKOUT: that is exactly the misattribution this replaces.
+    expect(c.message).not.toMatch(/shallow/)
+    expect(c.message).toMatch(/duplicate/)
+  })
+
+  test('base present, trees differ, three-dot diff empty → a merge-base surprise, named as such', () => {
+    const c = emptyDiffCause({ baseExists: true, treeChanges: 6 })
+    expect(c.cause).toBe('unexpected-merge-base')
+    expect(c.message).toMatch(/6 file\(s\)/)
+  })
+
+  // Positive control across the three: the causes must all be DIFFERENT, or the function has
+  // collapsed back into one message wearing three labels.
+  test('the three measured states produce three different causes and messages', () => {
+    const a = emptyDiffCause({ baseExists: false, treeChanges: 0 })
+    const b = emptyDiffCause({ baseExists: true, treeChanges: 0 })
+    const d = emptyDiffCause({ baseExists: true, treeChanges: 3 })
+    expect(new Set([a.cause, b.cause, d.cause]).size).toBe(3)
+    expect(new Set([a.message, b.message, d.message]).size).toBe(3)
   })
 })

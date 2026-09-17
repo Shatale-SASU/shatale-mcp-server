@@ -66,6 +66,18 @@ jobs:
           node scripts/a-code-change-must-say-what-changed.mjs --files tests/unit/x.test.ts >/dev/null
           echo "Control held: a change that ships nothing needs no entry."
 
+          # SHAT-3456. The git mode's refusals must name the cause they MEASURED. Both cases below are
+          # deterministic in this job: HEAD compared with itself has an identical tree, and an all-zero
+          # SHA is never in the clone. The unit tests cover the naming function; only a live run covers
+          # the ORDER of checks — a mutant that diffed before checking the base died on a stack trace
+          # and passed every unit test.
+          out="$(node scripts/a-code-change-must-say-what-changed.mjs "$(git rev-parse HEAD)" 2>&1 || true)"
+          echo "$out" | grep -q 'nothing-changes' || { echo "::error::an unchanged tree was not named 'nothing-changes': $out"; exit 1; }
+          echo "Control held: a pull request that changes nothing is refused as such, not blamed on the checkout."
+          out="$(node scripts/a-code-change-must-say-what-changed.mjs 0000000000000000000000000000000000000000 2>&1 || true)"
+          echo "$out" | grep -q 'missing-base' || { echo "::error::a base absent from the clone was not named 'missing-base': $out"; exit 1; }
+          echo "Control held: a base absent from the clone is named, not crashed on."
+
       - name: Run public tests (no API key)
         run: npm run test:public
         env:

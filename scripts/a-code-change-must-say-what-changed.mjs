@@ -57,6 +57,55 @@ export function verdict(changed) {
   };
 }
 
+/**
+ * emptyDiffCause names WHY a pull request produced zero changed files. It never turns the empty
+ * answer into a pass — it only stops the refusal from naming the wrong cause.
+ *
+ * ⚠️ THE OLD MESSAGE HAD ONE CAUSE AND IT MISLED A TICKET (SHAT-3456, 17.09.2026). It said "almost
+ * certainly a shallow checkout or the wrong base ref". PR #77's run refused with that text, and the
+ * ticket filed from it prescribed `fetch-depth: 0` — which the workflow had carried since 28.08. The
+ * run's own log shows a full fetch (`+refs/heads/*`) and the merge ref. What actually happened:
+ * #77's content had already been squash-merged as #73, so the merge ref had the SAME TREE as its base
+ * and the pull request changed nothing. The zero was true, and the message sent the reader to the
+ * checkout.
+ *
+ * So the causes are told apart by what can be measured, not guessed:
+ *   - base commit ABSENT from the clone → shallow checkout or a wrong base ref;
+ *   - base present, and the tree at HEAD equals the tree at base → the pull request changes nothing
+ *     (typically: its content is already on the base branch, e.g. squash-merged earlier);
+ *   - base present, trees differ, yet base...HEAD lists nothing → the merge base is not what the
+ *     caller assumed; named as such rather than folded into one of the other two.
+ *
+ * @param {{baseExists: boolean, treeChanges: number}} m
+ * @returns {{cause: 'missing-base'|'nothing-changes'|'unexpected-merge-base', message: string}}
+ */
+export function emptyDiffCause({ baseExists, treeChanges }) {
+  if (!baseExists) {
+    return {
+      cause: 'missing-base',
+      message:
+        'the base commit is not in this clone — a shallow checkout or a wrong base ref.\n' +
+        'Fetch enough history (fetch-depth: 0) and pass the pull request base SHA.',
+    }
+  }
+  if (treeChanges === 0) {
+    return {
+      cause: 'nothing-changes',
+      message:
+        'the base commit IS present, and HEAD has the same tree as the base: this pull request\n' +
+        'changes nothing. Most often its content is already on the base branch (squash-merged\n' +
+        'before). This is not a checkout problem — check whether the pull request is a duplicate.',
+    }
+  }
+  return {
+    cause: 'unexpected-merge-base',
+    message:
+      `the base commit is present and the trees differ by ${treeChanges} file(s), yet base...HEAD\n` +
+      'lists none: the merge base is not the commit this check was given. Pass the pull request\n' +
+      'base SHA, and check that HEAD is the merge ref rather than an unrelated commit.',
+  }
+}
+
 // ── Run mode ──────────────────────────────────────────────────────────────────
 //
 // Invoked as `node scripts/a-code-change-must-say-what-changed.mjs <base-ref>`, it asks git what
@@ -72,6 +121,23 @@ function changedFromGit(base) {
   return out.split('\n').filter(Boolean);
 }
 
+function baseIsPresent(base) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${base}^{commit}`], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function measureEmptyDiff(base) {
+  const baseExists = baseIsPresent(base);
+  if (!baseExists) return { baseExists, treeChanges: 0 };
+  // Two dots: the TREE difference between base and HEAD, which is what the merge ref would change.
+  const out = execFileSync('git', ['diff', '--name-only', base, 'HEAD'], { encoding: 'utf8' });
+  return { baseExists, treeChanges: out.split('\n').filter(Boolean).length };
+}
+
 function main(argv) {
   let changed;
   const filesAt = argv.indexOf('--files');
@@ -83,18 +149,23 @@ function main(argv) {
       console.error('usage: a-code-change-must-say-what-changed.mjs <base-ref> | --files <paths...>');
       process.exit(2);
     }
+    // ⚠️ THE BASE IS CHECKED BEFORE THE DIFF, NOT AFTER IT. Measured 17.09.2026: with the base commit
+    // absent, `git diff base...HEAD` does not return an empty list — it throws ("Invalid symmetric
+    // difference expression") and the step dies on a stack trace. So the "shallow checkout" message
+    // this file carried since 28.08 could never actually be printed for a shallow checkout: the one
+    // case it named was the one case that never reached it.
+    if (!baseIsPresent(base)) {
+      const c = emptyDiffCause({ baseExists: false, treeChanges: 0 });
+      console.error(`::error::cannot compare ${base} with HEAD — ${c.cause}.\n${c.message}`);
+      process.exit(1);
+    }
     changed = changedFromGit(base);
     // ⚠️ AN EMPTY DIFF IS NOT A PASS, IT IS AN UNANSWERED QUESTION. A shallow clone, a wrong base ref
-    // or a detached HEAD all produce zero changed files, and zero changed files satisfies this check
-    // perfectly. Refusing here is the difference between "nothing shipped changed" and "I could not
-    // see what changed".
+    // or a pull request that changes nothing all produce zero changed files, and zero changed files
+    // satisfies this check perfectly. It still refuses — but now says WHICH of those it measured.
     if (changed.length === 0) {
-      console.error(
-        `::error::no changed files between ${base} and HEAD.\n` +
-          'That is almost certainly a shallow checkout or the wrong base ref, not an empty pull\n' +
-          'request — and an empty answer passes this check for the wrong reason. Fetch enough\n' +
-          'history (fetch-depth: 0) and pass the pull request base SHA.',
-      );
+      const c = emptyDiffCause(measureEmptyDiff(base));
+      console.error(`::error::no changed files between ${base} and HEAD — ${c.cause}.\n${c.message}`);
       process.exit(1);
     }
   }
