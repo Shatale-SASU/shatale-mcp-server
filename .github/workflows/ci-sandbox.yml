@@ -18,10 +18,14 @@ jobs:
     # The secret was replaced on 2026-09-14 with a key whose account owns agents, and again on
     # 17.09.2026 with the ci-nightly publisher's key (SHAT-3340).
     #
-    # ⚠️ AND THE OLD REASON'S SECOND HALF WAS FALSE: this comment said "no API key can create an agent
-    # by design". Measured 17.09.2026 — POST /v1/sandbox/agents exists and answers 201 for a SANDBOX
-    # key; it is SandboxOnly, so a LIVE key still cannot. The narrower claim is the true one, and it
-    # matters because the false one is what made "a separate CI account" look impossible.
+    # ⚠️ AND THE OLD REASON'S SECOND HALF WAS FALSE, TWICE OVER. This comment said "no API key can
+    # create an agent by design"; the first correction said "only a sandbox key can", and review
+    # measured that as false as well. What the tree says (apps/api/main.go:6128): POST /v1/agents
+    # creates an agent for a LIVE key — requireAuthority(PermAgentsWrite) behind
+    # RejectSandboxKeyOnMutations, which lets `live` through and refuses a sandbox key — and POST
+    # /v1/sandbox/agents does it for a SANDBOX key. No MCP TOOL creates one, and that is the only
+    # part this repository depends on. The false version is what made "a separate CI account" look
+    # impossible, which is why it is corrected here rather than deleted.
     #
     # ⚠️ AND REMOVING THE CAUSE DOES NOT REMOVE THE MECHANISM. The chain was held off by this
     # separate opt-in, which the fixed key does not touch: a deferral whose reason has expired but

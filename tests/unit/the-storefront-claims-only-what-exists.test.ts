@@ -224,9 +224,12 @@ describe('the prompts instruct the model in things the tools can do', () => {
 
   // ⚠️ ADDED ON RESTORATION, AND IT COULD NOT HAVE BEEN IN THE ORIGINAL. This work merged into a
   // dead branch yesterday and was rebuilt today, and in between the owner settled what had been an
-  // open question: creating an agent is a HUMAN step, done by hand in the publisher console. So it
-  // is no longer enough for the prompts to stop ordering the model to create one — silence would
-  // leave the model to guess where an agent comes from, and a guessing model invents an id.
+  // open question: creating an agent is a HUMAN step as far as THIS CONTRACT is concerned — no tool
+  // here creates one. (The API does: POST /v1/agents with a live key, POST /v1/sandbox/agents with a
+  // sandbox one — apps/api/main.go:6128, measured 17.09.2026 after two wrong versions of this
+  // sentence. What matters to the model is that it has no such tool.) So it is no longer enough for
+  // the prompts to stop ordering the model to create one — silence would leave the model to guess
+  // where an agent comes from, and a guessing model invents an id.
   //
   // Wherever the surface mentions an agent it must say WHOSE step it is. Checked over the prompt
   // texts and the quickstart resource together, because a reader meets whichever comes first.

@@ -65,9 +65,9 @@ const LIVE_CHAIN_DISABLED =
   'DISABLED, NOT PASSED — this block did not run. Set SHATALE_E2E_LIVE_CHAIN=1 with a ' +
   'SHATALE_TEST_KEY whose account owns an agent. Both ci-sandbox.yml and nightly.yml set it ' +
   '(SHAT-3340: the secret holds the ci-nightly publisher\'s sandbox key — an account that belongs ' +
-  'to the pipeline, which is what made the unattended nightly the owner\'s to allow; agents on a ' +
-  'sandbox key are created by POST /v1/sandbox/agents, measured 17.09.2026, while a LIVE key still ' +
-  'cannot). Seeing this sentence in either run means the ' +
+  'to the pipeline, which is what made the unattended nightly the owner\'s to allow; an agent is ' +
+  'created by POST /v1/agents on a live key or POST /v1/sandbox/agents on a sandbox one, and by no ' +
+  'tool in this contract). Seeing this sentence in either run means the ' +
   'opt-in was removed, not that the chain is still blocked.'
 
 const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
@@ -98,7 +98,9 @@ describe('the live chain says it is disabled rather than passed', () => {
     expect(LIVE_CHAIN_DISABLED, 'the sentence must say where the opt-in IS set').toMatch(
       /ci-sandbox\.yml/,
     )
-    expect(LIVE_CHAIN_DISABLED, 'and where it is deliberately not set').toMatch(/nightly\.yml/)
+    expect(LIVE_CHAIN_DISABLED, 'and that the nightly sets it too, since 17.09.2026').toMatch(
+      /nightly\.yml/,
+    )
     expect(LIVE_CHAIN_DISABLED, 'a skip that reads as a pass is the whole failure').toMatch(
       /DISABLED, NOT PASSED/,
     )
@@ -114,11 +116,22 @@ describe('the live chain says it is disabled rather than passed', () => {
   const workflowNotice = (wf: string): string =>
     readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8')
 
+  // ⚠️ THE SAME FOUR ASSERTIONS AS ci-sandbox BELOW, AND THE ASYMMETRY WAS ITS OWN DEFECT (review,
+  // 17.09.2026). This test checked only that the fallback SENTENCE is present; the neighbour also
+  // checks that the opt-in is really set and that the count is really read. A workflow that enables
+  // the chain and never measures it is green whether or not the chain ran — which is the failure
+  // this whole file exists for, and nightly is the run nobody watches live.
   test('nightly.yml prints the notice itself', () => {
     const body = workflowNotice('nightly.yml')
     expect(body, 'the workflow does not say the live chain is off').toMatch(/DISABLED, NOT PASSED/)
     expect(body).toMatch(/SHAT-3340/)
     expect(body).toMatch(/SHATALE_E2E_LIVE_CHAIN/)
+    expect(body, 'the opt-in is not actually set in the nightly, so the chain does not run there').toMatch(
+      /SHATALE_E2E_LIVE_CHAIN:\s*['"]?1/,
+    )
+    expect(body, 'the nightly is green whether or not the chain ran unless the count is read').toMatch(
+      /live-chain-executed\.mjs/,
+    )
   })
 
   // ⚠️ ci-sandbox.yml NOW ENABLES THE CHAIN, AND THE NOTICE STAYS THERE AS A FALLBACK. Its step is
@@ -259,10 +272,13 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
 // ⚠️ AND ONE PRECONDITION DOES NOT COME FROM THIS CONTRACT, THOUGH THE REASON NARROWED ON 17.09.2026.
 // The agent is obtained the way the publish gate obtains it — `GET /v1/agents` with the same key, a
 // READ — and that step is a PREMISE, not part of the walk; the walk itself is the five tool calls.
-// What changed is WHY: this comment used to say "no API key can create an agent". Measured — POST
-// /v1/sandbox/agents answers 201 for a SANDBOX key (SandboxOnly, so a live key cannot), and that is
-// how the ci-nightly account got its agent. No MCP TOOL creates one, which is the part that still
-// holds and the part this walk depends on.
+// What changed is WHY, and the first correction was wrong too. This comment said "no API key can
+// create an agent"; I replaced it with "a live key cannot (sandbox-only)", and review measured that
+// as false as well. What the tree actually says: POST /v1/agents creates an agent for a LIVE key
+// (requireAuthority(PermAgentsWrite) behind RejectSandboxKeyOnMutations — apps/api/main.go:6128,
+// which lets `live` through and refuses a sandbox key), and POST /v1/sandbox/agents does it for a
+// SANDBOX key. The part that holds, and the only part this walk depends on, is that no MCP TOOL
+// creates one — so the agent is a PREMISE here however the account got it.
 //
 // ⚠️ A MISSING AGENT IS A LOUD FAILURE, NEVER A SKIP, and that is the neighbouring gate's rule for
 // the same premise: "an unverified premise is how a test ends up asserting nothing". The remedy is

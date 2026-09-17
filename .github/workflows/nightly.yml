@@ -20,10 +20,12 @@ jobs:
     # belongs to the pipeline.
     #
     # ⚠️ AND THE ACCEPTANCE IS NOT THIS LINE. SHAT-3023 closes on the first green AUTOMATIC nightly
-    # whose log carries "live chain: PASSED" — the flag makes the run possible, the count below is
-    # what proves it happened.
+    # whose log carries the instrument's own notice — "SHAT-3023 live chain: EXECUTED". The script
+    # prints EXECUTED / NOT EXECUTED / Could not measure and no "PASSED" string exists; writing one
+    # here would be an expectation pretending to be a measurement. The flag makes the run possible,
+    # the count is what proves it happened.
     env:
-      SHATALE_E2E_LIVE_CHAIN: '1' 
+      SHATALE_E2E_LIVE_CHAIN: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,23 +62,12 @@ jobs:
       # This repo already knows the rule — ci-public.yml and publish.yml both open with
       # `set -euo pipefail`. Nightly is the one place it was missed, and it is the one workflow
       # where nobody is watching the run live.
-      # SHAT-3340 — the live purchase chain is STILL OFF HERE, and the reason has CHANGED.
-      #
-      # 🔴 THE OLD REASON IS NO LONGER TRUE, AND LEAVING IT WOULD BE WORSE THAN LEAVING NOTHING: it
-      # said the account owning SHATALE_TEST_KEY has zero agents. The secret was replaced on
-      # 2026-09-14 with a key whose account owns agents, and ci-sandbox.yml now runs the chain. A
-      # recorded reason that has expired gets repeated; an absent one gets asked about.
-      #
-      # ▌THE REASON IT IS OFF HERE IS THE ACCOUNT, NOT THE KEY. The replacement key belongs to a
-      # PERSON'S sandbox account. This workflow runs unattended every night, so enabling the chain
-      # here would create purchases every night in an account somebody works in by hand. That is a
-      # decision about whose sandbox we spend, and it is the owner's — asked, not assumed. Either
       # ⚠️ THE NOTICE STAYS, AND IT IS NOT LEFTOVER TEXT — it is conditional on the opt-in, so with the
       # job-level env above it never prints, and the day somebody removes that line this run says so
       # in the channel a nightly failure is actually read in. Its wording is kept as it was, with the
-      # one stale clause corrected: "no API key can create one" was measured false on 17.09.2026 —
-      # POST /v1/sandbox/agents exists and answers 201 for a SANDBOX key (it is SandboxOnly, so a
-      # LIVE key still cannot).
+      # one stale clause corrected: "no API key can create one" was measured false on 17.09.2026.
+      # Both kinds of key create agents — POST /v1/agents for a live key, POST /v1/sandbox/agents for
+      # a sandbox one (apps/api/main.go:6128); no MCP tool does.
       - name: The live purchase chain is deferred, not passing
         if: env.SHATALE_E2E_LIVE_CHAIN != '1'
         run: |
