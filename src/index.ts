@@ -345,8 +345,9 @@ npx shatale-mcp-server
 \`\`\`
 
 ### 4. Who does what
-Creating the agent is YOUR step, not the assistant's: you create it yourself in the publisher
-console, by hand. That is deliberate — no API key issues an agent, and no tool here can.
+Creating the agent is YOUR step, not the assistant's: on a LIVE key you create it yourself in the
+publisher console, by hand — no live key issues an agent, and no tool here does. On a SANDBOX key the
+API does have POST /v1/sandbox/agents (sandbox-only), which is how a CI account gets its agent.
 
 Once you have an agent id, ask your AI assistant:
 - "Draft a spending policy with a 1000 EUR monthly budget and gambling blocked"

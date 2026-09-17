@@ -63,11 +63,11 @@ const LIVE_CHAIN_OPT_IN = process.env.SHATALE_E2E_LIVE_CHAIN === '1'
  */
 const LIVE_CHAIN_DISABLED =
   'DISABLED, NOT PASSED — this block did not run. Set SHATALE_E2E_LIVE_CHAIN=1 with a ' +
-  'SHATALE_TEST_KEY whose account owns an agent. ci-sandbox.yml sets it (SHAT-3340: the secret was ' +
-  'replaced on 2026-09-14 with such a key; the old one owned zero agents and no API key can create ' +
-  'one). nightly.yml deliberately does not: that key is a person\'s sandbox account, and an ' +
-  'unattended nightly would create purchases in an account somebody works in by hand — the ' +
-  'owner\'s call, asked rather than assumed. Seeing this sentence in a ci-sandbox run means the ' +
+  'SHATALE_TEST_KEY whose account owns an agent. Both ci-sandbox.yml and nightly.yml set it ' +
+  '(SHAT-3340: the secret holds the ci-nightly publisher\'s sandbox key — an account that belongs ' +
+  'to the pipeline, which is what made the unattended nightly the owner\'s to allow; agents on a ' +
+  'sandbox key are created by POST /v1/sandbox/agents, measured 17.09.2026, while a LIVE key still ' +
+  'cannot). Seeing this sentence in either run means the ' +
   'opt-in was removed, not that the chain is still blocked.'
 
 const describeIfKey = TEST_KEY && LIVE_CHAIN_OPT_IN ? describe : describe.skip
@@ -256,11 +256,13 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
 // that HAS AN ACTIVE DELEGATION, and `sandbox_create_user` is the only thing in the contract that
 // makes one — its own description says "This is the first step … nothing else here creates one".
 //
-// ⚠️ AND ONE PRECONDITION CANNOT COME FROM THE CONTRACT AT ALL, BY DESIGN. The same description:
-// "agent_id must be an agent YOU created by hand in the publisher console; no API key can create an
-// agent, so if you do not have one, ask the person for it rather than inventing an id." So the agent
-// is obtained the way the publish gate obtains it — `GET /v1/agents` with the same key, a READ —
-// and that step is a PREMISE, not part of the walk. The walk itself is the five tool calls.
+// ⚠️ AND ONE PRECONDITION DOES NOT COME FROM THIS CONTRACT, THOUGH THE REASON NARROWED ON 17.09.2026.
+// The agent is obtained the way the publish gate obtains it — `GET /v1/agents` with the same key, a
+// READ — and that step is a PREMISE, not part of the walk; the walk itself is the five tool calls.
+// What changed is WHY: this comment used to say "no API key can create an agent". Measured — POST
+// /v1/sandbox/agents answers 201 for a SANDBOX key (SandboxOnly, so a live key cannot), and that is
+// how the ci-nightly account got its agent. No MCP TOOL creates one, which is the part that still
+// holds and the part this walk depends on.
 //
 // ⚠️ A MISSING AGENT IS A LOUD FAILURE, NEVER A SKIP, and that is the neighbouring gate's rule for
 // the same premise: "an unverified premise is how a test ends up asserting nothing". The remedy is
@@ -298,9 +300,9 @@ async function resolveSandboxAgentId(): Promise<string> {
   if (!res.ok) {
     throw new Error(
       `GET /v1/agents answered HTTP ${res.status} on ${API_BASE}, so the chain has no agent to walk ` +
-        'with. Set SHATALE_GATE_AGENT_ID (publish.yml already uses that variable) or seed one agent ' +
-        'in the publisher console — no API key can create one, which is why this cannot be fixed in ' +
-        'the test.',
+        'with. Set SHATALE_GATE_AGENT_ID (publish.yml already uses that variable), or create one: on ' +
+        'a SANDBOX key POST /v1/sandbox/agents does it (measured 17.09.2026), on a live key it is by ' +
+        'hand in the publisher console. Either way it cannot be fixed inside this test.',
     )
   }
   // 🔴 THIS PARSE WAS THE DEFECT, AND ITS MESSAGE ACCUSED THE ACCOUNT FOR IT. It read
@@ -372,8 +374,9 @@ async function resolveSandboxAgentId(): Promise<string> {
         'agents while a working key sees two on the same host, so they are two accounts" was made ' +
         'THROUGH THE BROKEN READER above, which could never see an agent at all. It is retracted ' +
         'until re-measured with this code. Remedies, in the order that actually applies: ' +
-        '(1) seed one agent in the publisher console on the account that owns THIS key — no API key ' +
-        'can create an agent, by design; (2) replace the secret with a key of an account that ' +
+        '(1) create one on the account that owns THIS key — POST /v1/sandbox/agents on a sandbox ' +
+        'key (SandboxOnly; a live key must do it by hand in the publisher console); ' +
+        '(2) replace the secret with a key of an account that ' +
         'already has agents; (3) only if you know the id belongs to THIS account, pin it with ' +
         'SHATALE_GATE_AGENT_ID. Pinning an id from another account changes the wording of this ' +
         'failure and nothing else.',
@@ -453,9 +456,18 @@ describeIfKey(LIVE_SUITE_NAME, () => {
     const answer = text(revealed)
     const cardArrived = answer.includes('card_number') || answer.includes('"number"')
     const namedRefusal = answer.includes('card_credentials_unavailable')
+    // 🔴 THE THIRD OUTCOME, AND IT IS THE ONE A SANDBOX RUN ACTUALLY TAKES (SHAT-3340/3362 tail B).
+    // A sandbox purchase does not reveal a PAN, on purpose, and the API says so BY NAME —
+    // `sandbox_no_pan`, forwarded through our envelope (src/errors.ts, SHAT-2373) precisely so a
+    // sandbox integrator does not read a bare "not found" as a broken integration and retry on a
+    // LIVE key. This test listed two outcomes and called that refusal a failure, so the live chain
+    // could not be green in the only environment it runs in — the assertion was narrower than the
+    // contract it was checking.
+    const sandboxRefusesOnPurpose = answer.includes('sandbox_no_pan')
     expect(
-      cardArrived || namedRefusal,
-      `reveal_card ended in neither of its two legitimate outcomes: ${answer}`,
+      cardArrived || namedRefusal || sandboxRefusesOnPurpose,
+      `reveal_card ended in none of its three legitimate outcomes (card, ` +
+        `card_credentials_unavailable, sandbox_no_pan): ${answer}`,
     ).toBe(true)
   })
 })

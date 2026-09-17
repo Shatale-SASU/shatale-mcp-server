@@ -197,9 +197,10 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
         "Create one of YOUR OWN sandbox users and give it the delegation that lets it buy. This is " +
         "the first step: request_purchase needs a publisher_user_id that has an active delegation, " +
         "and nothing else here creates one. Idempotent — calling it again with the same ids changes " +
-        "nothing. agent_id must be an agent YOU created by hand in the publisher console; no API key " +
-        "can create an agent, so if you do not have one, ask the person for it rather than inventing " +
-        "an id. user_id is yours to choose: it is how you will refer to this person afterwards.",
+        "nothing. agent_id must be an agent that EXISTS on this account — a live key cannot create " +
+        "one (agent creation is sandbox-only), so on a live key ask the person for it rather than " +
+        "inventing an id; on a sandbox key POST /v1/sandbox/agents creates one. user_id is yours to " +
+        "choose: it is how you will refer to this person afterwards.",
       inputSchema: {
         type: 'object',
         properties: {

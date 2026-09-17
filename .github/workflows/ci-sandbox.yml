@@ -14,9 +14,14 @@ jobs:
     # SHAT-3340 — THE LIVE CHAIN IS ON HERE, AND THIS IS THE LINE THAT TURNS IT ON.
     #
     # The blocker is gone: measured across two dispatches, the key in Actions secrets saw ZERO
-    # agents while a working key saw TWO on the same host — one secret name, two sandbox accounts,
-    # and no API key can create an agent by design. The secret was replaced on 2026-09-14 with a key
-    # whose account owns agents (its timestamp moved 2026-05-11 -> 2026-09-14).
+    # agents while a working key saw TWO on the same host — one secret name, two sandbox accounts.
+    # The secret was replaced on 2026-09-14 with a key whose account owns agents, and again on
+    # 17.09.2026 with the ci-nightly publisher's key (SHAT-3340).
+    #
+    # ⚠️ AND THE OLD REASON'S SECOND HALF WAS FALSE: this comment said "no API key can create an agent
+    # by design". Measured 17.09.2026 — POST /v1/sandbox/agents exists and answers 201 for a SANDBOX
+    # key; it is SandboxOnly, so a LIVE key still cannot. The narrower claim is the true one, and it
+    # matters because the false one is what made "a separate CI account" look impossible.
     #
     # ⚠️ AND REMOVING THE CAUSE DOES NOT REMOVE THE MECHANISM. The chain was held off by this
     # separate opt-in, which the fixed key does not touch: a deferral whose reason has expired but

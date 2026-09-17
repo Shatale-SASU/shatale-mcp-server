@@ -10,6 +10,20 @@ jobs:
   nightly-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # SHAT-3340/3023 — THE LIVE CHAIN RUNS HERE NOW, AND THE REASON IT DID NOT IS GONE.
+    #
+    # It was off because SHATALE_TEST_KEY belonged to a PERSON'S sandbox account, and purchases every
+    # night in an account somebody works in by hand is an owner's decision rather than a pipeline's.
+    # The owner decided (17.09.2026): a separate CI account. The publisher ci-nightly with one agent
+    # exists, and the secret now holds ITS sandbox key — so the nightly spends in an account that
+    # belongs to the pipeline.
+    #
+    # ⚠️ AND THE ACCEPTANCE IS NOT THIS LINE. SHAT-3023 closes on the first green AUTOMATIC nightly
+    # whose log carries "live chain: PASSED" — the flag makes the run possible, the count below is
+    # what proves it happened.
+    env:
+      SHATALE_E2E_LIVE_CHAIN: '1' 
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,23 +71,38 @@ jobs:
       # PERSON'S sandbox account. This workflow runs unattended every night, so enabling the chain
       # here would create purchases every night in an account somebody works in by hand. That is a
       # decision about whose sandbox we spend, and it is the owner's — asked, not assumed. Either
-      # answer removes this block: a separate account with an agent, or a yes to sharing.
-      #
-      # This run passes --reporter=verbose, so a skipped suite's name is in the log — buried in it.
-      # A ::notice:: surfaces in the run summary, which is where a nightly failure is actually read.
-      # Conditional, so it stops claiming the block is off the moment somebody enables it.
+      # ⚠️ THE NOTICE STAYS, AND IT IS NOT LEFTOVER TEXT — it is conditional on the opt-in, so with the
+      # job-level env above it never prints, and the day somebody removes that line this run says so
+      # in the channel a nightly failure is actually read in. Its wording is kept as it was, with the
+      # one stale clause corrected: "no API key can create one" was measured false on 17.09.2026 —
+      # POST /v1/sandbox/agents exists and answers 201 for a SANDBOX key (it is SandboxOnly, so a
+      # LIVE key still cannot).
       - name: The live purchase chain is deferred, not passing
         if: env.SHATALE_E2E_LIVE_CHAIN != '1'
         run: |
-          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run in this NIGHTLY. It does run on demand in ci-sandbox.yml, which sets SHATALE_E2E_LIVE_CHAIN=1 (SHAT-3340: the secret was replaced on 2026-09-14 with a key whose account owns an agent - the old one owned zero, and no API key can create one). It is off HERE because that key is a person's sandbox account and this workflow is unattended: purchases every night in an account somebody works in by hand is the owner's decision, not the pipeline's."
+          echo "::notice title=SHAT-3023 live chain: DISABLED, NOT PASSED::The live provision->request->approve->status->reveal chain did not run in this NIGHTLY, because SHATALE_E2E_LIVE_CHAIN is not 1 - this job sets it, so seeing this notice means the opt-in was removed. SHAT-3340 is closed: the secret holds the sandbox key of the ci-nightly publisher, an account that belongs to the pipeline rather than to a person. Restore the job-level env, or say here why the chain must stay off."
 
+      # --reporter=json alongside the verbose one: the human reads the log, the step below reads the
+      # report. Same pair as ci-sandbox.yml, and for the same reason — a skipped suite makes the run
+      # PASS, so the colour of this step is not evidence that the chain executed.
       - name: Run full test suite
         id: tests
         run: |
           set -euo pipefail
-          npm test -- --reporter=verbose 2>&1 | tee /tmp/test-output.txt
+          npm test -- --reporter=verbose --reporter=json --outputFile=/tmp/vitest-nightly.json 2>&1 | tee /tmp/test-output.txt
         env:
           SHATALE_TEST_KEY: ${{ secrets.SHATALE_TEST_KEY }}
+
+      # 🔴 THE ACCEPTANCE IS A NUMBER, NOT THE COLOUR ABOVE, AND SHAT-3023 CLOSES ON IT. The script
+      # reads the run's own JSON report and answers how many live-chain cases EXECUTED, with distinct
+      # exit codes for "skipped" and "could not read the report" — one non-zero would merge two facts.
+      #
+      # ⚠️ `if: always()` ON PURPOSE: when the suite fails, this step above is already red, and the
+      # question "did the chain run at all" still needs its own answer, or a failure elsewhere hides a
+      # chain that never started.
+      - name: The live chain must have EXECUTED, not been skipped
+        if: always()
+        run: node scripts/live-chain-executed.mjs /tmp/vitest-nightly.json
 
       - name: Upload server logs on failure
         if: failure()
