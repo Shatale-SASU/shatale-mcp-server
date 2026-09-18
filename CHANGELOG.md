@@ -8,7 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **A streamable-HTTP transport beside stdio** (SHAT-3520). The server spoke only stdio, so a client
+  that cannot spawn a child process — a web application — could not reach it through the public
+  contract at all. stdio remains the default and is unchanged: the transport is ADDED, and it is
+  chosen by an explicit `SHATALE_MCP_TRANSPORT`, never inferred from the environment. A value we do
+  not recognise is refused rather than folded into the default, because falling back starts stdio
+  for somebody who asked for HTTP and leaves them debugging a network they can reach.
+
+  The server build moved into a factory. It was a module-level singleton whose handlers were
+  registered as import side effects — sound while stdio is a 1:1 pipe to one client, and wrong the
+  moment a second client can arrive: they would have shared one object and crossed each other's
+  replies. Both transports now hand back the SAME roster rather than two lists that happen to agree
+  today, and a test asks BOTH RUNNING TRANSPORTS and compares the sets — a tool present on one path
+  and absent on the other is a divergence that would never announce itself.
+
+  HTTP requires the publisher key as a bearer token, compared in constant time and never echoed.
+  `missing_key` and `key_not_accepted` stay separate answers on purpose. Without a key to check
+  against, HTTP refuses to start rather than listening on a network that authenticates nothing; it
+  binds loopback unless told otherwise. Sessions are stateless — a server and a transport per
+  request — so two callers cannot observe each other.
+
+  The stdio hardening stays on the stdio path: it writes a parse-error frame to the process stdout
+  and closes the session, which is right for a pipe and wrong twice on HTTP, where that stdout is
+  nobody's channel and one malformed frame would tear down a session shared with others.
 
 ## [1.0.4] — 2026-09-18
 
