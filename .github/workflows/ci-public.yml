@@ -100,7 +100,16 @@ jobs:
           # commit built here shares no history with HEAD, so it is PRESENT and has no merge base —
           # `git diff base...HEAD` throws on it. Deterministic in any clone: the empty tree is written
           # by git itself and the commit has no parent.
-          unrelated="$(git commit-tree "$(git hash-object -w -t tree /dev/null)" -m 'unrelated history, for the control below')"
+          # ⚠️ THE IDENTITY IS SUPPLIED INLINE, AND THAT IS A MEASUREMENT OF THIS CONTROL RATHER THAN
+          # STYLE. Written without it, the control passed locally and failed on the runner with
+          # "fatal: empty ident name … Author identity unknown": `git commit-tree` needs an author,
+          # my machine has one configured and a fresh runner does not. A control that depends on the
+          # operator's git config is a control that answers about the operator. Passing the four
+          # variables is also better than `git config user.email`: it leaves the repository's own
+          # configuration untouched, so nothing else in the job inherits a setting from a control.
+          unrelated="$(GIT_AUTHOR_NAME=control GIT_AUTHOR_EMAIL=control@invalid \
+            GIT_COMMITTER_NAME=control GIT_COMMITTER_EMAIL=control@invalid \
+            git commit-tree "$(git hash-object -w -t tree /dev/null)" -m 'unrelated history, for the control below')"
           refuses 'no-merge-base' 'a base that shares no history with HEAD' "$unrelated"
 
       - name: Run public tests (no API key)
