@@ -4,9 +4,16 @@
 
 | Version | Supported |
 |---------|-----------|
+| 1.1.x   | Yes       |
 | 1.0.x   | Yes       |
 | < 1.0   | No        |
 
+<!-- ⚠️ 1.0.x STAYS "Yes" ALONGSIDE 1.1.x, AND MARKING IT "No" WAS THE FIRST THING I WROTE HERE.
+     Between this commit and the publication of 1.1.0 the version everybody runs is 1.0.3. A table
+     that calls it unsupported in that window tells every reporter of a vulnerability that the live
+     version is out of scope — which is verbatim the defect recorded below for 0.2.x. Retiring 1.0.x
+     is a decision to take AFTER 1.1.0 is published and adopted, not in the commit that prepares it.
+-->
 <!-- This table said "0.2.x" while the published package was 0.5.2 — so the security policy told
      every reporter that the version everybody is running is unsupported. Corrected 2026-08-26
      (SHAT-2526). Bumped to 1.0.x with the 1.0.0 version bump, per the instruction that stood here —

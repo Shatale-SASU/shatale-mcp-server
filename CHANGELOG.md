@@ -10,7 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 _Nothing yet._
 
-## [1.0.4] — 2026-09-18
+## [1.1.0] — 2026-09-18
+
+> **MINOR, NOT PATCH, AND THE OWNER DECIDED IT ON 2026-09-18.** This release adds a public MCP tool —
+> `await_purchase_approval` (#64) — and the sandbox roster goes 19 → 21 (`reveal_card`, SHAT-3023, and
+> that one). Under semver an added tool is a minor bump: a consumer receives capability it did not
+> have, and 1.0.3 → 1.0.4 would have understated it. The observation was recorded in the release
+> preparation rather than decided there; the number is the releaser's call and this is it.
 
 > 🔴 **THIS VERSION WAS PREPARED ON 2026-08-28 AND NOT PUBLISHED FOR THREE WEEKS, AND THE COST IS
 > MEASURED (SHAT-3506).** The entry below was written the night the divergence was found; the tag was
