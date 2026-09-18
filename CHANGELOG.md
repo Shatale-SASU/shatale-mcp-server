@@ -8,6 +8,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.4] — 2026-09-18
+
+> 🔴 **THIS VERSION WAS PREPARED ON 2026-08-28 AND NOT PUBLISHED FOR THREE WEEKS, AND THE COST IS
+> MEASURED (SHAT-3506).** The entry below was written the night the divergence was found; the tag was
+> never cut. In the meantime `main` gathered twenty more commits, and the one thing 1.0.4 exists to
+> ship — a deterministic `idempotency_key` on every write — stayed unpublished while the API started
+> requiring it.
+>
+> **What that did:** the Concierge pins `shatale-mcp-server@1.0.3`, the API put `IdempotentBody` in
+> front of `POST /v1/sandbox/users` (SHAT-2721), and provisioning has answered
+> `400 idempotency_key is required in the request body` ever since. `sandbox_create_user` is the ONLY
+> way a new Concierge user reaches the enrolment funnel, so the funnel has been dead since the end of
+> August. The e2e spec that walks it has failed in every run it actually executed since 2026-09-06.
+>
+> ⚠️ **The fix was three hours late to the release, and that is worse than absent.** Commit `2a71805`
+> landed at 23:34 on 2026-08-27; `v1.0.3` was tagged at 20:28 the same evening. Anyone reading
+> `src/client.ts` — and two people did, including the author of this note — sees a client that sends
+> the key. The tree was right and the registry was three hours behind it.
+>
+> The sections below therefore cover **everything on `main` at the time of this release**, not only
+> what was written on 28.08. The date is the publication date, because a heading that names an older
+> day describes content it has never seen — which is the defect the original note underneath was
+> written about, one version down.
+
+### Fixed — the reason this release is urgent
+
+- **The Concierge enrolment funnel opens again** (SHAT-3506). `createSandboxUser` and
+  `sandboxCompleteOnboarding` send deterministic idempotency keys, which the API has required since
+  SHAT-2721. No code changed for this: it has been on `main` since 2026-08-27 and this is the first
+  release that carries it.
+
+
+> ⚠️ **1.0.3 was published without the three commits below, and the version was never raised.** The
+> package on npm and the tree on `main` carried ONE NUMBER over DIFFERENT CONTENT, so anyone
+> installing `shatale-mcp-server@1.0.3` got the older behaviour with no way to notice — the number
+> matched. Measured by RUNNING the published tarball, not by reading it: it announced
+> `demo(sandbox) mode, 17 tools`, where `main` announces 19.
+>
+> This release exists to make the number mean something again.
+
+### Added
+
+- **Checkout tools in the sandbox.** `get_checkout_customer` and `get_checkout_cardholder` now
+  register for a sandbox key, not only for `isLive && moneyGo`. The gate that hid them was ours, and
+  the reason recorded for it — that the backend would refuse a sandbox key on those routes — was not
+  true of the backend. The owner decided the tools should be available; the gate is removed rather
+  than re-justified. Sandbox goes 17 → 19 tools; the union over all modes stays 21.
+
+### Changed
+
+- **Every write now carries an idempotency key, and the list of writes comes from the source.**
+  `cancel_purchase`, `sandbox_approve_purchase`, `sandbox_create_user`,
+  `sandbox_complete_onboarding` and `register_user_profile` send one; the last of those previously
+  *forwarded* a caller-supplied key and enforced nothing. `sandbox_approve_purchase` matters most —
+  it issues a card, and it appeared in neither of the two tickets' hand-written lists.
+  The keys are DETERMINISTIC, derived from the operation and its target: these calls address a row
+  that already exists, so a repeat means "do that again to the same thing" and must de-duplicate. A
+  per-call random key does the opposite.
+  `sandbox_simulate_authorization` is the one exemption, and it is recorded with the measurement
+  that earns it rather than as an assertion.
+
+### Fixed
+
+- **The publish workflow refuses a tag that is not reachable from `main`.** A tag cut from a branch
+  can no longer reach the registry — the failure that put 0.5.1 on npm with no tag at all. Verified
+  to discriminate, not merely to exist: a tag on `main` passes, a tag on a side branch is refused,
+  and a tag whose name disagrees with `package.json` is refused.
+
+### Changed and added since 2026-08-28
+
+> ⚠️ **A NEW PUBLIC TOOL SHIPS UNDER A PATCH NUMBER, AND THAT IS A RELEASE DECISION RATHER THAN AN
+> OVERSIGHT TO CORRECT HERE.** `await_purchase_approval` (#64) is new MCP surface, and the sandbox
+> roster has gone 19 → 21 since the note above was written — `reveal_card` (SHAT-3023) and
+> `await_purchase_approval`. Under semver an added tool is a MINOR bump, so 1.0.3 → 1.0.4 understates
+> what a consumer receives.
+>
+> It is recorded and not decided: `package.json` already says 1.0.4, the publish gate matches the tag
+> against it, and `main-must-not-drift-past-its-published-version.mjs` is satisfied by 1.0.4. Raising
+> it to 1.1.0 is one line in two places and is the releaser's call.
+>
+> The counts above are quoted from the README's per-mode roster, which is generated from the RUNNING
+> server (`<!-- count:sandbox -->`). A count derived by grepping `src/tools` gives 23 and is wrong —
+> it counts names across modes. The number belongs to the instrument that maintains it.
+
 ### Changed
 
 - **The nightly run executes the live purchase chain, and a sandbox refusal is no longer counted as
@@ -175,44 +261,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   handler existed. The parent saw a raw Node stack from a child dying during the MCP handshake, which
   arrives as a timeout rather than an error. A value that is not a URL is refused too, by its LENGTH
   rather than by echoing it: a URL can carry credentials in its userinfo.
-
-## [1.0.4] — 2026-08-28
-
-> ⚠️ **1.0.3 was published without the three commits below, and the version was never raised.** The
-> package on npm and the tree on `main` carried ONE NUMBER over DIFFERENT CONTENT, so anyone
-> installing `shatale-mcp-server@1.0.3` got the older behaviour with no way to notice — the number
-> matched. Measured by RUNNING the published tarball, not by reading it: it announced
-> `demo(sandbox) mode, 17 tools`, where `main` announces 19.
->
-> This release exists to make the number mean something again.
-
-### Added
-
-- **Checkout tools in the sandbox.** `get_checkout_customer` and `get_checkout_cardholder` now
-  register for a sandbox key, not only for `isLive && moneyGo`. The gate that hid them was ours, and
-  the reason recorded for it — that the backend would refuse a sandbox key on those routes — was not
-  true of the backend. The owner decided the tools should be available; the gate is removed rather
-  than re-justified. Sandbox goes 17 → 19 tools; the union over all modes stays 21.
-
-### Changed
-
-- **Every write now carries an idempotency key, and the list of writes comes from the source.**
-  `cancel_purchase`, `sandbox_approve_purchase`, `sandbox_create_user`,
-  `sandbox_complete_onboarding` and `register_user_profile` send one; the last of those previously
-  *forwarded* a caller-supplied key and enforced nothing. `sandbox_approve_purchase` matters most —
-  it issues a card, and it appeared in neither of the two tickets' hand-written lists.
-  The keys are DETERMINISTIC, derived from the operation and its target: these calls address a row
-  that already exists, so a repeat means "do that again to the same thing" and must de-duplicate. A
-  per-call random key does the opposite.
-  `sandbox_simulate_authorization` is the one exemption, and it is recorded with the measurement
-  that earns it rather than as an assertion.
-
-### Fixed
-
-- **The publish workflow refuses a tag that is not reachable from `main`.** A tag cut from a branch
-  can no longer reach the registry — the failure that put 0.5.1 on npm with no tag at all. Verified
-  to discriminate, not merely to exist: a tag on `main` passes, a tag on a side branch is refused,
-  and a tag whose name disagrees with `package.json` is refused.
 
 ## [1.0.3] — 2026-08-27
 
