@@ -147,13 +147,35 @@ describe('an empty diff names the cause it measured', () => {
     expect(c.message).toMatch(/6 file\(s\)/)
   })
 
-  // Positive control across the three: the causes must all be DIFFERENT, or the function has
-  // collapsed back into one message wearing three labels.
-  test('the three measured states produce three different causes and messages', () => {
+  // 🔴 THE FOURTH STATE, WHICH USED TO CRASH INSTEAD OF BEING NAMED — review of #78. A base can be
+  // PRESENT and share no history with HEAD (an unrelated commit, a force-push, a grafted clone), and
+  // `git diff base...HEAD` needs a merge base: without one it throws and the check died on a stack
+  // trace before anything could be measured.
+  test('base present but unrelated to HEAD → no-merge-base, and NOT a fetch-more-history answer', () => {
+    const c = emptyDiffCause({ baseExists: true, mergeBase: false, treeChanges: 0 })
+    expect(c.cause).toBe('no-merge-base')
+    // ⚠️ THE REMEDY IS THE ASSERTION. 'missing-base' says "fetch enough history", and fetching will
+    // never produce a merge base that does not exist — sending somebody there is the same
+    // misattribution this whole function replaced. So the message must REFUSE that remedy in words.
+    expect(c.message).toMatch(/cannot fix this/i)
+    expect(c.message).toMatch(/shares no history/i)
+  })
+
+  // The default matters: every caller that predates this state omits `mergeBase`, and they must keep
+  // their old cause rather than silently becoming no-merge-base.
+  test('an omitted mergeBase keeps the previous causes', () => {
+    expect(emptyDiffCause({ baseExists: true, treeChanges: 0 }).cause).toBe('nothing-changes')
+    expect(emptyDiffCause({ baseExists: true, treeChanges: 4 }).cause).toBe('unexpected-merge-base')
+  })
+
+  // Positive control across the FOUR: the causes must all be DIFFERENT, or the function has
+  // collapsed back into one message wearing four labels.
+  test('the four measured states produce four different causes and messages', () => {
     const a = emptyDiffCause({ baseExists: false, treeChanges: 0 })
     const b = emptyDiffCause({ baseExists: true, treeChanges: 0 })
     const d = emptyDiffCause({ baseExists: true, treeChanges: 3 })
-    expect(new Set([a.cause, b.cause, d.cause]).size).toBe(3)
-    expect(new Set([a.message, b.message, d.message]).size).toBe(3)
+    const e = emptyDiffCause({ baseExists: true, mergeBase: false, treeChanges: 0 })
+    expect(new Set([a.cause, b.cause, d.cause, e.cause]).size).toBe(4)
+    expect(new Set([a.message, b.message, d.message, e.message]).size).toBe(4)
   })
 })

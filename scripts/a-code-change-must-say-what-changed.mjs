@@ -79,13 +79,33 @@ export function verdict(changed) {
  * @param {{baseExists: boolean, treeChanges: number}} m
  * @returns {{cause: 'missing-base'|'nothing-changes'|'unexpected-merge-base', message: string}}
  */
-export function emptyDiffCause({ baseExists, treeChanges }) {
+export function emptyDiffCause({ baseExists, mergeBase = true, treeChanges }) {
   if (!baseExists) {
     return {
       cause: 'missing-base',
       message:
         'the base commit is not in this clone — a shallow checkout or a wrong base ref.\n' +
         'Fetch enough history (fetch-depth: 0) and pass the pull request base SHA.',
+    }
+  }
+  // 🔴 A FOURTH STATE, AND IT CRASHED RATHER THAN BEING NAMED (SHAT-3456, review of #78). The base
+  // can be PRESENT and still share no history with HEAD — an unrelated commit, a force-pushed
+  // branch, a repository grafted from another. `git diff base...HEAD` is a symmetric difference, so
+  // it needs a merge base: without one git exits "fatal: refusing to merge unrelated histories"-class
+  // and the check died on a stack trace BEFORE measureEmptyDiff could classify anything.
+  //
+  // ⚠️ IT IS ITS OWN CAUSE RATHER THAN 'missing-base', because the remedy differs and that is the
+  // whole point of naming causes: missing-base says "fetch more history", and fetching more history
+  // will never produce a merge base that does not exist. Sending somebody to fetch-depth: 0 for this
+  // state is the same misattribution this function was written to end.
+  if (!mergeBase) {
+    return {
+      cause: 'no-merge-base',
+      message:
+        'the base commit IS in this clone, and it shares no history with HEAD: there is no merge\n' +
+        'base to compare against. Fetching more history cannot fix this — the two commits are not\n' +
+        'related. Check that the base SHA belongs to this repository and to the branch this pull\n' +
+        'request targets, and that HEAD is not an unrelated or force-pushed commit.',
     }
   }
   if (treeChanges === 0) {
@@ -130,9 +150,20 @@ function baseIsPresent(base) {
   }
 }
 
+function mergeBaseIsPresent(base) {
+  try {
+    execFileSync('git', ['merge-base', base, 'HEAD'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function measureEmptyDiff(base) {
   const baseExists = baseIsPresent(base);
   if (!baseExists) return { baseExists, treeChanges: 0 };
+  const mergeBase = mergeBaseIsPresent(base);
+  if (!mergeBase) return { baseExists, mergeBase, treeChanges: 0 };
   // Two dots: the TREE difference between base and HEAD, which is what the merge ref would change.
   const out = execFileSync('git', ['diff', '--name-only', base, 'HEAD'], { encoding: 'utf8' });
   return { baseExists, treeChanges: out.split('\n').filter(Boolean).length };
@@ -156,6 +187,15 @@ function main(argv) {
     // case it named was the one case that never reached it.
     if (!baseIsPresent(base)) {
       const c = emptyDiffCause({ baseExists: false, treeChanges: 0 });
+      console.error(`::error::cannot compare ${base} with HEAD — ${c.cause}.\n${c.message}`);
+      process.exit(1);
+    }
+    // ⚠️ AND THE MERGE BASE IS CHECKED BEFORE THE DIFF, FOR THE SAME REASON THE BASE IS (review of
+    // #78). `changedFromGit` runs `git diff base...HEAD`; a base that exists but shares no history
+    // with HEAD makes that throw, and the step dies on a stack trace before any cause can be named.
+    // The existence check added above did not cover it: the commit is there, the relationship is not.
+    if (!mergeBaseIsPresent(base)) {
+      const c = emptyDiffCause({ baseExists: true, mergeBase: false, treeChanges: 0 });
       console.error(`::error::cannot compare ${base} with HEAD — ${c.cause}.\n${c.message}`);
       process.exit(1);
     }

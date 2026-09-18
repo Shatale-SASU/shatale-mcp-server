@@ -71,12 +71,37 @@ jobs:
           # SHA is never in the clone. The unit tests cover the naming function; only a live run covers
           # the ORDER of checks — a mutant that diffed before checking the base died on a stack trace
           # and passed every unit test.
-          out="$(node scripts/a-code-change-must-say-what-changed.mjs "$(git rev-parse HEAD)" 2>&1 || true)"
-          echo "$out" | grep -q 'nothing-changes' || { echo "::error::an unchanged tree was not named 'nothing-changes': $out"; exit 1; }
-          echo "Control held: a pull request that changes nothing is refused as such, not blamed on the checkout."
-          out="$(node scripts/a-code-change-must-say-what-changed.mjs 0000000000000000000000000000000000000000 2>&1 || true)"
-          echo "$out" | grep -q 'missing-base' || { echo "::error::a base absent from the clone was not named 'missing-base': $out"; exit 1; }
-          echo "Control held: a base absent from the clone is named, not crashed on."
+          # 🔴 THE EXIT CODE IS PART OF THE ASSERTION, AND `|| true` USED TO THROW IT AWAY — review of
+          # #78. These three controls only grepped the TEXT, so a mutant that printed the right cause
+          # and exited 0 passed every one of them: a refusal that returns success is not a refusal,
+          # the message becomes advice, and the gate lets the change through. The status is captured
+          # and required to be non-zero, separately from the naming.
+          refuses() { # refuses <expected-cause> <what> <args…>
+            local cause="$1" what="$2"; shift 2
+            local out rc=0
+            out="$(node scripts/a-code-change-must-say-what-changed.mjs "$@" 2>&1)" || rc=$?
+            if [ "$rc" = "0" ]; then
+              echo "::error::$what exited 0. A refusal that returns success is not a refusal — the cause below is printed as advice while the gate passes the change."
+              printf '%s\n' "$out"
+              exit 1
+            fi
+            printf '%s\n' "$out" | grep -q "$cause" || {
+              echo "::error::$what exited $rc but did not name '$cause':"
+              printf '%s\n' "$out"
+              exit 1
+            }
+            echo "Control held: $what is refused (exit $rc) and named '$cause'."
+          }
+
+          refuses 'nothing-changes' 'a pull request that changes nothing' "$(git rev-parse HEAD)"
+          refuses 'missing-base' 'a base absent from the clone' 0000000000000000000000000000000000000000
+
+          # ⚠️ AND THE THIRD STATE, WHICH CRASHED INSTEAD OF BEING NAMED UNTIL THIS CHANGE. A parentless
+          # commit built here shares no history with HEAD, so it is PRESENT and has no merge base —
+          # `git diff base...HEAD` throws on it. Deterministic in any clone: the empty tree is written
+          # by git itself and the commit has no parent.
+          unrelated="$(git commit-tree "$(git hash-object -w -t tree /dev/null)" -m 'unrelated history, for the control below')"
+          refuses 'no-merge-base' 'a base that shares no history with HEAD' "$unrelated"
 
       - name: Run public tests (no API key)
         run: npm run test:public
