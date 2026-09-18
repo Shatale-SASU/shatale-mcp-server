@@ -20,9 +20,9 @@ _Nothing yet._
 
 > 🔴 **THIS VERSION WAS PREPARED ON 2026-08-28 AND NOT PUBLISHED FOR THREE WEEKS, AND THE COST IS
 > MEASURED (SHAT-3506).** The entry below was written the night the divergence was found; the tag was
-> never cut. In the meantime `main` gathered twenty more commits, and the one thing 1.0.4 exists to
-> ship — a deterministic `idempotency_key` on every write — stayed unpublished while the API started
-> requiring it.
+> never cut. In the meantime `main` gathered twenty more commits, and the one thing that release was
+> prepared to ship — a deterministic `idempotency_key` on every write — stayed unpublished while the
+> API started requiring it. It goes out here, under 1.1.0; 1.0.4 was never published.
 >
 > **What that did:** the Concierge pins `shatale-mcp-server@1.0.3`, the API put `IdempotentBody` in
 > front of `POST /v1/sandbox/users` (SHAT-2721), and provisioning has answered
@@ -86,15 +86,20 @@ _Nothing yet._
 
 ### Changed and added since 2026-08-28
 
-> ⚠️ **A NEW PUBLIC TOOL SHIPS UNDER A PATCH NUMBER, AND THAT IS A RELEASE DECISION RATHER THAN AN
-> OVERSIGHT TO CORRECT HERE.** `await_purchase_approval` (#64) is new MCP surface, and the sandbox
-> roster has gone 19 → 21 since the note above was written — `reveal_card` (SHAT-3023) and
-> `await_purchase_approval`. Under semver an added tool is a MINOR bump, so 1.0.3 → 1.0.4 understates
-> what a consumer receives.
+> ⚠️ **A NEW PUBLIC TOOL WAS ABOUT TO SHIP UNDER A PATCH NUMBER — OBSERVED WHILE PREPARING 1.0.4,
+> AND DECIDED SINCE.** `await_purchase_approval` (#64) is new MCP surface, and the sandbox roster had
+> gone 19 → 21 since the note above was written — `reveal_card` (SHAT-3023) and
+> `await_purchase_approval`. Under semver an added tool is a MINOR bump, so 1.0.3 → 1.0.4 understated
+> what a consumer received.
 >
-> It is recorded and not decided: `package.json` already says 1.0.4, the publish gate matches the tag
-> against it, and `main-must-not-drift-past-its-published-version.mjs` is satisfied by 1.0.4. Raising
-> it to 1.1.0 is one line in two places and is the releaser's call.
+> It was recorded rather than decided, because the number is the releaser's call and not the
+> reviewer's: at the time of writing `package.json` said 1.0.4, the publish gate matched the tag
+> against it, and `main-must-not-drift-past-its-published-version.mjs` was satisfied by 1.0.4.
+>
+> **Outcome — the owner decided on 2026-09-18, and this release goes out as 1.1.0.** The note is kept
+> in the tense it was written in rather than deleted: that somebody noticed the discrepancy and did
+> not settle it alone is the part worth keeping. What was false after the decision was its time and
+> its status, not its content.
 >
 > The counts above are quoted from the README's per-mode roster, which is generated from the RUNNING
 > server (`<!-- count:sandbox -->`). A count derived by grepping `src/tools` gives 23 and is wrong —
