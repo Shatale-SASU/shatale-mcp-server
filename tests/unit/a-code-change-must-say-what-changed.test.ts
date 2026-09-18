@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 // @ts-expect-error — plain .mjs script, no types, deliberately shared rather than reimplemented here.
-import { verdict } from '../../scripts/a-code-change-must-say-what-changed.mjs'
+import { verdict, emptyDiffCause } from '../../scripts/a-code-change-must-say-what-changed.mjs'
 
 // The controls for the changelog guard.
 //
@@ -120,5 +120,62 @@ describe('main must not drift past its published version', () => {
     const base = { latestTagVersion: '1.0.3', shippedChangedSinceTag: 1 }
     expect(driftVerdict({ ...base, packageVersion: '1.0.3' }).ok).toBe(false)
     expect(driftVerdict({ ...base, packageVersion: '1.0.4' }).ok).toBe(true)
+  })
+})
+
+// SHAT-3456. An empty diff is refused either way — these cases pin that the refusal names the cause
+// it MEASURED. The old single cause ("almost certainly a shallow checkout") sent a ticket to the
+// checkout while the real cause was a pull request whose content was already squash-merged.
+describe('an empty diff names the cause it measured', () => {
+  test('base absent from the clone → a checkout or base-ref problem', () => {
+    const c = emptyDiffCause({ baseExists: false, treeChanges: 0 })
+    expect(c.cause).toBe('missing-base')
+    expect(c.message).toMatch(/shallow checkout or a wrong base ref/)
+  })
+
+  test('base present and the trees equal → the pull request changes nothing (the #77 case)', () => {
+    const c = emptyDiffCause({ baseExists: true, treeChanges: 0 })
+    expect(c.cause).toBe('nothing-changes')
+    // ⚠️ AND IT MUST NOT BLAME THE CHECKOUT: that is exactly the misattribution this replaces.
+    expect(c.message).not.toMatch(/shallow/)
+    expect(c.message).toMatch(/duplicate/)
+  })
+
+  test('base present, trees differ, three-dot diff empty → a merge-base surprise, named as such', () => {
+    const c = emptyDiffCause({ baseExists: true, treeChanges: 6 })
+    expect(c.cause).toBe('unexpected-merge-base')
+    expect(c.message).toMatch(/6 file\(s\)/)
+  })
+
+  // 🔴 THE FOURTH STATE, WHICH USED TO CRASH INSTEAD OF BEING NAMED — review of #78. A base can be
+  // PRESENT and share no history with HEAD (an unrelated commit, a force-push, a grafted clone), and
+  // `git diff base...HEAD` needs a merge base: without one it throws and the check died on a stack
+  // trace before anything could be measured.
+  test('base present but unrelated to HEAD → no-merge-base, and NOT a fetch-more-history answer', () => {
+    const c = emptyDiffCause({ baseExists: true, mergeBase: false, treeChanges: 0 })
+    expect(c.cause).toBe('no-merge-base')
+    // ⚠️ THE REMEDY IS THE ASSERTION. 'missing-base' says "fetch enough history", and fetching will
+    // never produce a merge base that does not exist — sending somebody there is the same
+    // misattribution this whole function replaced. So the message must REFUSE that remedy in words.
+    expect(c.message).toMatch(/cannot fix this/i)
+    expect(c.message).toMatch(/shares no history/i)
+  })
+
+  // The default matters: every caller that predates this state omits `mergeBase`, and they must keep
+  // their old cause rather than silently becoming no-merge-base.
+  test('an omitted mergeBase keeps the previous causes', () => {
+    expect(emptyDiffCause({ baseExists: true, treeChanges: 0 }).cause).toBe('nothing-changes')
+    expect(emptyDiffCause({ baseExists: true, treeChanges: 4 }).cause).toBe('unexpected-merge-base')
+  })
+
+  // Positive control across the FOUR: the causes must all be DIFFERENT, or the function has
+  // collapsed back into one message wearing four labels.
+  test('the four measured states produce four different causes and messages', () => {
+    const a = emptyDiffCause({ baseExists: false, treeChanges: 0 })
+    const b = emptyDiffCause({ baseExists: true, treeChanges: 0 })
+    const d = emptyDiffCause({ baseExists: true, treeChanges: 3 })
+    const e = emptyDiffCause({ baseExists: true, mergeBase: false, treeChanges: 0 })
+    expect(new Set([a.cause, b.cause, d.cause, e.cause]).size).toBe(4)
+    expect(new Set([a.message, b.message, d.message, e.message]).size).toBe(4)
   })
 })

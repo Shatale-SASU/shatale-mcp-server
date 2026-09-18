@@ -66,6 +66,52 @@ jobs:
           node scripts/a-code-change-must-say-what-changed.mjs --files tests/unit/x.test.ts >/dev/null
           echo "Control held: a change that ships nothing needs no entry."
 
+          # SHAT-3456. The git mode's refusals must name the cause they MEASURED. Both cases below are
+          # deterministic in this job: HEAD compared with itself has an identical tree, and an all-zero
+          # SHA is never in the clone. The unit tests cover the naming function; only a live run covers
+          # the ORDER of checks — a mutant that diffed before checking the base died on a stack trace
+          # and passed every unit test.
+          # 🔴 THE EXIT CODE IS PART OF THE ASSERTION, AND `|| true` USED TO THROW IT AWAY — review of
+          # #78. These three controls only grepped the TEXT, so a mutant that printed the right cause
+          # and exited 0 passed every one of them: a refusal that returns success is not a refusal,
+          # the message becomes advice, and the gate lets the change through. The status is captured
+          # and required to be non-zero, separately from the naming.
+          refuses() { # refuses <expected-cause> <what> <args…>
+            local cause="$1" what="$2"; shift 2
+            local out rc=0
+            out="$(node scripts/a-code-change-must-say-what-changed.mjs "$@" 2>&1)" || rc=$?
+            if [ "$rc" = "0" ]; then
+              echo "::error::$what exited 0. A refusal that returns success is not a refusal — the cause below is printed as advice while the gate passes the change."
+              printf '%s\n' "$out"
+              exit 1
+            fi
+            printf '%s\n' "$out" | grep -q "$cause" || {
+              echo "::error::$what exited $rc but did not name '$cause':"
+              printf '%s\n' "$out"
+              exit 1
+            }
+            echo "Control held: $what is refused (exit $rc) and named '$cause'."
+          }
+
+          refuses 'nothing-changes' 'a pull request that changes nothing' "$(git rev-parse HEAD)"
+          refuses 'missing-base' 'a base absent from the clone' 0000000000000000000000000000000000000000
+
+          # ⚠️ AND THE THIRD STATE, WHICH CRASHED INSTEAD OF BEING NAMED UNTIL THIS CHANGE. A parentless
+          # commit built here shares no history with HEAD, so it is PRESENT and has no merge base —
+          # `git diff base...HEAD` throws on it. Deterministic in any clone: the empty tree is written
+          # by git itself and the commit has no parent.
+          # ⚠️ THE IDENTITY IS SUPPLIED INLINE, AND THAT IS A MEASUREMENT OF THIS CONTROL RATHER THAN
+          # STYLE. Written without it, the control passed locally and failed on the runner with
+          # "fatal: empty ident name … Author identity unknown": `git commit-tree` needs an author,
+          # my machine has one configured and a fresh runner does not. A control that depends on the
+          # operator's git config is a control that answers about the operator. Passing the four
+          # variables is also better than `git config user.email`: it leaves the repository's own
+          # configuration untouched, so nothing else in the job inherits a setting from a control.
+          unrelated="$(GIT_AUTHOR_NAME=control GIT_AUTHOR_EMAIL=control@invalid \
+            GIT_COMMITTER_NAME=control GIT_COMMITTER_EMAIL=control@invalid \
+            git commit-tree "$(git hash-object -w -t tree /dev/null)" -m 'unrelated history, for the control below')"
+          refuses 'no-merge-base' 'a base that shares no history with HEAD' "$unrelated"
+
       - name: Run public tests (no API key)
         run: npm run test:public
         env:
