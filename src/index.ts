@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { resolveTransport, startHttpTransport } from './http-transport.js'
+import { resolveTransport } from './transport-choice.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -626,6 +626,10 @@ async function main() {
   // somebody makes and can be found in their configuration.
   const host = process.env.SHATALE_MCP_HTTP_HOST?.trim() || '127.0.0.1'
   const port = parsePort(process.env.SHATALE_MCP_HTTP_PORT)
+
+  // ⚠️ IMPORTED HERE AND NOT AT THE TOP, so that a stdio launch never loads it. See the note on
+  // transport-choice.ts: the cost was measured, and it is paid by every client that speaks stdio.
+  const { startHttpTransport } = await import('./http-transport.js')
 
   await startHttpTransport({
     port,
