@@ -227,10 +227,20 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     },
     {
       name: 'sandbox_complete_onboarding',
+      // SHAT-3592. This used to claim the call left the test user with money available to spend.
+      // It does not: the endpoint it reaches, POST /v1/sandbox/users/{id}/onboarding, runs one
+      // UPDATE — profile_status='complete', kyc_level='basic', threeds_onboarded=TRUE. Nothing
+      // about money moves. An agent that believes otherwise plans a purchase against something
+      // that does not exist, and this sentence travels to npm inside the package.
+      //
+      // ⚠️ THE OLD WORDING IS DESCRIBED HERE, NOT QUOTED, AND THAT IS NOT SQUEAMISHNESS. tsconfig
+      // keeps comments, so this file ships; a comment reproducing the claim puts the very words
+      // back into the published package, where anyone grepping it finds them. The same trap caught
+      // the publisher cabinet this morning: a denial still carries the noun.
       description:
-        'Mark a sandbox test user as fully onboarded (KYC passed, wallet funded). Skips real ' +
-        'verification steps. Pass the SAME user_id you gave sandbox_create_user — your own ' +
-        'identifier for the person, which is the only one you have.',
+        'Mark a sandbox test user as fully onboarded: profile complete, KYC at basic level, ' +
+        '3-D Secure enrolled. Skips real verification steps. Pass the SAME user_id you gave ' +
+        'sandbox_create_user — your own identifier for the person, which is the only one you have.',
       inputSchema: {
         type: 'object',
         properties: {
