@@ -1,0 +1,48 @@
+{
+  "about": "SHAT-3371. The error-code dictionary shared by shatale-api (apps/api) and shatale-mcp-server. This file exists in BOTH repositories with identical bytes: apps/api/testdata/forwarded-codes.contract.json here, tests/fixtures/forwarded-codes.contract.json there. Each repository's CI checks its own side against it; neither CI can see the other copy, so an edit to one copy must be made to the other in the same change. error_codes is the Error.code enum of apps/api/api/openapi.yaml; status_derived is what errorCode() in apps/api/api/v1/error_redact.go returns; forwarded is FORWARDED_CODES in shatale-mcp-server src/errors.ts. All three lists are sorted.",
+  "error_codes": [
+    "ambiguous_email",
+    "api_error",
+    "auth_failed",
+    "card_step_not_completed",
+    "conflict",
+    "consent_required",
+    "delegation_consent_missing",
+    "export_too_large",
+    "forbidden",
+    "gateway_not_available",
+    "internal_error",
+    "invalid_request",
+    "kyb_phase1_required",
+    "kyb_phase2_required",
+    "limit_currency_contradiction",
+    "method_not_allowed",
+    "no_card_on_file",
+    "not_found",
+    "not_implemented",
+    "purchase_terminal",
+    "rate_limited",
+    "sandbox_no_pan",
+    "second_factor_required",
+    "terms_version_stale",
+    "user_exists",
+    "validation_failed",
+    "webhook_not_configured"
+  ],
+  "status_derived": [
+    "api_error",
+    "auth_failed",
+    "conflict",
+    "forbidden",
+    "internal_error",
+    "invalid_request",
+    "method_not_allowed",
+    "not_found",
+    "not_implemented",
+    "rate_limited",
+    "validation_failed"
+  ],
+  "forwarded": [
+    "sandbox_no_pan"
+  ]
+}
