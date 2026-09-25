@@ -90,7 +90,13 @@ export class MockUpstream {
       return ok({ id: path.split('/').pop(), name: 'Mock Merchant', mcc: 5732, country: 'US' })
     }
     if (method === 'GET' && path === '/v1/merchants/catalog') {
-      return ok({ merchants: [{ id: 'mock-merchant', name: 'Mock Merchant', country: 'US' }] })
+      // The real endpoint always reports catalog_state (SHAT-3796); a mock without it would pin
+      // a shape production never sends.
+      return ok({
+        catalog_state: 'ok',
+        merchants: [{ id: 'mock-merchant', name: 'Mock Merchant', country: 'US' }],
+        total: 1,
+      })
     }
     if (method === 'POST' && path === '/v1/purchases') {
       return ok({ purchase_id: 'pur_mock_1', status: 'pending' })
