@@ -5,6 +5,21 @@ import { errorResult, ShataleApiError } from '../errors.js'
 import { requireId } from '../validate.js'
 
 /**
+ * The one `catalog_state` under which a 404 for a merchant id is NOT about the id.
+ *
+ * The field has exactly one producer — shatale-api, `apps/api/api/v1/merchant_catalog.go`, func
+ * `catalogState` — and it returns one of `ok`, `out_of_range`, `not_published`, `no_match`
+ * (measured on that repo's origin/main on 2026-09-27). Three of the four mean the catalogue HAS
+ * published merchants, and then an id it cannot find is an id worth checking. Only this one means
+ * there is nothing to find at all.
+ *
+ * ⚠️ Written as an inclusion, never as `!== something`: an exclusion is satisfied by every value
+ * the producer might add later, and by every value it never had. SHAT-4031 was exactly that — a
+ * comparison against `'published'`, which is not in the set above and never was.
+ */
+const CATALOGUE_HAS_NOTHING_TO_FIND = 'not_published'
+
+/**
  * The catalogue's own account of itself, from the endpoint search_merchants uses.
  *
  * Returns `undefined` when it cannot be established — a probe that fails must never replace the
@@ -98,9 +113,11 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           // drift apart, and the one that drifts is the one nobody touches.
           if (err instanceof ShataleApiError && err.code === 'not_found') {
             const state = await catalogState(client)
-            // Only the catalogue's own word overrides the 404. If it IS published, this really is
-            // an unknown id and the original advice is the correct advice — so it survives.
-            if (state !== undefined && state !== 'published') {
+            // Only the catalogue's own word overrides the 404, and only the ONE word that explains
+            // it. SHAT-4031: this used to read `state !== 'published'` — a value the producer has
+            // never emitted, so the test was true for every real answer and a healthy catalogue's
+            // 404 lost the advice that was correct. See CATALOGUE_HAS_NOTHING_TO_FIND.
+            if (state !== undefined && state === CATALOGUE_HAS_NOTHING_TO_FIND) {
               return jsonResult({
                 catalog_state: state,
                 merchant_id: merchantId.value,

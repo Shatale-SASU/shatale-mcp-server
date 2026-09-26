@@ -83,7 +83,11 @@ describe('SHAT-2556: an empty catalogue explains itself', () => {
    * id-blaming text exists to close (SHAT-2678). Both halves, or neither.
    */
   test('a published catalogue keeps the original not-found advice', async () => {
-    stubCatalog({ catalog_state: 'published', merchants: [{ id: 'x' }], total: 1 })
+    // SHAT-4031: this fixture said `'published'`, which the producer of this field has never
+    // emitted (it answers ok / out_of_range / not_published / no_match). The case therefore passed
+    // against an invented value while the axis it names stayed open. `ok` is what a published
+    // catalogue actually answers.
+    stubCatalog({ catalog_state: 'ok', merchants: [{ id: 'x' }], total: 1 })
     const { result, text } = await details()
 
     expect(text).toMatch(BLAMES_THE_ID)
@@ -111,5 +115,73 @@ describe('SHAT-2556: an empty catalogue explains itself', () => {
 
     expect(result.isError).toBe(true)
     expect(text).toMatch(BLAMES_THE_ID)
+  })
+})
+
+/**
+ * SHAT-4031 — THE HALF ABOVE WAS WRITTEN AGAINST A STATE THE API DOES NOT HAVE.
+ *
+ * The case named "a published catalogue keeps the original not-found advice" stubs
+ * `catalog_state: 'published'`, and the handler compares `state !== 'published'`. Both agree with
+ * each other and with nothing else: the ONLY producer of this field is
+ * apps/api/api/v1/merchant_catalog.go, func catalogState, and it returns exactly one of
+ *
+ *     "ok" · "out_of_range" · "not_published" · "no_match"
+ *
+ * measured on shatale-api origin/main on 2026-09-27. `published` is not among them, so
+ * `state !== 'published'` is TRUE for every answer the catalogue can give — including a healthy
+ * `ok`. A real 404 on a healthy catalogue is therefore replaced by
+ * `{catalog_state:"ok", merchant:null}`, and the advice that was correct is thrown away.
+ *
+ * /!\ THE FIXTURE IS WHY IT SURVIVED. The guard for the second half exists, runs, and passes — on a
+ * value invented for it. A test whose fixture agrees with the bug cannot see the bug, and it reads
+ * as coverage of exactly the axis it leaves open. So these cases use the states the producer emits,
+ * one case per state, and the reason each answer is what it is:
+ *
+ *   ok           → the catalogue answered with rows. A 404 for an id is an unknown id → keep advice.
+ *   no_match     → published merchants exist, the (unfiltered) probe just matched none → keep advice.
+ *   out_of_range → matches exist past this page → keep advice.
+ *   not_published→ nothing is published, so no id can be found → the catalogue is the reason.
+ *
+ * Only `not_published` explains a 404. Every other state means the catalogue HAS merchants, and
+ * then the caller's id is the thing to look at.
+ */
+describe('SHAT-4031: only a state the catalogue actually emits may silence a 404', () => {
+  test('a healthy catalogue (ok) keeps the original not-found advice', async () => {
+    stubCatalog({ catalog_state: 'ok', merchants: [{ id: 'x' }], total: 1 })
+    const { result, text } = await details()
+
+    expect(text).toMatch(BLAMES_THE_ID)
+    expect(text).not.toContain('"merchant": null')
+    expect(result.isError).toBe(true)
+  })
+
+  test('no_match keeps the original not-found advice', async () => {
+    stubCatalog({ catalog_state: 'no_match', merchants: [], total: 0 })
+    const { result, text } = await details()
+
+    expect(text).toMatch(BLAMES_THE_ID)
+    expect(result.isError).toBe(true)
+  })
+
+  test('out_of_range keeps the original not-found advice', async () => {
+    stubCatalog({ catalog_state: 'out_of_range', merchants: [], total: 7 })
+    const { result, text } = await details()
+
+    expect(text).toMatch(BLAMES_THE_ID)
+    expect(result.isError).toBe(true)
+  })
+
+  /**
+   * The other side of the same predicate, so that a fix cannot pass by refusing to explain
+   * anything: the one state that DOES explain a 404 must still explain it.
+   */
+  test('not_published still names the catalogue as the reason', async () => {
+    stubCatalog({ catalog_state: 'not_published', merchants: [], total: 0 })
+    const { result, text } = await details()
+
+    expect(text).toContain('not_published')
+    expect(text).not.toMatch(BLAMES_THE_ID)
+    expect(result.isError).not.toBe(true)
   })
 })
