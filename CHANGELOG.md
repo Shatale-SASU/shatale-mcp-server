@@ -21,7 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- `search_merchants` no longer answers an empty catalogue with a bare empty list. The API already
+  reported `catalog_state`, but only as a machine field, so the first guest-mode search read the
+  same as a broken connection or a bad filter. The JSON is unchanged and now carries a plain
+  `message`: for `not_published`, that the catalog has no published merchants yet and the filters
+  are not the cause; for `no_match`, that merchants exist but none matched and a filter should be
+  broadened; for `out_of_range`, that the offset is past the end. `ok` and unrecognised states get
+  no message. The tool description says so in one sentence (SHAT-3796).
 
 ## [1.1.0] — 2026-09-18
 

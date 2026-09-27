@@ -20,6 +20,37 @@ async function catalogState(client: ShataleClient): Promise<string | undefined> 
   }
 }
 
+/**
+ * A plain sentence for the state search_merchants' own endpoint reports, or `undefined`.
+ *
+ * `ok` needs no explanation, and a missing or unrecognised state gets none: only the catalogue's
+ * own word counts, the same rule get_merchant_details follows. Inventing a reason for a state we
+ * do not know would be a hint that can point away from the cause.
+ */
+function catalogMessage(result: unknown): string | undefined {
+  if (result === null || typeof result !== 'object' || Array.isArray(result)) return undefined
+  const { catalog_state: state, total } = result as { catalog_state?: unknown; total?: unknown }
+  switch (state) {
+    case 'not_published':
+      return (
+        'The catalog has no published merchants yet, so every search returns an empty list. ' +
+        'This is not caused by your filters. The catalog fills as merchants are published; ' +
+        'search again later. (get_merchant_details cannot help meanwhile: it reads the same catalog.)'
+      )
+    case 'no_match':
+      return (
+        'The catalog has published merchants, but none matched these filters. ' +
+        'Broaden or remove a filter (query, category, capability, country) and search again.'
+      )
+    case 'out_of_range':
+      return typeof total === 'number'
+        ? `The requested offset is past the end of the results (total is ${total}). Use a smaller offset.`
+        : 'The requested offset is past the end of the results. Use a smaller offset.'
+    default:
+      return undefined
+  }
+}
+
 export function createCatalogTools(client: ShataleClient): ToolModule {
   return {
     tools: [
@@ -27,7 +58,8 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
         name: 'search_merchants',
         description:
           'Search the Shatale merchant catalog. Find merchants by category, capability, keyword, or country. ' +
-          'Returns merchants with their MCP capabilities so you can determine which merchants support agent-driven purchases.',
+          'Returns merchants with their MCP capabilities so you can determine which merchants support agent-driven purchases. ' +
+          'An empty result carries catalog_state and a message saying why it is empty.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -63,7 +95,11 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           // SHAT-2678: the query string filters, it does not address. No id here for a 404 to be
           // about, so do not send the caller looking for one.
           const result = await client.request('GET', `/v1/merchants/catalog?${params}`, undefined, 'fixed')
-          return jsonResult(result)
+          // SHAT-3796: an empty list agrees with every hypothesis — broken connection, bad filter,
+          // no data — so the answer says which one it is. The API already knows (`catalog_state`);
+          // this only puts it into a sentence. The JSON is kept as it was, with one field added.
+          const message = catalogMessage(result)
+          return jsonResult(message === undefined ? result : { ...(result as object), message })
         } catch (err) {
           return errorResult(err, 'catalog_search_failed')
         }
