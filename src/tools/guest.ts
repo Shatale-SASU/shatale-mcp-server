@@ -251,11 +251,13 @@ function handleSimulatePurchase(args: Record<string, unknown>) {
     },
     trace: { trace_id: traceId, steps },
     idempotency_key: idempotencyKey,
-    // SHAT-1461: the sandbox equivalent is sandbox_simulate_authorization, NOT request_purchase. Under a
-    // sandbox key request_purchase is BLOCKED client-side (SHAT-1488, purchase.ts) and steers callers here —
-    // so listing it as the sandbox equivalent sent a demo user to a tool that refuses them (a false promise on
-    // the acquisition path). The sandbox mode description already says this (see explain_shatale, and
-    // list_capabilities, which now derives its list from the router).
+    // SHAT-1461 named sandbox_simulate_authorization here because request_purchase was then refused under a
+    // sandbox key (SHAT-1488). That refusal was removed in SHAT-2611: under a sandbox key request_purchase
+    // runs the ordinary path (purchase.ts) and creates a sandbox purchase — the API stamps the environment
+    // from the key, and an in-band sandbox purchase is approved automatically on the API side, with no real
+    // money and a non-chargeable demo card. sandbox_simulate_authorization is listed as the tool that shows
+    // this guest demo's policy decision alone, without creating a purchase (see explain_shatale's sandbox
+    // text and list_capabilities, which derives its list from the router).
     sandbox_equivalent_tools: ['sandbox_simulate_authorization'],
     next_step: {
       label: 'Run the same flow against Shatale Sandbox APIs',

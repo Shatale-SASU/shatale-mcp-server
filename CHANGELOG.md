@@ -21,7 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Internal
+- A source comment in the guest demo tool (`src/tools/guest.ts`) no longer says `request_purchase` is
+  refused under a sandbox key. That refusal was removed in SHAT-2611; under a sandbox key the call
+  creates a sandbox purchase. Comment only, no behaviour change.
 
 ## [1.1.0] — 2026-09-18
 
