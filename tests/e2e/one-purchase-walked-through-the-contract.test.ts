@@ -303,6 +303,24 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     expect(log, 'the MCP process wrote the CVV to its log').not.toContain(SENTINEL_CVV)
   })
 
+  // ⚠️ THE TRANSITION, THROUGH THE REAL SDK (SHAT-3023). A unit test can set `_meta` on a handler's
+  // result; only the built server over stdio shows that it SURVIVES the MCP SDK to the caller — and
+  // that the operator's copy lands on the process's stderr without the card.
+  test('a reveal without the person still works, and the deprecation reaches the caller and the log', async () => {
+    const revealed = await client.callTool('reveal_card', { purchase_id: 'pur_mock_1' })
+    expect(revealed.isError, `the 1.1.x-shaped call broke: ${text(revealed)}`).toBeFalsy()
+    expect(JSON.parse(text(revealed))).toEqual(API_CARD_CREDENTIALS)
+    expect(revealed._meta?.deprecation?.code, 'the deprecation did not reach the MCP caller').toBe(
+      'reveal_without_person',
+    )
+    const reveal = mock.lastRequest('GET', '/v1/purchases/pur_mock_1/card-credentials')
+    expect(reveal?.query, 'the unscoped call must carry no query at all').toEqual({})
+    const log = client.getStderr()
+    expect(log).toContain('DEPRECATED')
+    expect(log).not.toContain(SENTINEL_PAN)
+    expect(log).not.toContain(SENTINEL_CVV)
+  })
+
   // ⚠️ THE CONTROL FOR THE ASSERTION ABOVE, AND WITHOUT IT "the sentinel arrived" PROVES NOTHING
   // ABOUT THE ALLOWLIST: it would also hold if redaction did nothing at all, anywhere. So the same
   // sentinel is sent down a path that is NOT on the allowlist, through a tool that reads it, and it

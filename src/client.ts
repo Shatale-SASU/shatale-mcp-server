@@ -459,11 +459,15 @@ export class ShataleClient {
   // (RevealCard: r.URL.Query().Get("publisher_user_id"), SHAT-4016). A query, not a body, because this
   // is a GET. The scrub decides on the path WITHOUT the query (redact.ts pathReturnsOurCard splits on
   // '?'), so this does not move the call off the allowlist.
-  async getCardCredentials(id: string, publisherUserId: string): Promise<unknown> {
+  //
+  // `undefined` is the DEPRECATED transition (reveal.ts REVEAL_WITHOUT_PERSON_DEPRECATION): the
+  // request goes out exactly as 1.1.x sent it, with no query at all — not an empty parameter, which
+  // the API trims to "" and treats the same, but which would make the wire record lie about intent.
+  async getCardCredentials(id: string, publisherUserId?: string): Promise<unknown> {
     return this.request(
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/card-credentials` +
-        `?publisher_user_id=${encodeURIComponent(publisherUserId)}`,
+        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
       undefined,
       // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
       // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's

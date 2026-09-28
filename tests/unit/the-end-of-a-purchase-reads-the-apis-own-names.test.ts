@@ -123,9 +123,11 @@ describe('reveal_card reads the card in the API\'s own names', () => {
     expect(pathReturnsOurCard(`${url.pathname}${url.search}`)).toBe(true)
   })
 
+  // ⚠️ PRESENT BUT UNUSABLE IS A MISTAKE, NOT THE TRANSITION. Only an ABSENT person takes the
+  // deprecated path (next block); a caller that tried to name one and sent blank is told so.
   for (const [label, args] of [
-    ['no publisher_user_id', { purchase_id: PURCHASE }],
     ['an empty publisher_user_id', { purchase_id: PURCHASE, publisher_user_id: '' }],
+    ['a non-string publisher_user_id', { purchase_id: PURCHASE, publisher_user_id: 42 }],
     ['a whitespace publisher_user_id', { purchase_id: PURCHASE, publisher_user_id: '   ' }],
   ] as const) {
     it(`${label}: nothing is sent, and the refusal names the argument`, async () => {
@@ -138,6 +140,60 @@ describe('reveal_card reads the card in the API\'s own names', () => {
       expect(textOf(res)).toContain('publisher_user_id')
     })
   }
+
+  // ── the transition: an ABSENT person is served as 1.1.x served it, and says so ─────────────────
+  //
+  // Published 1.1.0/1.1.1 shipped reveal_card with purchase_id alone. The owner's rule is that an
+  // existing caller does not break on upgrade, so the call still works — and every such call leaves
+  // a deprecation in the result's `_meta` and on stderr, neither of which may carry the card.
+  function captureStderr(): string[] {
+    const written: string[] = []
+    const origWrite = process.stderr.write.bind(process.stderr)
+    vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown, ...rest: unknown[]) => {
+      written.push(String(chunk))
+      return (origWrite as (...x: unknown[]) => boolean)(chunk, ...rest)
+    }) as typeof process.stderr.write)
+    return written
+  }
+
+  it('without publisher_user_id: the card is served unscoped, with a deprecation in _meta and on stderr', async () => {
+    const fn = answerWith(cardCredentials())
+    const written = captureStderr()
+    const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
+      purchase_id: PURCHASE,
+    })
+    // Served, as before: one request, no query at all (not an empty one), the card intact.
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(urlOf(fn).pathname).toBe(`/v1/purchases/${PURCHASE}/card-credentials`)
+    expect(urlOf(fn).search, 'the unscoped call must go out exactly as 1.1.x sent it').toBe('')
+    expect(res.isError, textOf(res)).toBeFalsy()
+    expect(JSON.parse(textOf(res))).toEqual(API_CARD_CREDENTIALS)
+    // Said, in both places.
+    const meta = (res as { _meta?: { deprecation?: { code?: string; message?: string } } })._meta
+    expect(meta?.deprecation?.code, 'the caller was not told the call is deprecated').toBe('reveal_without_person')
+    expect(meta?.deprecation?.message).toContain('publisher_user_id')
+    const log = written.join('')
+    expect(log, 'the operator was not told the call is deprecated').toContain('DEPRECATED')
+    expect(log).toContain('publisher_user_id')
+    expect(log).toContain(PURCHASE)
+    // And neither channel carries the card.
+    for (const channel of [log, JSON.stringify(meta)]) {
+      expect(channel).not.toContain(SENTINEL_PAN)
+      expect(channel).not.toContain(SENTINEL_CVV)
+    }
+  })
+
+  it('with publisher_user_id: no deprecation anywhere — the warning is about the absence, not a banner', async () => {
+    answerWith(cardCredentials())
+    const written = captureStderr()
+    const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
+      purchase_id: PURCHASE,
+      publisher_user_id: PERSON,
+    })
+    expect(res.isError, textOf(res)).toBeFalsy()
+    expect((res as { _meta?: unknown })._meta).toBeUndefined()
+    expect(written.join('')).not.toContain('DEPRECATED')
+  })
 
   // ── nothing of the card reaches a log ─────────────────────────────────────────────────────────
   //

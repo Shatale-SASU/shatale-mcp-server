@@ -21,14 +21,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Changed
-- **`reveal_card` now requires `publisher_user_id`** — the same person the purchase was requested for —
-  and sends it as the query parameter the API's person gate reads (SHAT-4016 / SHAT-4051). Without it
-  the API could check only that the key's publisher owns the purchase, so one person of a publisher
-  could name another person's purchase id and receive that card. The API keeps the parameter optional
-  for compatibility and named this tool as the one live caller that did not send it — the reason its
-  gate could not be switched on. A call without it is refused before any request is sent, and says
-  which argument is missing (SHAT-3023).
+### Added
+- **`reveal_card` accepts `publisher_user_id`** — the same person the purchase was requested for — and
+  sends it as the query parameter the API's person gate reads (SHAT-4016 / SHAT-4051). Without it the
+  API can check only that the key's publisher owns the purchase, so one person of a publisher could
+  name another person's purchase id and receive that card. The API named this tool as the one live
+  caller that did not send it — the reason its gate could not be switched on (SHAT-3023).
+
+### Deprecated
+- **`reveal_card` without `publisher_user_id`.** It still works exactly as in 1.1.x — same request, no
+  query — so nobody built on 1.1.0/1.1.1 breaks on upgrade. Each such call carries
+  `_meta.deprecation` (`code: reveal_without_person`) in its result and writes one line to stderr;
+  neither contains anything of the card. **Removal plan:** once the Concierge pin is past the release
+  carrying this change and the API's `event=reveal_without_person_scope` count is zero, the parameter
+  becomes required here and the API's person-scope flag is switched on. A `publisher_user_id` that is
+  PRESENT but empty or not a string is refused now — that is a caller's mistake, not the transition.
 
 ### Fixed
 - **The PCI scrub did not know the API's name for a card number.** shatale-api's reveal answers
