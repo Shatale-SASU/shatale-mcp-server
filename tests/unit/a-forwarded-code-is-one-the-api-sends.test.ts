@@ -13,15 +13,20 @@ import { extractForwardedCode } from '../../src/errors.js'
  * sending is a named refusal that silently falls back to our generic envelope, and both
  * repositories stay green, each honestly measuring its own half.
  *
- * Neither CI can read the other repository, so the dictionary is committed as
+ * A test here cannot read shatale-api, which is private, so the dictionary is committed as
  * tests/fixtures/forwarded-codes.contract.json, with the SAME BYTES as
  * apps/api/testdata/forwarded-codes.contract.json in Shatale-SASU/shatale. There, a Go test proves
  * the file's error_codes / status_derived are what the server sends; here, this test proves its
  * `forwarded` list IS FORWARDED_CODES, and that every forwarded code is a domain code the file says
  * the API sends.
  *
- * ⚠️ WHAT THIS DOES NOT CLOSE: nothing compares the two copies of the file. Changing a forwarded code
- * means editing it here AND in shatale-api, and a change made to one copy only stays green in both.
+ * THE PAIR. Each copy is honest about its own side, and the pair is honest only while the copies are
+ * the same bytes. That is checked on shatale-api's side only: its
+ * scripts/audit-the-forwarded-codes-contract-is-one-file.mjs (a step of its honesty-guards workflow)
+ * reads THIS file on shatale-mcp-server's main and exits 1 when the bytes differ or the file is gone.
+ * This repository's CI does not compare. So changing a forwarded code still means editing both
+ * copies, and the edit lands HERE FIRST: until it does, the comparison in shatale-api is red; an edit
+ * made here alone is seen there, on the next run of that step — not in this repository.
  */
 
 const here = dirname(fileURLToPath(import.meta.url))
