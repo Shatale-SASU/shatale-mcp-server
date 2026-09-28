@@ -454,10 +454,16 @@ export class ShataleClient {
   // (apps/api/internal/purchases/pgx/card_reveal_repo.go:149). It returns this card's PAN, expiry and
   // CVV and NOT `three_ds_password` — that removal is the point of SHAT-2323, because one pool 3DS
   // password is shared by every card in the pool and revealing it once discloses it for all of them.
-  async getCardCredentials(id: string): Promise<unknown> {
+  //
+  // ⚠️ `publisherUserId` TRAVELS AS THE QUERY PARAMETER shatale-api's person gate reads
+  // (RevealCard: r.URL.Query().Get("publisher_user_id"), SHAT-4016). A query, not a body, because this
+  // is a GET. The scrub decides on the path WITHOUT the query (redact.ts pathReturnsOurCard splits on
+  // '?'), so this does not move the call off the allowlist.
+  async getCardCredentials(id: string, publisherUserId: string): Promise<unknown> {
     return this.request(
       'GET',
-      `/v1/purchases/${encodeURIComponent(id)}/card-credentials`,
+      `/v1/purchases/${encodeURIComponent(id)}/card-credentials` +
+        `?publisher_user_id=${encodeURIComponent(publisherUserId)}`,
       undefined,
       // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
       // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's

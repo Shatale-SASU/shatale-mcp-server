@@ -154,7 +154,10 @@
     "label": "reveal_card (LIVE + money-GO and sandbox; the allowlisted reveal route)",
     "struct_hint": "apps/api/api/v1/purchases.go card-credentials route",
     "method": "GET",
-    "path": "/v1/purchases/pur_fixture_5/card-credentials"
+    "path": "/v1/purchases/pur_fixture_5/card-credentials",
+    "query": {
+      "publisher_user_id": "usr_fixture_5"
+    }
   },
   {
     "label": "get_checkout_customer (LIVE + money-GO only; same route, different half of the response)",

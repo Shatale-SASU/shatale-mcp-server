@@ -60,7 +60,7 @@ describe('the reveal tool asks the path the allowlist was holding open', () => {
     const fn = captureFetch()
     const client = new ShataleClient(BASE, 'sk_sandbox_abc')
 
-    await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE })
+    await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE, publisher_user_id: 'usr_3023' })
 
     expect(fn).toHaveBeenCalledTimes(1)
     // Not "the string looks right" but "the scrub would let this through" — the same predicate the
@@ -90,7 +90,7 @@ describe('the reveal tool asks the path the allowlist was holding open', () => {
 
   it('an empty reveal is refused rather than returned as a success', async () => {
     const client = { getCardCredentials: async () => ({}) } as unknown as ShataleClientType
-    const res = await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE })
+    const res = await createRevealTools(client).handlers.reveal_card({ purchase_id: PURCHASE, publisher_user_id: 'usr_3023' })
     expect(JSON.stringify(res)).toContain('card_credentials_unavailable')
   })
 

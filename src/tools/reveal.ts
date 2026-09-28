@@ -2,7 +2,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
-import { requireId } from '../validate.js'
+import { requireId, exactStringFields, describeShape } from '../validate.js'
 
 // reveal_card — the agent-scoped reveal of the card Shatale issued for THIS purchase (SHAT-3023).
 //
@@ -36,6 +36,20 @@ function hasCard(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && Object.keys(v as object).length > 0
 }
 
+// ⚠️ THE API'S OWN NAMES, EXACTLY, AND THE READ REFUSES ANYTHING ELSE (SHAT-3023).
+//
+// shatale-api RevealCard (apps/api/api/v1/purchases.go, writeJSON after "card credentials revealed to
+// agent") answers with these five string keys and no others. This tool used to hand back whatever
+// came — the only check was "not empty" — and the mock this repository tested against spoke a
+// different dialect (`card_number`, `expiry_month`, `expiry_year`, `cardholder_name`) for the whole
+// life of the tool, green. A lenient reader turns a renamed field into silence: the agent fills the
+// expiry with nothing and reports a successful checkout.
+//
+// So a missing, extra or non-string field is a NAMED refusal. An EXTRA field is refused too, on
+// purpose: the one extra field this response has ever carried was `three_ds_password`, and its return
+// would be SHAT-2259 reopening, not a feature to forward. The refusal names keys only, never a value.
+const REVEALED_CARD_FIELDS = ['pan', 'cvv', 'exp_month', 'exp_year', 'last4'] as const
+
 export function createRevealTools(client: ShataleClient): ToolModule {
   return {
     tools: [
@@ -56,8 +70,14 @@ export function createRevealTools(client: ShataleClient): ToolModule {
               description:
                 'The purchase ID (from request_purchase) whose issued card is to be revealed',
             },
+            publisher_user_id: {
+              type: 'string' as const,
+              description:
+                'The same publisher_user_id the purchase was requested for (the person it belongs ' +
+                'to). The API reveals a card only to the person whose purchase it is.',
+            },
           },
-          required: ['purchase_id'],
+          required: ['purchase_id', 'publisher_user_id'],
         },
       },
     ],
@@ -65,8 +85,15 @@ export function createRevealTools(client: ShataleClient): ToolModule {
       reveal_card: async (args) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
+        // ⚠️ THE PERSON, NOT ONLY THE PUBLISHER (SHAT-4016 / SHAT-4051). Without it the API can only
+        // check that the key's publisher owns the purchase, so any person of that publisher could
+        // name another person's purchase id and receive that card. shatale-api keeps the parameter
+        // optional for compatibility and names THIS tool as the one live caller that does not send
+        // it — the reason the person gate cannot be switched on. Required here, so that it can.
+        const person = requireId(args, 'publisher_user_id')
+        if (!person.ok) return person.result
         try {
-          const data = await client.getCardCredentials(id.value)
+          const data = await client.getCardCredentials(id.value, person.value)
           // Fail loud rather than hand back an empty-but-successful reveal. An agent given `{}` at a
           // live checkout form fills nothing and reports success, and the purchase stalls with no cause
           // recorded anywhere. The usual reason is that the purchase is not payment_ready yet.
@@ -79,7 +106,20 @@ export function createRevealTools(client: ShataleClient): ToolModule {
                 'before its credentials can be revealed.',
             })
           }
-          return jsonResult(data)
+          const card = exactStringFields(data, REVEALED_CARD_FIELDS)
+          if (!card.ok) {
+            return refusal({
+              code: 'card_credentials_unrecognised',
+              message:
+                'The card credentials came back in a shape this tool does not recognise ' +
+                `(${describeShape(card.report)}), so none of it is handed over.`,
+              suggested_fix:
+                'Do not fill the merchant form from this response. This is a contract mismatch between ' +
+                'this MCP server and the Shatale API, not a problem with the purchase — upgrade ' +
+                'shatale-mcp-server, or report it with this message.',
+            })
+          }
+          return jsonResult(card.fields)
         } catch (err) {
           return errorResult(err, 'reveal_card_failed')
         }

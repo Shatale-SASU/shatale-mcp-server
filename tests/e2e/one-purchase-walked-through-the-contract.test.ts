@@ -25,6 +25,12 @@ import { readFileSync } from 'node:fs'
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { McpTestClient } from '../harness/mcpClient'
 import { MockUpstream } from '../harness/mockUpstream'
+import {
+  API_CARD_CREDENTIALS,
+  API_CHECKOUT_IDENTITY,
+  SENTINEL_CVV,
+  SENTINEL_PAN,
+} from '../fixtures/api-response-shapes'
 
 const TEST_KEY = process.env.SHATALE_TEST_KEY
 
@@ -182,7 +188,22 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     await mock.close()
   })
 
-  test('the id from request_purchase reaches approve, status and reveal', async () => {
+  // ⚠️ THE WALK NOW STARTS WHERE A PURCHASE STARTS AND ENDS WHERE THE MERCHANT FORM IS FILLED
+  // (SHAT-3023, 28.09.2026). It began at sandbox_create_user and stopped at reveal_card, so the two
+  // tools the form's identity fields come from — get_checkout_cardholder and get_checkout_customer,
+  // which together are the "checkout_identity" of the epic (name retired by the coordinator on
+  // 16.09.2026, role kept) — were asserted only against a HARD-CODED id in the control below, never
+  // on the purchase the chain made. And the card was read as `card_number`, a name the API never
+  // sends (tests/fixtures/api-response-shapes.ts), so the chain proved a conversation that does not
+  // happen.
+  test('the id from request_purchase reaches approve, status, reveal and both checkout identities', async () => {
+    // The walk begins with finding the merchant, and the merchant the purchase names is the one the
+    // search answered — taken from the answer, not written here.
+    const found = await client.callTool('search_merchants', { query: 'mock' })
+    expect(found.isError, `search_merchants failed: ${text(found)}`).toBeFalsy()
+    const merchant = (JSON.parse(text(found)) as { merchants?: Array<{ id?: string }> }).merchants?.[0]?.id
+    expect(merchant, 'search_merchants answered without a merchant to buy from').toBeTruthy()
+
     // ⚠️ THE FIRST LINK, ADDED AFTER THE LIVE RUN REFUSED THE CHAIN WITHOUT IT. request_purchase
     // needs a publisher_user_id that HAS AN ACTIVE DELEGATION, and sandbox_create_user is the only
     // thing in the contract that makes one — its own description says so: "This is the first step".
@@ -198,7 +219,7 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     const created = await client.callTool('request_purchase', {
       publisher_user_id: 'usr_chain_1',
       agent_id: 'agt_chain_1',
-      merchant: 'amazon.com',
+      merchant: merchant!,
       amount: 49.99,
       currency: 'EUR',
       description: 'SHAT-3023 chain',
@@ -217,13 +238,28 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     const status = await client.callTool('get_purchase_status', { purchase_id: purchaseId })
     expect(status.isError).toBeFalsy()
 
-    const revealed = await client.callTool('reveal_card', { purchase_id: purchaseId })
+    const revealed = await client.callTool('reveal_card', {
+      purchase_id: purchaseId,
+      publisher_user_id: 'usr_chain_1',
+    })
     expect(revealed.isError, `reveal_card refused: ${text(revealed)}`).toBeFalsy()
 
+    const holder = await client.callTool('get_checkout_cardholder', { purchase_id: purchaseId })
+    expect(holder.isError, `get_checkout_cardholder refused: ${text(holder)}`).toBeFalsy()
+    const buyer = await client.callTool('get_checkout_customer', { purchase_id: purchaseId })
+    expect(buyer.isError, `get_checkout_customer refused: ${text(buyer)}`).toBeFalsy()
+
     // ── the joins, which are the subject ──────────────────────────────────────────────────────────
+    const search = mock.lastRequest('GET', '/v1/merchants/catalog')
+    expect(search, 'the search never reached the upstream').toBeDefined()
+
     const provision = mock.lastRequest('POST', '/v1/sandbox/users')
     expect(provision, 'no sandbox user was provisioned — the chain skipped its own first link')
       .toBeDefined()
+
+    const purchase = mock.lastRequest('POST', '/v1/purchases')
+    expect(JSON.stringify(purchase?.body), 'the purchase was requested for a merchant the search did not return')
+      .toContain(merchant!)
 
     const approve = mock.lastRequest('POST', '/v1/sandbox/purchases/')
     expect(approve, 'no approval request reached the upstream').toBeDefined()
@@ -236,12 +272,35 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     const reveal = mock.lastRequest('GET', `/v1/purchases/${purchaseId}/card-credentials`)
     expect(reveal, 'the reveal did not ask the allowlisted card-credentials path for that purchase')
       .toBeDefined()
+    // The person gate (shatale-api SHAT-4016) reads this query parameter; the person is the one the
+    // purchase was requested FOR, so it is compared with the request_purchase call above.
+    expect(reveal!.query.publisher_user_id, 'the reveal was asked without the person the purchase is for')
+      .toBe('usr_chain_1')
 
-    // ── and the card survived the redaction layer, because the path is allowlisted ────────────────
-    const card = JSON.parse(text(revealed))
-    expect(card.card_number, 'the card field came back scrubbed — the client method is off the allowlisted path')
-      .toBe('MOCK-CARD-NUMBER-NOT-A-PAN')
-    expect(card.cvv).toBe('MOCK-CVV')
+    const identity = mock.lastRequest('GET', `/v1/purchases/${purchaseId}/checkout-identity`)
+    expect(identity, 'the checkout identity was read for a different purchase than the one created')
+      .toBeDefined()
+
+    // ── the card survived the redaction layer, in the API's names, because the path is allowlisted ─
+    expect(
+      JSON.parse(text(revealed)),
+      'the card came back changed — scrubbed (the client method is off the allowlisted path) or reshaped',
+    ).toEqual(API_CARD_CREDENTIALS)
+
+    // ── and both identity halves arrived, each in its own tool ─────────────────────────────────────
+    expect(JSON.parse(text(holder)).billing_identity).toEqual(API_CHECKOUT_IDENTITY.billing_identity)
+    expect(JSON.parse(text(buyer)).merchant_customer_identity).toEqual(
+      API_CHECKOUT_IDENTITY.merchant_customer_identity,
+    )
+    expect(text(holder), 'the cardholder tool carried card data').not.toContain(SENTINEL_PAN)
+    expect(text(buyer), 'the buyer tool carried card data').not.toContain(SENTINEL_PAN)
+
+    // ── and the card went to the caller who asked, and nowhere else ────────────────────────────────
+    // The server's own process: stdout is the MCP transport, stderr is its log. The card is in the
+    // RESULT above (asserted), so its absence here is about the log, not about a card that never came.
+    const log = client.getStderr()
+    expect(log, 'the MCP process wrote the PAN to its log').not.toContain(SENTINEL_PAN)
+    expect(log, 'the MCP process wrote the CVV to its log').not.toContain(SENTINEL_CVV)
   })
 
   // ⚠️ THE CONTROL FOR THE ASSERTION ABOVE, AND WITHOUT IT "the sentinel arrived" PROVES NOTHING
@@ -468,9 +527,17 @@ describeIfKey(LIVE_SUITE_NAME, () => {
     expect(status.isError, `get_purchase_status failed: ${text(status)}`).toBeFalsy()
     expect(text(status), 'the status read answered about a different purchase').toContain(purchaseId!)
 
-    const revealed = await client.callTool('reveal_card', { purchase_id: purchaseId! })
+    // The person the purchase was requested for: shatale-api's person gate reads it (SHAT-4016),
+    // and reveal_card no longer asks without it.
+    const revealed = await client.callTool('reveal_card', {
+      purchase_id: purchaseId!,
+      publisher_user_id: userId,
+    })
     const answer = text(revealed)
-    const cardArrived = answer.includes('card_number') || answer.includes('"number"')
+    // ⚠️ `pan`, THE API'S NAME (SHAT-3023). This read `card_number` / `"number"` — names the API has
+    // never sent on this route — so a real card arriving would have been reported as "none of the
+    // legitimate outcomes". reveal_card now returns exactly the API's five fields or refuses.
+    const cardArrived = answer.includes('"pan"')
     const namedRefusal = answer.includes('card_credentials_unavailable')
     // 🔴 THE THIRD OUTCOME, AND IT IS THE ONE A SANDBOX RUN ACTUALLY TAKES (SHAT-3340/3362 tail B).
     // A sandbox purchase does not reveal a PAN, on purpose, and the API says so BY NAME —
