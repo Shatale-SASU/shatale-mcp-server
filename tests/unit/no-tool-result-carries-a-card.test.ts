@@ -44,8 +44,21 @@ let modules: ToolModule[]
 beforeAll(async () => {
   // Answers every path with a body carrying a card in three different shapes, so a redactor that
   // only reaches `payment.card` — which is all it reached before review widened it — is caught.
-  server = createServer((_req, res) => {
+  //
+  // ⚠️ AND A FOURTH SHAPE, THE ONE THE API ACTUALLY USES (SHAT-3023): `revealed_card` carries the
+  // reveal endpoint's own names — `pan`, not `card_number`. The three shapes above were all names
+  // this scrub already knew, so the sweep could not see that it did not know the API's. Measured
+  // before redact.ts learned `pan`: every tool below leaked the PAN through this key.
+  //
+  // The reveal endpoint itself answers ITS OWN shape and nothing else, as shatale-api does: a
+  // reveal_card that now reads the response strictly would (rightly) refuse the kitchen-sink body.
+  server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
+    const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
+    if (/^\/v1\/purchases\/[^/]+\/card-credentials$/.test(path)) {
+      res.end(JSON.stringify({ pan: PAN, cvv: CVV, exp_month: '12', exp_year: '31', last4: PAN.slice(-4) }))
+      return
+    }
     res.end(
       JSON.stringify({
         id: 'x_1',
@@ -53,6 +66,7 @@ beforeAll(async () => {
         payment: { card: { number: PAN, cvv: CVV, exp_month: 12 } },
         issued_card: { card_number: PAN, cvc: CVV },
         cards: [{ number: PAN, cvv: CVV }],
+        revealed_card: { pan: PAN, cvv: CVV, exp_month: '12', exp_year: '31', last4: PAN.slice(-4) },
         merchants: [{ id: 'm1', name: 'Fixture' }],
         codes: [{ code: '5691', description: 'Clothing' }],
       }),
@@ -93,7 +107,7 @@ const args: Record<string, Record<string, unknown>> = {
     publisher_user_id: 'u', agent_id: 'a', merchant: 'm', amount: 2.5, currency: 'EUR', description: 'd',
   },
   get_purchase_status: { purchase_id: 'p_1' },
-  reveal_card: { purchase_id: 'p_1' },
+  reveal_card: { purchase_id: 'p_1', publisher_user_id: 'u_1' },
   cancel_purchase: { purchase_id: 'p_1', reason: 'r' },
   request_temporary_credentials: {
     publisher_user_id: 'u', agent_id: 'a', merchant_domain: 'example.com', purpose: 'p',

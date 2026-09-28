@@ -122,8 +122,23 @@ const CARD_NOTE =
 // A node is card-ish if it carries a PAN-shaped field. Keyed on the field, not on the
 // parent's name, because the parent is what kept changing — `card`, `issued_card`,
 // a bare array element — while the sensitive field itself never did.
+//
+// ⚠️ `pan` IS HERE BECAUSE IT IS THE API'S OWN NAME, AND IT WAS MISSING (SHAT-3023). shatale-api's
+// reveal (RevealCard, apps/api/api/v1/purchases.go) answers `{pan, cvv, exp_month, exp_year, last4}`,
+// and its own register of cardholder-data names (api/v1/cardholder_data_refusal.go) lists `pan` as
+// "a card number". This scrub knew `number` and `card_number` only — the names the mock used. So the
+// reveal shape, arriving on any path OFF the allowlist, lost its cvv and KEPT ITS PAN: measured by
+// tests/unit/the-end-of-a-purchase-reads-the-apis-own-names.test.ts before this line changed. The
+// cvv branch fired, the `_note` was attached saying the PAN was withheld, and the PAN sat next to it.
+function panOf(o: Record<string, unknown>): string | undefined {
+  if (typeof o.number === 'string') return o.number
+  if (typeof o.card_number === 'string') return o.card_number
+  if (typeof o.pan === 'string') return o.pan
+  return undefined
+}
+
 function isCardish(o: Record<string, unknown>): boolean {
-  return typeof o.number === 'string' || typeof o.card_number === 'string' || 'cvv' in o || 'cvc' in o
+  return panOf(o) !== undefined || 'pan' in o || 'cvv' in o || 'cvc' in o
 }
 
 function scrub(node: unknown, depth: number, seen: WeakSet<object>): unknown {
@@ -138,14 +153,17 @@ function scrub(node: unknown, depth: number, seen: WeakSet<object>): unknown {
   for (const k of Object.keys(o)) out[k] = scrub(o[k], depth + 1, seen)
 
   if (isCardish(o)) {
-    const pan = typeof o.number === 'string' ? o.number : typeof o.card_number === 'string' ? o.card_number : undefined
+    const pan = panOf(o)
     if (pan) {
       // last4 is derived before the delete — an agent still needs to tell two cards
       // apart, and taking that away would push it to ask for the PAN some other way.
       out.last4 = pan.slice(-4)
-      delete out.number
-      delete out.card_number
     }
+    // Deleted whether or not a PAN string was found: a `pan` that is not a string (a number, an
+    // object) is still a card number in the wrong type, and the wrong type is no reason to keep it.
+    delete out.number
+    delete out.card_number
+    delete out.pan
     delete out.cvv
     delete out.cvc
     out._note = CARD_NOTE

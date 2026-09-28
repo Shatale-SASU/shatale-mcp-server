@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
+Last updated: 2026-09-28 (SHAT-3023 — the checkout identity tools gain Validation; rows 19, 20, 23 name the files that walk the whole purchase)
 
 > ⚠️ **THIS IS A HAND-MAINTAINED SNAPSHOT, AND IT HAD DRIFTED BY THREE TOOLS.** The matrix listed
 > 17 rows and reported "Happy path 17/17 (100%)" while the code defined **20** tools. The three it
@@ -52,11 +52,11 @@ Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
 | 16 | `sandbox_create_user` | ✅ | ✅ | ✅ | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 17 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
 | 18 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
-| 19 | `get_checkout_cardholder` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
-| 20 | `get_checkout_customer` | ✅ | - | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card |
+| 19 | `get_checkout_cardholder` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
+| 20 | `get_checkout_customer` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
 | 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 | 22 | `await_purchase_approval` | ✅ | ✅ | - | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
-| 23 | `reveal_card` | ✅ | ✅ | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
+| 23 | `reveal_card` | ✅ | ✅ | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` was **blocked when a sandbox key is set** — no longer true since SHAT-2373 made `/v1/purchases` serve sandbox keys deliberately (environment stamped from the key). The client-side refusal was removed in SHAT-2611; `sandbox_simulate_authorization` remains the narrower tool for a policy decision without a purchase.
 
@@ -64,10 +64,12 @@ Last updated: 2026-09-05 (SHAT-3023 — `reveal_card` added; row 23)
 
 - **Tools defined in code**: 23
 - **Happy path**: 23/23
-- **Input validation**: 7/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Input validation**: 9/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
-  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 28 refusal cases plus 2 positive
-  controls), which this table predates.
+  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 36 "sends nothing and says why" cases
+  — 12 tools × 3, counted with `--reporter=verbose` on 2026-09-28 — plus its positive controls),
+  which this table predates. The two checkout identity tools joined that list with SHAT-3023; the
+  sentence said 28 before, against 30 cases at the time.
 - **Contract (Zod)**: 12/23
 - **Security edge cases**: 5/23 + global injection/leak tests + `request_purchase` sandbox-guard
 
@@ -97,4 +99,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `wire-fixtures.test.ts` | 4 | No (mock upstream) |
 | `the-key-travels-only-in-the-environment.test.ts` | 3 | No |
 | `the-banner-says-where-it-points.test.ts` | 4 | No |
-| `one-purchase-walked-through-the-contract.test.ts` | 6 | Partial |
+| `one-purchase-walked-through-the-contract.test.ts` | 7 | Partial |

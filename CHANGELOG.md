@@ -21,7 +21,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **`reveal_card` accepts `publisher_user_id`** — the same person the purchase was requested for — and
+  sends it as the query parameter the API's person gate reads (SHAT-4016 / SHAT-4051). Without it the
+  API can check only that the key's publisher owns the purchase, so one person of a publisher could
+  name another person's purchase id and receive that card. The API named this tool as the one live
+  caller that did not send it — the reason its gate could not be switched on (SHAT-3023).
+
+### Deprecated
+- **`reveal_card` without `publisher_user_id`.** It still works exactly as in 1.1.x — same request, no
+  query — so nobody built on 1.1.0/1.1.1 breaks on upgrade. Each such call carries
+  `_meta.deprecation` (`code: reveal_without_person`) in its result and writes one line to stderr;
+  neither contains anything of the card. **Removal plan:** once the Concierge pin is past the release
+  carrying this change and the API's `event=reveal_without_person_scope` count is zero, the parameter
+  becomes required here and the API's person-scope flag is switched on. A `publisher_user_id` that is
+  PRESENT but empty or not a string is refused now — that is a caller's mistake, not the transition.
+
+### Fixed
+- **The PCI scrub did not know the API's name for a card number.** shatale-api's reveal answers
+  `pan / cvv / exp_month / exp_year / last4`; the scrub recognised `number` and `card_number` only.
+  So that shape, arriving on any path OFF the allowlist, lost its CVV and kept its PAN. No tool
+  received it that way today — the only route that sends it is the allowlisted reveal — but the guard
+  existed for exactly the day one does. `pan` is now recognised (SHAT-3023).
+- **`reveal_card` and the two checkout identity tools read the response strictly.** They used to
+  hand back whatever the API sent as long as it was not empty. The mock this package was tested
+  against spoke a different dialect from the API for the whole life of `reveal_card`
+  (`card_number / expiry_month / expiry_year`; `address_line1`), and every test was green. Now a
+  missing, extra or non-string field is a named refusal — `card_credentials_unrecognised`,
+  `checkout_identity_unrecognised` — that names the keys and never a value. An extra field is refused
+  too: the one extra field the reveal has ever carried was `three_ds_password` (SHAT-2323).
+- **`get_checkout_cardholder` and `get_checkout_customer` no longer send a whitespace id.** They
+  validated with a bare `.min(1)`, so `"   "` went out as `/v1/purchases/%20%20%20/checkout-identity`;
+  they now use the same `requireId` every other id-taking tool does (SHAT-3023).
 
 ## [1.1.0] — 2026-09-18
 
