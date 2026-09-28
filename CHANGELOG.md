@@ -6,20 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## 1.1.1 — 2026-09-19
-
-### Fixed
-- `sandbox_complete_onboarding` no longer claims the call leaves the test user with money available
-  to spend. The description — in the tool itself and word for word in the README — asserted a
-  payment service we do not run. What the endpoint does is one UPDATE, setting
-  `profile_status='complete'`, `kyc_level='basic'` and `threeds_onboarded=TRUE`, and it now says
-  that. An agent reads a description BEFORE it calls, so the old sentence became a plan against
-  something that does not exist; and it travelled to npm inside the package, read by anyone
-  evaluating us. A guard now refuses that vocabulary in any tool description, anywhere in the
-  README, and in the built files this package ships — the old wording is described in these notes
-  rather than quoted, because quoting it would put the words back into the package (SHAT-3592).
-
-## [Unreleased]
+## 1.2.0 — 2026-09-28
 
 ### Added
 - **`reveal_card` accepts `publisher_user_id`** — the same person the purchase was requested for — and
@@ -53,6 +40,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **`get_checkout_cardholder` and `get_checkout_customer` no longer send a whitespace id.** They
   validated with a bare `.min(1)`, so `"   "` went out as `/v1/purchases/%20%20%20/checkout-identity`;
   they now use the same `requireId` every other id-taking tool does (SHAT-3023).
+
+## 1.1.1 — 2026-09-19
+
+### Fixed
+- `sandbox_complete_onboarding` no longer claims the call leaves the test user with money available
+  to spend. The description — in the tool itself and word for word in the README — asserted a
+  payment service we do not run. What the endpoint does is one UPDATE, setting
+  `profile_status='complete'`, `kyc_level='basic'` and `threeds_onboarded=TRUE`, and it now says
+  that. An agent reads a description BEFORE it calls, so the old sentence became a plan against
+  something that does not exist; and it travelled to npm inside the package, read by anyone
+  evaluating us. A guard now refuses that vocabulary in any tool description, anywhere in the
+  README, and in the built files this package ships — the old wording is described in these notes
+  rather than quoted, because quoting it would put the words back into the package (SHAT-3592).
 
 ## [1.1.0] — 2026-09-18
 
