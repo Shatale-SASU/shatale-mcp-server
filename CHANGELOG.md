@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 1.1.2 — 2026-09-27
+
+### Fixed
+- `get_merchant_details` no longer swallows a genuine 404. When the merchant id was unknown, the
+  handler asked the catalogue for its state and replaced the error with
+  `{catalog_state, merchant: null}` unless that state was `published` — a value this field has never
+  carried. Its only producer answers one of `ok`, `out_of_range`, `not_published`, `no_match`, so the
+  comparison was true for every real answer, including a healthy `ok`: the advice to check the id was
+  thrown away exactly when it was the right advice, and the caller got a null merchant with no
+  explanation. Now only `not_published` — the one state that means there is nothing to find at all —
+  silences the 404; the other three mean the catalogue HAS merchants, and then the id is the thing to
+  look at. Written as an inclusion rather than `!== something`, because an exclusion is satisfied by
+  every value the producer might add later and by every value it never had, which is how this
+  happened. The case that was supposed to hold the other half passed on a fixture stubbing the same
+  non-existent `published`, so it measured nothing; it now uses the state a published catalogue
+  actually answers (SHAT-4031).
+
 ## 1.1.1 — 2026-09-19
 
 ### Fixed
