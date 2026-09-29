@@ -25,7 +25,7 @@ import { cardCredentials } from '../fixtures/api-response-shapes'
 // ⚠️ JSON.stringify ALONE IS NOT ENOUGH, AND THAT IS WHY THE FIXTURE CARRIES MORE THAN \n AND \r.
 // It leaves U+2028/U+2029 (line and paragraph separators — a line break for JavaScript tooling and
 // many viewers), U+0085 (NEL), DEL and the C1 controls, and the bidi overrides raw. Measured before
-// writing this: JSON.stringify("a\u2028b\u2029c\u0085d\u007fe\u202ef") keeps all six.
+// writing this: JSON.stringify("a\u2028b\u2029c\u0085d\u007fe\u202ef") keeps all five.
 
 // Every character here is one that must NOT reach the log raw. Placed INSIDE the id, not at its
 // ends: requireId trims, and a trimmed-away character would make the test pass for the wrong reason.

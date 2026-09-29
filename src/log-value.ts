@@ -10,7 +10,7 @@
  * exactly by JSON.parse — and then the characters JSON.stringify leaves RAW are escaped too:
  * DEL and the C1 controls (U+007F–U+009F, including NEL U+0085), the line and paragraph separators
  * U+2028/U+2029, and the bidi marks and overrides that reorder what a reader sees. Measured before
- * this was written: JSON.stringify("a\u2028b\u2029c\u0085d\u007fe\u202ef") keeps all six raw.
+ * this was written: JSON.stringify("a\u2028b\u2029c\u0085d\u007fe\u202ef") keeps all five raw.
  *
  * This is ESCAPING, not redaction: the operator still reads the whole value. What must not reach a
  * log at all (a card) is decided elsewhere and is not this function's job.
