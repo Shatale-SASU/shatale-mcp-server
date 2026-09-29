@@ -1,4 +1,5 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { forLog } from './log-value.js'
 
 /**
  * F-009 — harden the stdio session against malformed JSON-RPC frames.
@@ -86,7 +87,9 @@ export function installStdioErrorHandling(
   const handler = (error: Error): void => {
     const message = error instanceof Error ? error.message : String(error)
     try {
-      stderr.write(`[shatale-mcp] protocol error: ${message}\n`)
+      // The message can QUOTE the client's frame (V8's JSON.parse error does), so it is a value from
+      // outside and goes through forLog: one line, whatever the frame held (SHAT-4307).
+      stderr.write(`[shatale-mcp] protocol error: ${forLog(message)}\n`)
     } catch {
       // stderr unavailable — nothing else we can do.
     }
