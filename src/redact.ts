@@ -111,7 +111,7 @@ export function pathReturnsOurCard(path: string): boolean {
 
 export function redactPurchaseCard(result: unknown, path?: string): unknown {
   if (path !== undefined && pathReturnsOurCard(path)) return result
-  return scrub(result, 0, new WeakSet())
+  return scrub(result, 0, new WeakMap())
 }
 
 const CARD_NOTE =
@@ -122,30 +122,72 @@ const CARD_NOTE =
 // A node is card-ish if it carries a PAN-shaped field. Keyed on the field, not on the
 // parent's name, because the parent is what kept changing — `card`, `issued_card`,
 // a bare array element — while the sensitive field itself never did.
-function isCardish(o: Record<string, unknown>): boolean {
-  return typeof o.number === 'string' || typeof o.card_number === 'string' || 'cvv' in o || 'cvc' in o
+//
+// ⚠️ `pan` IS HERE BECAUSE IT IS THE API'S OWN NAME, AND IT WAS MISSING (SHAT-3023). shatale-api's
+// reveal (RevealCard, apps/api/api/v1/purchases.go) answers `{pan, cvv, exp_month, exp_year, last4}`,
+// and its own register of cardholder-data names (api/v1/cardholder_data_refusal.go) lists `pan` as
+// "a card number". This scrub knew `number` and `card_number` only — the names the mock used. So the
+// reveal shape, arriving on any path OFF the allowlist, lost its cvv and KEPT ITS PAN: measured by
+// tests/unit/the-end-of-a-purchase-reads-the-apis-own-names.test.ts before this line changed. The
+// cvv branch fired, the `_note` was attached saying the PAN was withheld, and the PAN sat next to it.
+function panOf(o: Record<string, unknown>): string | undefined {
+  if (typeof o.number === 'string') return o.number
+  if (typeof o.card_number === 'string') return o.card_number
+  if (typeof o.pan === 'string') return o.pan
+  return undefined
 }
 
-function scrub(node: unknown, depth: number, seen: WeakSet<object>): unknown {
-  if (depth > 12 || !node || typeof node !== 'object') return node
-  if (seen.has(node as object)) return node
-  seen.add(node as object)
+function isCardish(o: Record<string, unknown>): boolean {
+  return panOf(o) !== undefined || 'pan' in o || 'cvv' in o || 'cvc' in o
+}
 
-  if (Array.isArray(node)) return node.map((v) => scrub(v, depth + 1, seen))
+// ⚠️ THE LIMIT IS WHERE THE WALK STOPS READING — AND WHAT IT HAS NOT READ, IT DOES NOT PASS (SHAT-4307).
+// This line used to be `if (depth > 12 || …) return node`: everything below depth 12 came back
+// exactly as it arrived, so a card nested 13 levels down kept its PAN and CVV on a path off the
+// allowlist (second hand on shatale-mcp-server#93 measured it at depth 14). No API response nests that
+// deep today — but this scrub exists for the response nobody has seen yet, and a limit below which it
+// silently stands aside is a documented way round it. So an OBJECT or ARRAY past the limit is replaced,
+// whole, by TOO_DEEP_MARKER. A primitive there is left alone: it can only be a card number if its
+// parent is card-ish, and its parent was read. Depth counts from the root (0), one per object/array.
+export const SCRUB_MAX_DEPTH = 12
+export const TOO_DEEP_MARKER =
+  `[withheld by the PCI scrub: nested deeper than ${SCRUB_MAX_DEPTH} levels, so it was not read]`
+
+// ⚠️ AND AN OBJECT MET A SECOND TIME GETS ITS SCRUBBED COPY, NOT ITSELF (SHAT-4307). The walk used
+// to remember objects in a WeakSet and, on meeting one again — a cycle, or the same object under two
+// keys — return THE ORIGINAL, unscrubbed: a card that pointed at itself came back with its PAN. A
+// response from JSON.parse never shares a reference, so the API cannot reach this; any caller that
+// hands the scrub an object graph can. The map now records the COPY before descending, so a second
+// visit (and a cycle closing on an ancestor still being built) receives the scrubbed one.
+function scrub(node: unknown, depth: number, done: WeakMap<object, unknown>): unknown {
+  if (!node || typeof node !== 'object') return node
+  if (depth > SCRUB_MAX_DEPTH) return TOO_DEEP_MARKER
+  if (done.has(node)) return done.get(node)
+
+  if (Array.isArray(node)) {
+    const arr: unknown[] = []
+    done.set(node, arr)
+    for (const v of node) arr.push(scrub(v, depth + 1, done))
+    return arr
+  }
 
   const o = node as Record<string, unknown>
   const out: Record<string, unknown> = {}
-  for (const k of Object.keys(o)) out[k] = scrub(o[k], depth + 1, seen)
+  done.set(node, out)
+  for (const k of Object.keys(o)) out[k] = scrub(o[k], depth + 1, done)
 
   if (isCardish(o)) {
-    const pan = typeof o.number === 'string' ? o.number : typeof o.card_number === 'string' ? o.card_number : undefined
+    const pan = panOf(o)
     if (pan) {
       // last4 is derived before the delete — an agent still needs to tell two cards
       // apart, and taking that away would push it to ask for the PAN some other way.
       out.last4 = pan.slice(-4)
-      delete out.number
-      delete out.card_number
     }
+    // Deleted whether or not a PAN string was found: a `pan` that is not a string (a number, an
+    // object) is still a card number in the wrong type, and the wrong type is no reason to keep it.
+    delete out.number
+    delete out.card_number
+    delete out.pan
     delete out.cvv
     delete out.cvc
     out._note = CARD_NOTE

@@ -1,5 +1,6 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { AddressInfo } from 'node:net'
+import { cardCredentials, checkoutIdentity } from '../fixtures/api-response-shapes'
 
 export interface CapturedRequest {
   method: string
@@ -99,28 +100,28 @@ export class MockUpstream {
     // this path and answer with a purchase-shaped body, so a checkout fixture would pin a route
     // the tool never actually distinguishes.
     if (method === 'GET' && /\/v1\/purchases\/[^/]+\/checkout-identity$/.test(path)) {
-      return ok({
-        billing_identity: { name: 'Shatale SASU', address_line1: '1 Rue Fixture', country: 'FR' },
-        merchant_customer_identity: { name: 'Fixture User', email: 'fixture@test.shatale.com' },
-      })
+      // ⚠️ IN THE API'S OWN NAMES, FROM ONE PLACE (SHAT-3023). This branch used to answer
+      // `address_line1` with no city or postal code — a shape shatale-api never sends — and every
+      // test that read it was green, because the tools passed the half through unread. The shape now
+      // comes from tests/fixtures/api-response-shapes.ts, which cites the producer by sha and line.
+      return ok(checkoutIdentity())
     }
     // Ordered BEFORE the generic /v1/purchases/ read, for the reason the checkout-identity branch
     // above already records: that branch's startsWith would swallow this path and answer with a
     // purchase-shaped body, so the reveal would look successful while returning no card at all.
     //
-    // ⚠️ THE VALUES ARE SENTINELS, NOT A CARD. `card_number` here carries no digits on purpose: a
+    // ⚠️ THE VALUES ARE SENTINELS, NOT A CARD. The PAN here carries no digits on purpose: a
     // PAN-shaped literal in a fixture is a PAN-shaped literal in the repository, and the scanners
     // that exist for exactly that reason cannot tell a fixture from a leak. What the test needs is
     // not a realistic number — it is a value it can recognise AFTER the redaction layer has had its
     // chance, which is what makes "the allowlisted path was used" observable.
+    //
+    // 🔴 AND THE NAMES ARE THE API'S (SHAT-3023). This branch answered `card_number / expiry_month /
+    // expiry_year / cardholder_name` for the whole life of reveal_card; shatale-api answers
+    // `pan / cvv / exp_month / exp_year / last4`. The PCI scrub knew the mock's name and not the
+    // API's, so the suite proved a boundary for a field that never arrives.
     if (method === 'GET' && /\/v1\/purchases\/[^/]+\/card-credentials$/.test(path)) {
-      return ok({
-        card_number: 'MOCK-CARD-NUMBER-NOT-A-PAN',
-        expiry_month: 12,
-        expiry_year: 2031,
-        cvv: 'MOCK-CVV',
-        cardholder_name: 'Shatale Fixture',
-      })
+      return ok(cardCredentials())
     }
     if (method === 'GET' && path.startsWith('/v1/purchases/')) {
       return ok({ purchase_id: path.split('/').pop(), status: 'pending' })

@@ -92,3 +92,54 @@ export function requireFirstId(
     ),
   }
 }
+
+/**
+ * ⚠️ THE OTHER DIRECTION OF THE SAME BOUNDARY: WHAT COMES BACK, NOT WHAT GOES OUT (SHAT-3023).
+ *
+ * Everything above guards the ids we SEND. The end of a purchase — reveal_card and the two checkout
+ * identity tools — READS a response and hands it to an agent that will type it into a merchant's
+ * form. Those tools used to check only "not empty" and pass the body through, so a field the API
+ * renamed, dropped or added went to the agent unremarked. Measured on this repository before this
+ * change: the mock upstream answered the reveal as `card_number / expiry_month / expiry_year` while
+ * shatale-api answers `pan / exp_month / exp_year / last4`, and every test was green. A lenient reader
+ * turns a name mismatch into silence; this one refuses instead.
+ *
+ * It reports NAMES ONLY — which keys were missing, which were unexpected, which were not strings —
+ * and never a value. The object it inspects may be a card: echoing any part of it into an error
+ * would make the refusal the leak.
+ */
+export type ShapeReport = { missing: string[]; unexpected: string[]; notString: string[] }
+
+export function exactStringFields(
+  value: unknown,
+  names: readonly string[],
+): { ok: true; fields: Record<string, string> } | { ok: false; report: ShapeReport } {
+  const report: ShapeReport = { missing: [], unexpected: [], notString: [] }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, report: { ...report, missing: [...names] } }
+  }
+  const o = value as Record<string, unknown>
+  const fields: Record<string, string> = {}
+  for (const n of names) {
+    if (!Object.prototype.hasOwnProperty.call(o, n)) report.missing.push(n)
+    else if (typeof o[n] !== 'string') report.notString.push(n)
+    else fields[n] = o[n] as string
+  }
+  for (const k of Object.keys(o)) {
+    // A key name is the API's, not the card's — but it is still upstream text, so it is bounded.
+    if (!names.includes(k)) report.unexpected.push(k.slice(0, 64))
+  }
+  if (report.missing.length || report.unexpected.length || report.notString.length) {
+    return { ok: false, report }
+  }
+  return { ok: true, fields }
+}
+
+/** One sentence naming what did not match, for a refusal's message. Names only, never values. */
+export function describeShape(report: ShapeReport): string {
+  const parts: string[] = []
+  if (report.missing.length) parts.push(`missing: ${report.missing.join(', ')}`)
+  if (report.unexpected.length) parts.push(`unexpected: ${report.unexpected.join(', ')}`)
+  if (report.notString.length) parts.push(`not a string: ${report.notString.join(', ')}`)
+  return parts.join('; ')
+}

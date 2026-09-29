@@ -3,6 +3,7 @@ import { MockUpstream } from '../harness/mockUpstream.js'
 import { ShataleClient } from '../../src/client.js'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
+import { createCheckoutTools } from '../../src/tools/checkout.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
 import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
@@ -50,6 +51,7 @@ beforeAll(async () => {
   modules = {
     purchase: createPurchaseTools(client, { isSandbox: false }),
     reveal: createRevealTools(client),
+    checkout: createCheckoutTools(client),
     credentials: createCredentialTools(client, { emailsEnabled: true }),
     onboarding: createOnboardingTools(client, { enabled: true }),
     catalog: createCatalogTools(client),
@@ -89,6 +91,12 @@ const idTools: Array<{ tool: string; missing: string }> = [
   // was already asserting that no id-taking tool does that, and it was TRUE only of the tools
   // somebody remembered to list.
   { tool: 'reveal_card', missing: 'purchase_id' },
+  // ⚠️ ADDED LATE (SHAT-3023), AND THE COMMENT ABOVE PREDICTED EXACTLY THIS. Review of #69 recorded
+  // that checkout.ts carried the same bare `.min(1)` reveal_card was fixed for — and neither checkout
+  // tool was ever in this list, so the suite stayed green about them while `"   "` went out as
+  // GET /v1/purchases/%20%20%20/checkout-identity. Both halves read the same route.
+  { tool: 'get_checkout_cardholder', missing: 'purchase_id' },
+  { tool: 'get_checkout_customer', missing: 'purchase_id' },
   { tool: 'sandbox_approve_purchase', missing: 'purchase_id or request_id' },
   { tool: 'sandbox_complete_onboarding', missing: 'user_id' },
 ]

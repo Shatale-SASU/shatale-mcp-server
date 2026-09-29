@@ -3,6 +3,7 @@ import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.j
 import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
+import { forLog } from './log-value.js'
 
 /**
  * Flattens an error's `cause` chain into one operator-readable line.
@@ -454,10 +455,20 @@ export class ShataleClient {
   // (apps/api/internal/purchases/pgx/card_reveal_repo.go:149). It returns this card's PAN, expiry and
   // CVV and NOT `three_ds_password` — that removal is the point of SHAT-2323, because one pool 3DS
   // password is shared by every card in the pool and revealing it once discloses it for all of them.
-  async getCardCredentials(id: string): Promise<unknown> {
+  //
+  // ⚠️ `publisherUserId` TRAVELS AS THE QUERY PARAMETER shatale-api's person gate reads
+  // (RevealCard: r.URL.Query().Get("publisher_user_id"), SHAT-4016). A query, not a body, because this
+  // is a GET. The scrub decides on the path WITHOUT the query (redact.ts pathReturnsOurCard splits on
+  // '?'), so this does not move the call off the allowlist.
+  //
+  // `undefined` is the DEPRECATED transition (reveal.ts REVEAL_WITHOUT_PERSON_DEPRECATION): the
+  // request goes out exactly as 1.1.x sent it, with no query at all — not an empty parameter, which
+  // the API trims to "" and treats the same, but which would make the wire record lie about intent.
+  async getCardCredentials(id: string, publisherUserId?: string): Promise<unknown> {
     return this.request(
       'GET',
-      `/v1/purchases/${encodeURIComponent(id)}/card-credentials`,
+      `/v1/purchases/${encodeURIComponent(id)}/card-credentials` +
+        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
       undefined,
       // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
       // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's
@@ -575,10 +586,14 @@ export class ShataleClient {
       // SHATALE_API_URL themselves, the host's log is their own machine, and a redacted diagnostic
       // is frequently a useless one — the point of the line is to tell DNS, refusal and timeout
       // apart. It must never be widened to a channel the model reads.
+      //
+      // Unfiltered is not unescaped: the chain is text written by fetch, by the API and by whatever a
+      // future cause holds, so it goes through forLog — quoted, one line, every character still there
+      // (SHAT-4307). A newline in it would otherwise start a line this server did not write.
 
       console.error(
         `list_mcc_codes: the /v1/mcc-codes lookup failed, serving this package's built-in ISO ` +
-          `18245 list instead. Reason: ${describeErrorChain(err)}`,
+          `18245 list instead. Reason: ${forLog(describeErrorChain(err))}`,
       )
       return {
         ...(ShataleClient.filterBuiltInMCC(query) as Record<string, unknown>),

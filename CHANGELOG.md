@@ -6,19 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## 1.1.1 — 2026-09-19
-
-### Fixed
-- `sandbox_complete_onboarding` no longer claims the call leaves the test user with money available
-  to spend. The description — in the tool itself and word for word in the README — asserted a
-  payment service we do not run. What the endpoint does is one UPDATE, setting
-  `profile_status='complete'`, `kyc_level='basic'` and `threeds_onboarded=TRUE`, and it now says
-  that. An agent reads a description BEFORE it calls, so the old sentence became a plan against
-  something that does not exist; and it travelled to npm inside the package, read by anyone
-  evaluating us. A guard now refuses that vocabulary in any tool description, anywhere in the
-  README, and in the built files this package ships — the old wording is described in these notes
-  rather than quoted, because quoting it would put the words back into the package (SHAT-3592).
-
 ## [Unreleased]
 
 ### Added
@@ -46,6 +33,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   The stdio hardening stays on the stdio path: it writes a parse-error frame to the process stdout
   and closes the session, which is right for a pipe and wrong twice on HTTP, where that stdout is
   nobody's channel and one malformed frame would tear down a session shared with others.
+
+### Security
+- **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
+  card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it
+  arrived, so a card 13 levels down kept its PAN and CVV. Such a subtree is now replaced, whole, by a
+  marker string (`TOO_DEEP_MARKER`). No API response nests that deep today; the limit is where the
+  walk stops reading, and what it has not read it no longer passes.
+- **An object met twice in a response is scrubbed both times** (SHAT-4307). The walk returned the
+  ORIGINAL object on a second visit (a cycle, or one object under two keys), so a card that pointed
+  at itself kept its PAN. Not reachable from a JSON response; closed because it cost one map.
+- **stderr lines carry outside values as values** (SHAT-4307). The `reveal_card` DEPRECATED line (the
+  caller's `purchase_id`), the protocol-error line (the parser's message, which quotes the client's
+  frame) and the `list_mcc_codes` fallback line (the exception chain) are now JSON-encoded, with the
+  separators JSON leaves raw — U+2028/U+2029, NEL, DEL/C1, bidi overrides — escaped too. A newline in
+  such a value can no longer end the line and start one the server did not write. Every character is
+  still there for the operator; the value is now quoted.
+
+## 1.2.0 — 2026-09-28
+
+### Added
+- **`reveal_card` accepts `publisher_user_id`** — the same person the purchase was requested for — and
+  sends it as the query parameter the API's person gate reads (SHAT-4016 / SHAT-4051). Without it the
+  API can check only that the key's publisher owns the purchase, so one person of a publisher could
+  name another person's purchase id and receive that card. The API named this tool as the one live
+  caller that did not send it — the reason its gate could not be switched on (SHAT-3023).
+
+### Deprecated
+- **`reveal_card` without `publisher_user_id`.** It still works exactly as in 1.1.x — same request, no
+  query — so nobody built on 1.1.0/1.1.1 breaks on upgrade. Each such call carries
+  `_meta.deprecation` (`code: reveal_without_person`) in its result and writes one line to stderr;
+  neither contains anything of the card. **Removal plan:** once the Concierge pin is past the release
+  carrying this change and the API's `event=reveal_without_person_scope` count is zero, the parameter
+  becomes required here and the API's person-scope flag is switched on. A `publisher_user_id` that is
+  PRESENT but empty or not a string is refused now — that is a caller's mistake, not the transition.
+
+### Fixed
+- **The PCI scrub did not know the API's name for a card number.** shatale-api's reveal answers
+  `pan / cvv / exp_month / exp_year / last4`; the scrub recognised `number` and `card_number` only.
+  So that shape, arriving on any path OFF the allowlist, lost its CVV and kept its PAN. No tool
+  received it that way today — the only route that sends it is the allowlisted reveal — but the guard
+  existed for exactly the day one does. `pan` is now recognised (SHAT-3023).
+- **`reveal_card` and the two checkout identity tools read the response strictly.** They used to
+  hand back whatever the API sent as long as it was not empty. The mock this package was tested
+  against spoke a different dialect from the API for the whole life of `reveal_card`
+  (`card_number / expiry_month / expiry_year`; `address_line1`), and every test was green. Now a
+  missing, extra or non-string field is a named refusal — `card_credentials_unrecognised`,
+  `checkout_identity_unrecognised` — that names the keys and never a value. An extra field is refused
+  too: the one extra field the reveal has ever carried was `three_ds_password` (SHAT-2323).
+- **`get_checkout_cardholder` and `get_checkout_customer` no longer send a whitespace id.** They
+  validated with a bare `.min(1)`, so `"   "` went out as `/v1/purchases/%20%20%20/checkout-identity`;
+  they now use the same `requireId` every other id-taking tool does (SHAT-3023).
+
+## 1.1.1 — 2026-09-19
+
+### Fixed
+- `sandbox_complete_onboarding` no longer claims the call leaves the test user with money available
+  to spend. The description — in the tool itself and word for word in the README — asserted a
+  payment service we do not run. What the endpoint does is one UPDATE, setting
+  `profile_status='complete'`, `kyc_level='basic'` and `threeds_onboarded=TRUE`, and it now says
+  that. An agent reads a description BEFORE it calls, so the old sentence became a plan against
+  something that does not exist; and it travelled to npm inside the package, read by anyone
+  evaluating us. A guard now refuses that vocabulary in any tool description, anywhere in the
+  README, and in the built files this package ships — the old wording is described in these notes
+  rather than quoted, because quoting it would put the words back into the package (SHAT-3592).
 
 ## [1.1.0] — 2026-09-18
 

@@ -1,21 +1,44 @@
-import { z } from 'zod'
 import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
-import { jsonResult, textResult } from '../types.js'
+import { jsonResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
+import { requireId, exactStringFields, describeShape } from '../validate.js'
 
 // A merchant checkout form can ask for the CARDHOLDER and the BUYER separately. Shatale returns them
 // as two honest, legitimately-distinct identities (they need not match — the pool card is Shatale's,
 // the purchase is for the end-user). These two tools expose each half so the agent fills the right
 // value into the right field. Card credentials (PAN/CVV) are NOT here — they come out-of-band.
 
-const purchaseIdSchema = z.object({
-  purchase_id: z.string().min(1, 'purchase_id is required'),
-})
+// ⚠️ requireId, NOT a bare `.min(1)` — the defect review of #69 named here and left: `"   "` survived
+// it and went out as GET /v1/purchases/%20%20%20/checkout-identity. validate.ts says why in its words.
 
 type IdentityResponse = {
-  billing_identity?: Record<string, unknown>
-  merchant_customer_identity?: Record<string, unknown>
+  billing_identity?: unknown
+  merchant_customer_identity?: unknown
+}
+
+// ⚠️ EACH HALF IN THE API'S OWN NAMES, EXACTLY (SHAT-3023). shatale-api CheckoutIdentity
+// (apps/api/api/v1/purchases.go) writes these keys and no others. The mock this repository tested
+// against sent `address_line1` and no city or postal code, and nothing noticed, because the tool
+// checked only "the half is not empty" and passed the object through. An agent filling a billing
+// form from a half whose names drifted fills the wrong fields or none, and says it succeeded.
+//
+// Each tool judges ONLY ITS OWN HALF: the cardholder tool does not refuse because the buyer half
+// changed, or one drift would take both tools down for a reason only one of them has.
+const BILLING_FIELDS = ['name', 'address_line', 'city', 'postal_code', 'country'] as const
+const CUSTOMER_FIELDS = ['name', 'first_name', 'last_name', 'email'] as const
+
+function identityUnrecognised(which: string, detail: string) {
+  return refusal({
+    code: 'checkout_identity_unrecognised',
+    message:
+      `The ${which} identity came back in a shape this tool does not recognise (${detail}), so none ` +
+      'of it is handed over.',
+    suggested_fix:
+      'Do not fill the merchant form from this response. This is a contract mismatch between this ' +
+      'MCP server and the Shatale API, not a problem with the purchase — upgrade shatale-mcp-server, ' +
+      'or report it with this message.',
+  })
 }
 
 const purchaseIdProperty = {
@@ -42,11 +65,9 @@ function identityUnavailable(which: string) {
 
 export function createCheckoutTools(client: ShataleClient): ToolModule {
   const fetchIdentity = async (args: Record<string, unknown>) => {
-    const parsed = purchaseIdSchema.safeParse(args)
-    if (!parsed.success) {
-      return { ok: false as const, result: textResult(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`, true) }
-    }
-    const data = (await client.getCheckoutIdentity(parsed.data.purchase_id)) as IdentityResponse
+    const id = requireId(args, 'purchase_id')
+    if (!id.ok) return { ok: false as const, result: id.result }
+    const data = (await client.getCheckoutIdentity(id.value)) as IdentityResponse
     return { ok: true as const, data }
   }
 
@@ -89,8 +110,10 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           if (!hasKeys(got.data.billing_identity)) {
             return identityUnavailable('cardholder/billing')
           }
+          const billing = exactStringFields(got.data.billing_identity, BILLING_FIELDS)
+          if (!billing.ok) return identityUnrecognised('cardholder/billing', describeShape(billing.report))
           return jsonResult({
-            billing_identity: got.data.billing_identity,
+            billing_identity: billing.fields,
             _note: 'Cardholder/billing identity only. Card number/expiry/CVV are entered out-of-band, not returned here.',
           })
         } catch (err) {
@@ -105,8 +128,10 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           if (!hasKeys(got.data.merchant_customer_identity)) {
             return identityUnavailable('buyer/customer')
           }
+          const customer = exactStringFields(got.data.merchant_customer_identity, CUSTOMER_FIELDS)
+          if (!customer.ok) return identityUnrecognised('buyer/customer', describeShape(customer.report))
           return jsonResult({
-            merchant_customer_identity: got.data.merchant_customer_identity,
+            merchant_customer_identity: customer.fields,
           })
         } catch (err) {
           return errorResult(err, 'checkout_customer_failed')

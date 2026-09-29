@@ -270,7 +270,12 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
     // SHAT-2610; the fixture is what records that the URL sent is that route and not a neighbour, in
     // the file a Go-side replay reads. A tool wired to `/credentials` or `/card` answers 200 and comes
     // back scrubbed, and nothing but the URL says why.
-    await live.callTool('reveal_card', { purchase_id: 'pur_fixture_5' })
+    //
+    // ⚠️ AND THE PERSON TRAVELS AS A QUERY PARAMETER NOW (SHAT-3023 / SHAT-4016). shatale-api's person
+    // gate reads `publisher_user_id` from the query of this route, and its main.go cites THIS record
+    // ("ни query, ни body") as the measurement of why the gate cannot be switched on. The `query` key
+    // below is that measurement changing.
+    await live.callTool('reveal_card', { purchase_id: 'pur_fixture_5', publisher_user_id: 'usr_fixture_5' })
     captured.push({
       label: 'reveal_card (LIVE + money-GO and sandbox; the allowlisted reveal route)',
       struct_hint: 'apps/api/api/v1/purchases.go card-credentials route',
