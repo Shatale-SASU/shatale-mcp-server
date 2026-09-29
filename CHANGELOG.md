@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## [Unreleased]
+
+### Security
+- **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
+  card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it
+  arrived, so a card 13 levels down kept its PAN and CVV. Such a subtree is now replaced, whole, by a
+  marker string (`TOO_DEEP_MARKER`). No API response nests that deep today; the limit is where the
+  walk stops reading, and what it has not read it no longer passes.
+- **An object met twice in a response is scrubbed both times** (SHAT-4307). The walk returned the
+  ORIGINAL object on a second visit (a cycle, or one object under two keys), so a card that pointed
+  at itself kept its PAN. Not reachable from a JSON response; closed because it cost one map.
+- **stderr lines carry outside values as values** (SHAT-4307). The `reveal_card` DEPRECATED line (the
+  caller's `purchase_id`), the protocol-error line (the parser's message, which quotes the client's
+  frame) and the `list_mcc_codes` fallback line (the exception chain) are now JSON-encoded, with the
+  separators JSON leaves raw — U+2028/U+2029, NEL, DEL/C1, bidi overrides — escaped too. A newline in
+  such a value can no longer end the line and start one the server did not write. Every character is
+  still there for the operator; the value is now quoted.
+
 ## 1.2.0 — 2026-09-28
 
 ### Added

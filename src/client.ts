@@ -3,6 +3,7 @@ import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.j
 import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
+import { forLog } from './log-value.js'
 
 /**
  * Flattens an error's `cause` chain into one operator-readable line.
@@ -585,10 +586,14 @@ export class ShataleClient {
       // SHATALE_API_URL themselves, the host's log is their own machine, and a redacted diagnostic
       // is frequently a useless one — the point of the line is to tell DNS, refusal and timeout
       // apart. It must never be widened to a channel the model reads.
+      //
+      // Unfiltered is not unescaped: the chain is text written by fetch, by the API and by whatever a
+      // future cause holds, so it goes through forLog — quoted, one line, every character still there
+      // (SHAT-4307). A newline in it would otherwise start a line this server did not write.
 
       console.error(
         `list_mcc_codes: the /v1/mcc-codes lookup failed, serving this package's built-in ISO ` +
-          `18245 list instead. Reason: ${describeErrorChain(err)}`,
+          `18245 list instead. Reason: ${forLog(describeErrorChain(err))}`,
       )
       return {
         ...(ShataleClient.filterBuiltInMCC(query) as Record<string, unknown>),

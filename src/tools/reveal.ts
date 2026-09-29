@@ -3,6 +3,7 @@ import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
 import { requireId, exactStringFields, describeShape } from '../validate.js'
+import { forLog } from '../log-value.js'
 
 // reveal_card — the agent-scoped reveal of the card Shatale issued for THIS purchase (SHAT-3023).
 //
@@ -118,8 +119,11 @@ export function createRevealTools(client: ShataleClient): ToolModule {
           if (!person.ok) return person.result
           personValue = person.value
         } else {
+          // The id is the CALLER'S, and requireId only trims it: a newline inside it would end this
+          // line and let the rest read as a line the server wrote. forLog quotes and escapes it
+          // (SHAT-4307); the operator still reads the whole id.
           process.stderr.write(
-            `shatale-mcp-server: DEPRECATED — reveal_card for purchase ${id.value} without ` +
+            `shatale-mcp-server: DEPRECATED — reveal_card for purchase ${forLog(id.value)} without ` +
               `publisher_user_id; served unscoped. ${REVEAL_WITHOUT_PERSON_DEPRECATION}\n`,
           )
         }
