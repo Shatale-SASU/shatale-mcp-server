@@ -290,34 +290,6 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
     })
     live.close()
 
-    // ── Onboarding, behind its deploy flag ──────────────────────────────────
-    const onboarding = new McpTestClient(
-      {
-        SHATALE_API_KEY: 'sk_sandbox_mock',
-        SHATALE_API_URL: mock.url,
-        SHATALE_ONBOARDING_ENABLED: 'true',
-      },
-      'wire-fixtures-onboarding',
-    )
-    await onboarding.initialize()
-    await onboarding.callTool('register_user_profile', {
-      publisher_user_id: 'pub-1',
-      user_claims: { email: 'fixture@test.shatale.com', name: 'Fixture User', country: 'FR' },
-      intended_use: 'purchase',
-    })
-    captured.push({
-      label: 'register_user_profile',
-      struct_hint: 'apps/api/api/v1/onboarding.go register request struct',
-      ...describeLast(mock, 'POST', '/v1/onboarding/register'),
-    })
-
-    await onboarding.callTool('get_onboarding_status', { session_id: 'sess_fixture_1' })
-    captured.push({
-      label: 'get_onboarding_status',
-      struct_hint: 'apps/api/api/v1/onboarding.go session status route',
-      ...describeLast(mock, 'GET', '/v1/onboarding/sessions/'),
-    })
-    onboarding.close()
   })
 
   afterAll(async () => {

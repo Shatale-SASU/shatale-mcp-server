@@ -67,10 +67,10 @@ const control = (name, text, expect) => {
 // that shortcut flipped the GUEST column instead, so the control went red on a cell other
 // than the one it advertised, and the assertion below could not tell the difference. The
 // mode is now asserted verbatim, so a red on the wrong column is a FAIL, not a pass.
-control('(a) onboarding claimed available in sandbox',
-  GOOD.replace('| `register_user_profile` | — | — | yes | — | — | yes |',
-    '| `register_user_profile` | — | yes | yes | — | — | yes |'),
-  { red: true, mustName: ['register_user_profile', 'is available in "sandbox"'] })
+control('(a) sandbox_complete_onboarding claimed available in live',
+  GOOD.replace('| `sandbox_complete_onboarding` | — | yes | — | — |',
+    '| `sandbox_complete_onboarding` | — | yes | yes | — |'),
+  { red: true, mustName: ['sandbox_complete_onboarding', 'is available in "live"'] })
 
 // (a2) the mirror of (a): a real tool marked unavailable where it IS registered.
 //
@@ -81,7 +81,7 @@ control('(a) onboarding claimed available in sandbox',
 // run that proves nothing. Update the literal when the row changes — do not loosen it to a pattern
 // that always matches.
 control('(a2) get_checkout_cardholder marked unavailable in live+money',
-  GOOD.replace(/^\| `get_checkout_cardholder` \| — \| yes \| yes \| — \| yes \|/m, '| `get_checkout_cardholder` | — | yes | yes | — | — |'),
+  GOOD.replace(/^\| `get_checkout_cardholder` \| — \| yes \| — \| yes \|/m, '| `get_checkout_cardholder` | — | yes | — | — |'),
   { red: true, mustName: ['get_checkout_cardholder', 'live+money'] })
 
 // (c2) the tool stays in the matrix but loses its description.
@@ -90,9 +90,9 @@ control('(c2) description of get_credential_status deleted',
   { red: true, mustName: ['get_credential_status', 'no description'] })
 
 // (b) an example prompt that invites a tool the mode does not advertise.
-control('(b) prompt invites register_user_profile in sandbox',
-  GOOD.replace('## Example Prompts\n', '## Example Prompts\n\n- *"Register a new user with email alice@startup.io"* <!-- prompt:register_user_profile@sandbox -->\n'),
-  { red: true, mustName: ['register_user_profile', 'Unknown tool'] })
+control('(b) prompt invites sandbox_complete_onboarding in guest',
+  GOOD.replace('## Example Prompts\n', '## Example Prompts\n\n- *"Mark test user usr_1 as onboarded"* <!-- prompt:sandbox_complete_onboarding@guest -->\n'),
+  { red: true, mustName: ['sandbox_complete_onboarding', 'Unknown tool'] })
 
 // (b2) an example prompt with no annotation at all — the shape the old README had.
 control('(b2) unannotated example prompt',
@@ -151,7 +151,7 @@ control(`(d2) bare "${foreign} tools" with no mode`,
 // grep for it finds nothing, and the gate cannot be tripped by its own canary.
 const CANARY = ['get', 'phantom', 'ledger'].join('_')
 control('canary: a tool that exists nowhere',
-  GOOD.replace(/^\| `get_purchase_status` \|/m, `| \`${CANARY}\` | — | — | — | — | — | — |\n| \`get_purchase_status\` |`),
+  GOOD.replace(/^\| `get_purchase_status` \|/m, `| \`${CANARY}\` | — | — | — | — |\n| \`get_purchase_status\` |`),
   { red: true, mustName: [CANARY] })
 
 control('canary in prose, outside the matrix',
@@ -164,7 +164,7 @@ control('a "gone" declaration about a tool that is still advertised',
   { red: true, mustName: ['explain_shatale'] })
 
 control('a "removed because unreachable" note about a tool that IS reachable',
-  GOOD.replace('<!-- prompt-unreachable:register_user_profile@sandbox -->', '<!-- prompt-unreachable:register_user_profile@sandbox+flags -->'),
+  GOOD.replace('<!-- prompt-unreachable:register_user_profile@sandbox -->', '<!-- prompt-unreachable:get_purchase_status@sandbox -->'),
   { red: true, mustName: ['Restore the prompt'] })
 
 // ── Self-catch controls: the gate must not eat its own words ────────────────
