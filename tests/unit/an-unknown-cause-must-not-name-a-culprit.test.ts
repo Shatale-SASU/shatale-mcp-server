@@ -29,7 +29,6 @@ import { describe, test, expect, beforeAll } from 'vitest'
 import { ShataleClient } from '../../src/client.js'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
 import { createSandboxTools } from '../../src/tools/sandbox.js'
 import { createCheckoutTools } from '../../src/tools/checkout.js'
@@ -58,8 +57,6 @@ const CALLS: Array<[string, Record<string, unknown>]> = [
   ['cancel_purchase', { purchase_id: 'pur_1' }],
   ['request_temporary_credentials', { publisher_user_id: 'pub-1', agent_id: 'agent-1', merchant_domain: 'amazon.com', purpose: 'checkout' }],
   ['get_credential_status', { credential_request_id: 'cred_1' }],
-  ['register_user_profile', { publisher_user_id: 'pub-1', user_claims: { email: 'probe@example.com' } }],
-  ['get_onboarding_status', { session_id: 'ses_1' }],
   ['search_merchants', { query: 'electronics' }],
   ['get_merchant_details', { merchant_id: 'mer_1' }],
   ['sandbox_simulate_authorization', { agent_id: 'agent-1', amount: 1000, currency: 'EUR', mcc: '5691', merchant_name: 'Probe', card_number: '4111111111111111' }],
@@ -77,7 +74,6 @@ beforeAll(() => {
   const modules: ToolModule[] = [
     createPurchaseTools(client, { isSandbox: false }),
     createCredentialTools(client),
-    createOnboardingTools(client, { enabled: true }),
     createCatalogTools(client),
     createSandboxTools(client),
     createCheckoutTools(client),

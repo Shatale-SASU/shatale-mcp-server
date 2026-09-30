@@ -147,11 +147,6 @@ const ROUTES: Array<{ route: string; kind: Kind; call: () => Promise<unknown> }>
   { route: 'GET /v1/credentials/{id}', kind: 'caller-id', call: () => client().getCredentialStatus('cred_1') },
   { route: 'GET /v1/credentials/{id}/emails', kind: 'caller-id', call: () => client().getCredentialEmails('cred_1') },
 
-  // --- onboarding ---
-  { route: 'POST /v1/onboarding/register', kind: 'fixed', call: () =>
-    client().registerUserProfile({ publisher_user_id: 'u_1', user_claims: { email: 'a@b.co' } }) },
-  { route: 'GET /v1/onboarding/sessions/{id}', kind: 'caller-id', call: () => client().getOnboardingStatus('sess_1') },
-
   // --- sandbox ---
   { route: 'POST /v1/sandbox/authorizations', kind: 'fixed', call: () =>
     client().sandboxSimulateAuthorization({

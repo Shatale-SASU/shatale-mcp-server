@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed
+- **`register_user_profile` and `get_onboarding_status`, and the `SHATALE_ONBOARDING_ENABLED` flag that
+  gated them** (SHAT-4435). The API removed its `/v1/onboarding/*` routes (funnel B, the second signup
+  path), so both tools would answer 404 — `POST /v1/onboarding/register` and
+  `GET /v1/onboarding/sessions/{id}` no longer exist. They were advertised only under the flag, which
+  was the only feature flag the server read; setting it now changes nothing. The client methods
+  `registerUserProfile` / `getOnboardingStatus` are gone as well. `sandbox_complete_onboarding` is a
+  different route (`/v1/sandbox/users/{id}/onboarding`) and is unchanged. Tool counts per mode are
+  unchanged (guest 7, sandbox 21, live 7, live+money-GO 17): the pair was never in them. The README
+  matrix loses its two "+ flags" columns, which only existed to show the pair.
+
 ### Security
 - **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
   card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it

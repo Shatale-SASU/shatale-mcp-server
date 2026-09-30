@@ -111,29 +111,6 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
     expect(result.content[0].text).toBeDefined()
   })
 
-  // ── Onboarding tools ──
-
-  test('register_user_profile creates profile', async () => {
-    const email = testEmail()
-    const result = await client.callTool('register_user_profile', {
-      publisher_user_id: testId('user'),
-      user_claims: {
-        email,
-        name: 'E2E Test User',
-      },
-    })
-    expect(result.content[0].type).toBe('text')
-    expect(result.content[0].text).toBeDefined()
-  })
-
-  test('get_onboarding_status returns status', async () => {
-    const result = await client.callTool('get_onboarding_status', {
-      publisher_user_id: testId('user'),
-    })
-    expect(result.content[0].type).toBe('text')
-    expect(result.content[0].text).toBeDefined()
-  })
-
   // ── Sandbox-specific tools (SHAT-1488: deployed routes only) ──
 
   test('sandbox_simulate_authorization runs the policy engine', async () => {
