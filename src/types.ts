@@ -19,6 +19,11 @@ export interface PurchaseInput {
     country?: string
   }
   idempotency_key?: string
+  /**
+   * SHAT-4438. WHY the agent is making this purchase, shown to the person on the approval card beside
+   * `description`. Already normalised (trimmed; undefined when nothing visible was said).
+   */
+  agent_intent?: string
 }
 
 /** Credential request input */
