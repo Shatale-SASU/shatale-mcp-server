@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **`request_purchase` takes an optional `agent_intent`** (SHAT-4438): WHY the agent is making the
+  purchase, in its own words. The API stores it and shows it to the person on the approval card beside
+  `description` (the what); it is not returned by `get_purchase_status`. Plain text, at most 500
+  characters (code points, as the API counts them) after trimming; control characters other than line
+  breaks and tab, and the bidi characters that reorder text (U+202A–U+202E, U+2066–U+2069, LRM, RLM,
+  ALM), are refused here before any request, in a message that never quotes the text. An intent with
+  nothing visible in it is not sent. It is NOT part of the derived idempotency key: a retry that
+  rephrases its reason is the same purchase. Needs an API that knows the field (shatale-api SHAT-4438,
+  migration 369); an older API ignores it.
+
 ### Security
 - **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
   card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it

@@ -3,7 +3,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
-import { requireId } from '../validate.js'
+import { requireId, normaliseAgentIntent, agentIntentProblem, MAX_AGENT_INTENT_CHARS } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
@@ -20,6 +20,8 @@ const requestPurchaseSchema = z.object({
     country: z.string().length(2).optional(),
   }).optional(),
   idempotency_key: z.string().optional(),
+  // SHAT-4438. Optional; checked after the parse by agentIntentProblem, whose message never quotes it.
+  agent_intent: z.string().optional(),
 })
 
 // redactPurchaseCard moved to src/redact.ts and is now applied inside ShataleClient.request, so the
@@ -110,6 +112,15 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
                 phone: { type: 'string', description: 'User phone number' },
                 country: { type: 'string', description: 'User country (ISO 3166-1 alpha-2)' },
               },
+            },
+            agent_intent: {
+              type: 'string',
+              maxLength: MAX_AGENT_INTENT_CHARS,
+              description:
+                'Optional. WHY you are making this purchase, in a sentence or two — shown to the person ' +
+                'on the approval card beside description (the what). Plain text, at most ' +
+                `${MAX_AGENT_INTENT_CHARS} characters; it is shown as text, never as markup or links. It is not ` +
+                'returned to you by get_purchase_status.',
             },
             idempotency_key: {
               type: 'string',
@@ -209,6 +220,13 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         // published package, and a recipe quoted verbatim is a recipe someone can follow.)
         try {
           const input = parsed.data
+          // SHAT-4438. Normalised first, judged second — the order the API uses — so a reason padded
+          // with spaces to 501 characters is judged at the length that would be stored.
+          const agentIntent = normaliseAgentIntent(input.agent_intent)
+          const intentProblem = agentIntent === undefined ? undefined : agentIntentProblem(agentIntent)
+          if (intentProblem) {
+            return textResult(`Invalid input: ${intentProblem}`, true)
+          }
           const result = await client.requestPurchase({
             publisher_user_id: input.publisher_user_id,
             agent_id: input.agent_id,
@@ -218,6 +236,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             description: input.description,
             user_hint: input.user_hint,
             idempotency_key: input.idempotency_key,
+            agent_intent: agentIntent,
           })
           // PCI: never surface raw PAN/CVV into the agent context.
           return jsonResult(result)

@@ -101,6 +101,11 @@ export function toPurchaseWireBody(
     description: input.description,
   }
   if (input.user_hint) body.user_hint = input.user_hint
+  // SHAT-4438. Sent only when the agent said something: the API reads an absent field as "said nothing",
+  // and an empty one would be a statement. /!\ NOT PART OF THE DERIVED KEY BELOW, ON PURPOSE: the API does
+  // not count it among the fields a repeat must agree on, so a retry that rephrases its reason is the SAME
+  // purchase. Hashed into the key, the rephrased retry would mint a new key and buy twice.
+  if (input.agent_intent) body.agent_intent = input.agent_intent
   // Explicit caller key wins; otherwise a DETERMINISTIC key (not random) so
   // retries of the same logical purchase de-dup rather than double-charge.
   if (input.idempotency_key) body.idempotency_key = input.idempotency_key

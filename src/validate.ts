@@ -143,3 +143,59 @@ export function describeShape(report: ShapeReport): string {
   if (report.notString.length) parts.push(`not a string: ${report.notString.join(', ')}`)
   return parts.join('; ')
 }
+
+/**
+ * SHAT-4438. The ceiling on `agent_intent`, in CHARACTERS (Unicode code points). It is the API's number —
+ * `purchases.MaxAgentIntentRunes` and migration 369's `char_length(agent_intent) <= 500` in shatale-api —
+ * repeated here so an agent hears about a too-long reason from the tool it called, in the words of the
+ * field it sent, rather than as a forwarded 400 one hop away.
+ *
+ * /!\ CODE POINTS, NOT UTF-16 UNITS. `'👍'.length` is 2; Go counts it as one rune and Postgres as one
+ * character. Counting `.length` here would refuse an emoji-heavy reason the API accepts.
+ */
+export const MAX_AGENT_INTENT_CHARS = 500
+
+/**
+ * The bidi characters that make the visible order differ from the stored order: embeddings and
+ * overrides U+202A–U+202E, isolates U+2066–U+2069, and the implicit marks LRM U+200E, RLM U+200F and
+ * ALM U+061C. The API refuses exactly these (shatale-api internal/purchases/validation.go,
+ * isBidiEmbedding); the zero-width joiner and non-joiner are ordinary writing and are NOT here.
+ */
+const BIDI_REORDERING = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/u
+/** Control characters other than the line breaks and tab a sentence may carry. */
+const CONTROL_EXCEPT_LINE_BREAKS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u
+/** A character a person can see: anything that is not whitespace, a control, or a format character. */
+const VISIBLE = /[^\s\p{Cc}\p{Cf}]/u
+
+/**
+ * normaliseAgentIntent — trimmed; undefined when the agent said nothing, INCLUDING text with nothing
+ * visible in it (zero-width spaces, a byte-order mark). The API normalises the same way, so an absent
+ * reason is not sent at all rather than sent as something the approval card would draw as an empty box.
+ */
+export function normaliseAgentIntent(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined
+  const t = raw.trim()
+  return VISIBLE.test(t) ? t : undefined
+}
+
+/**
+ * agentIntentProblem — why this `agent_intent` would be refused, or undefined when it is fine.
+ *
+ * /!\ THE ANSWER NEVER QUOTES THE TEXT. A reason may carry anything the agent knows about the person,
+ * and a refusal travels into the model's transcript and the host's logs.
+ *
+ * /!\ MARKUP IS NOT A PROBLEM. `<b>` is text; the approval card renders this as text, never as HTML or a
+ * link. A client that stripped it would be deciding what the person reads.
+ */
+export function agentIntentProblem(intent: string): string | undefined {
+  const n = [...intent].length
+  if (n > MAX_AGENT_INTENT_CHARS) {
+    return `agent_intent is ${n} characters, exceeds maximum of ${MAX_AGENT_INTENT_CHARS}`
+  }
+  const bad = intent.match(CONTROL_EXCEPT_LINE_BREAKS) ?? intent.match(BIDI_REORDERING)
+  if (bad) {
+    const cp = bad[0].codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')
+    return `agent_intent must be plain text: control or bidi-override character U+${cp} is not allowed`
+  }
+  return undefined
+}
