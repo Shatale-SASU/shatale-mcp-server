@@ -61,6 +61,17 @@ describe('the fifth outcome reaches the agent as the server said it', () => {
     expect(String(got.note)).toMatch(/NOT approved/)
   })
 
+  // Coordinator's decision 04.10 (shatale-api #3203): a purchase the publisher's policy allowed without
+  // asking the person answers approved WITH reason not_required. The reason must reach the agent intact —
+  // it is the only thing that tells "policy allowed it" from "the person said yes".
+  it('approved with reason not_required keeps its reason and gets no note', async () => {
+    const got = await awaitWith({ outcome: 'approved', reason: 'not_required', purchase: { status: 'payment_ready' } })
+    expect(calls).toBe(1)
+    expect(got.outcome).toBe('approved')
+    expect(got.reason).toBe('not_required')
+    expect(got.note).toBeUndefined()
+  })
+
   // POSITIVE CONTROL on the same instrument: approved is passed through bare, so the two cases above
   // are about the outcome and not about a tool that annotates everything.
   it('approved stays approved, with nothing added', async () => {
@@ -87,6 +98,8 @@ describe('the rule is in code and in the description', () => {
     expect(tool).toBeDefined()
     expect(tool!.description).toMatch(/\bended\b/)
     expect(tool!.description).toMatch(/Only approved means approved/)
+    expect(tool!.description, 'the description must say what approved + not_required means').toMatch(/not_required/)
+    expect(tool!.description, 'an expired hold is an ended purchase, and the description must say so').toMatch(/payment hold expired/)
     expect(tool!.description).toMatch(/including one not listed here, as not approved/)
   })
 })
