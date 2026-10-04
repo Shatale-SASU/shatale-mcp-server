@@ -40,6 +40,30 @@ export { redactPurchaseCard } from '../redact.js'
  */
 const MIN_POLL_INTERVAL_MS = 2_000
 
+/**
+ * The outcomes this release knows. `ended` is new (SHAT-4363, shatale-api #3203): a cancelled,
+ * abandoned or failed purchase used to answer `declined`, and an agent told the person "you said no"
+ * about a decision nobody made. The owner's decision (29.09.2026) is that it is a different message.
+ */
+export const KNOWN_APPROVAL_OUTCOMES = ['approved', 'declined', 'expired', 'still_waiting', 'ended'] as const
+
+/**
+ * ⚠️ AN OUTCOME THIS RELEASE DOES NOT KNOW IS NOT AN APPROVAL — and it is said in the result, not
+ * only in the description. The API grows its outcome list (it just did); a model reading a word it
+ * was never told about guesses, and the one guess that costs money is "approved". The value is
+ * passed through UNCHANGED — rewriting it would destroy what the server said — and a note beside it
+ * names the rule. Only the literal `approved` is approval; nothing here ever adds it.
+ */
+export function withUnknownOutcomeNamed<T extends { outcome: string }>(result: T): T & { note?: string } {
+  if ((KNOWN_APPROVAL_OUTCOMES as readonly string[]).includes(result.outcome)) return result
+  return {
+    ...result,
+    note:
+      `Unrecognised outcome ${JSON.stringify(result.outcome)} — treat it as NOT approved. ` +
+      'Only "approved" means the person approved this purchase.',
+  }
+}
+
 export interface PurchaseToolOptions {
   /**
    * Whether the active key is a sandbox key. NOT USED FOR A REFUSAL — SHAT-2611.
@@ -141,9 +165,13 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         name: 'await_purchase_approval',
         description:
           'Wait for the person to answer a purchase that needs their approval, instead of polling. ' +
-          'Returns approved, declined, expired — or still_waiting, which means nobody has answered ' +
-          'yet and you may call this again. It reads the decision; calling it never changes the ' +
-          'purchase, and get_purchase_status keeps working alongside it.',
+          'Returns approved, declined, expired, ended — or still_waiting, which means nobody has answered ' +
+          'yet and you may call this again. ended means there will be no answer: the purchase was ' +
+          'cancelled, abandoned or failed, or stopped without the person being asked; its reason field ' +
+          'says which, so tell the person what happened, not that they declined. Only approved means ' +
+          'approved: treat any other outcome, including one not listed here, as not approved. It reads ' +
+          'the decision; calling it never changes the purchase, and get_purchase_status keeps working ' +
+          'alongside it.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -256,7 +284,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             const startedAt = Date.now()
             const result = await client.awaitPurchaseApproval(id.value)
             if (result.outcome !== 'still_waiting') {
-              return jsonResult(result)
+              return jsonResult(withUnknownOutcomeNamed(result))
             }
             if (Date.now() >= deadline) {
               // Not a failure: nobody has answered yet. Saying so, and being callable again, is what

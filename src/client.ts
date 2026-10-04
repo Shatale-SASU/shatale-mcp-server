@@ -323,13 +323,13 @@ export class ShataleClient {
    * The caller loops. That is deliberate: the guarantee stays true word for word, and the tool above
    * this one is what turns several bounded calls into one wait the agent sees.
    */
-  async awaitPurchaseApproval(id: string): Promise<{ outcome: string; purchase?: unknown }> {
+  async awaitPurchaseApproval(id: string): Promise<{ outcome: string; reason?: string; purchase?: unknown }> {
     return this.request(
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/await-approval`,
       undefined,
       'caller-id',
-    ) as Promise<{ outcome: string; purchase?: unknown }>
+    ) as Promise<{ outcome: string; reason?: string; purchase?: unknown }>
   }
 
   async cancelPurchase(id: string, reason?: string): Promise<unknown> {
