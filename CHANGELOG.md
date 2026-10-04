@@ -36,6 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `block_reason`). The tool passes it through unchanged and its description names it. **Backward
   compatible:** any outcome this release does not recognise is passed through unchanged with a `note`
   saying it is NOT approved; nothing here ever produces `approved` from another word.
+  `approved` may now carry `reason: not_required` — the publisher's policy allowed the purchase and the
+  person was never asked; `approved` without a reason is the person's yes. The description says so.
+  A purchase whose payment hold expired now answers `ended` with `reason: expired` (it used to answer
+  `expired`, which reads as "the question ran out of time" — about a person who may have said yes).
+  **Release order:** this package ships BEFORE the API change (coordinator, 04.10).
 
 ### Security
 - **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
