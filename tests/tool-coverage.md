@@ -100,3 +100,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `the-key-travels-only-in-the-environment.test.ts` | 3 | No |
 | `the-banner-says-where-it-points.test.ts` | 4 | No |
 | `one-purchase-walked-through-the-contract.test.ts` | 7 | Partial |
+| `status-await-and-cancel-name-the-person.test.ts` | 1 | No (mock upstream) |

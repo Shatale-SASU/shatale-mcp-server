@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **`get_purchase_status`, `await_purchase_approval` and `cancel_purchase` accept `publisher_user_id`**
+  — the same person the purchase was requested for — and send it to the API (SHAT-4788, the client half
+  of shatale-api SHAT-4785). A publisher API key is one key for all of that publisher's people, so
+  without it these three calls could read or cancel any person's purchase by id. On the wire it is the
+  query parameter `publisher_user_id` on the two reads, and on the cancel (`DELETE`) the same string in
+  the query **and** in the body. When shatale-api switches its person requirement on, a call without it
+  is answered `404 purchase not found` — the same answer as for a purchase that does not exist — so an
+  agent that never passes it would read its own live purchase as missing.
+
+### Deprecated
+- **The three tools above without `publisher_user_id`.** They still work exactly as in 1.2.x — same
+  request, no query, no body field — so nobody built on 1.2.0 breaks on upgrade. Each such call carries
+  `_meta.deprecation` (`code: purchase_access_without_person`) in its result and writes one line to
+  stderr (one per call, not per poll of an await). A `publisher_user_id` that is present but empty or
+  blank is refused before anything is sent. **Removal plan:** the argument becomes required once
+  shatale-api reports no `purchase_access_without_person_scope` lines by route after this release is in
+  use; the API's switch is turned on only after that.
+
 ### Security
 - **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
   card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it

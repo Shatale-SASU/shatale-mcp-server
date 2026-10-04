@@ -4,6 +4,7 @@ import { VERSION as CLIENT_VERSION } from './version.js'
 import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 import { forLog } from './log-value.js'
+import { personQuery } from './person-scope.js'
 
 /**
  * Flattens an error's `cause` chain into one operator-readable line.
@@ -310,8 +311,19 @@ export class ShataleClient {
     return this.request('POST', '/v1/purchases', toPurchaseWireBody(input, true), 'fixed')
   }
 
-  async getPurchaseStatus(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/purchases/${encodeURIComponent(id)}`, undefined, 'caller-id')
+  // ⚠️ `publisherUserId` TRAVELS AS THE QUERY the API's person scope reads (shatale-api
+  // GetPurchaseStatus / AwaitApproval: r.URL.Query().Get("publisher_user_id"), SHAT-3991, required
+  // behind a switch from SHAT-4785). A query, not a body, because these are GETs. `undefined` is the
+  // DEPRECATED transition (person-scope.ts): the request goes out exactly as 1.2.x sent it, with no
+  // query at all rather than an empty parameter the API would treat the same but the wire would
+  // record as an intent we did not have.
+  async getPurchaseStatus(id: string, publisherUserId?: string): Promise<unknown> {
+    return this.request(
+      'GET',
+      `/v1/purchases/${encodeURIComponent(id)}${personQuery(publisherUserId)}`,
+      undefined,
+      'caller-id',
+    )
   }
 
   /**
@@ -323,23 +335,35 @@ export class ShataleClient {
    * The caller loops. That is deliberate: the guarantee stays true word for word, and the tool above
    * this one is what turns several bounded calls into one wait the agent sees.
    */
-  async awaitPurchaseApproval(id: string): Promise<{ outcome: string; purchase?: unknown }> {
+  async awaitPurchaseApproval(
+    id: string,
+    publisherUserId?: string,
+  ): Promise<{ outcome: string; purchase?: unknown }> {
     return this.request(
       'GET',
-      `/v1/purchases/${encodeURIComponent(id)}/await-approval`,
+      `/v1/purchases/${encodeURIComponent(id)}/await-approval${personQuery(publisherUserId)}`,
       undefined,
       'caller-id',
     ) as Promise<{ outcome: string; purchase?: unknown }>
   }
 
-  async cancelPurchase(id: string, reason?: string): Promise<unknown> {
+  // ⚠️ THE PERSON GOES IN THE QUERY AND IN THE BODY, THE SAME STRING. The API reads the body field
+  // today (SHAT-3991) and is taught the query on this route by SHAT-4785 (a body that disagrees with
+  // the query is refused 400, equal is fine), so which of the two a given server version reads is the
+  // API's to change; sending both means neither side of that change leaves a cancel unscoped. A cancel
+  // gives up the right to spend, and the one unscoped outcome here is another person's purchase gone.
+  async cancelPurchase(id: string, reason?: string, publisherUserId?: string): Promise<unknown> {
     // SHAT-2633: a cancel is a state change on the money path. Without a key a retry is
     // indistinguishable from a second intent — the sentence that ticket uses to explain why this
     // one mattered, and the reason "all" was in SHAT-1104's title.
     return this.request(
       'DELETE',
-      `/v1/purchases/${encodeURIComponent(id)}`,
-      { reason, idempotency_key: deriveOperationKey('cancel_purchase', id) },
+      `/v1/purchases/${encodeURIComponent(id)}${personQuery(publisherUserId)}`,
+      {
+        reason,
+        idempotency_key: deriveOperationKey('cancel_purchase', id),
+        ...(publisherUserId === undefined ? {} : { publisher_user_id: publisherUserId }),
+      },
       'caller-id',
     )
   }
