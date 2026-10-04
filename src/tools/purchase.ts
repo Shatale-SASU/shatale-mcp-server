@@ -4,6 +4,7 @@ import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
 import { requireId } from '../validate.js'
+import { readPerson, markServedWithoutPerson, PUBLISHER_USER_ID_PROPERTY } from '../person-scope.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
@@ -157,6 +158,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
               type: 'string',
               description: 'The purchase request ID returned by request_purchase',
             },
+            publisher_user_id: PUBLISHER_USER_ID_PROPERTY,
           },
           required: ['purchase_id'],
         },
@@ -182,6 +184,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
               type: 'string',
               description: 'The purchase request ID returned by request_purchase',
             },
+            publisher_user_id: PUBLISHER_USER_ID_PROPERTY,
           },
           required: ['purchase_id'],
         },
@@ -200,6 +203,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
               type: 'string',
               description: 'Reason for cancellation (optional but recommended)',
             },
+            publisher_user_id: PUBLISHER_USER_ID_PROPERTY,
           },
           required: ['purchase_id'],
         },
@@ -275,6 +279,9 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       await_purchase_approval: async (args, ctx) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
+        // SHAT-4788: the person, read ONCE per call (one stderr line, not one per poll below).
+        const who = readPerson(args, 'await_purchase_approval', id.value)
+        if (!who.ok) return who.result
 
         // Without a listener: stay inside the SDK's 60s default. With one: a few minutes, then hand
         // the decision back to the agent. Neither number is a preference — the first is the host's
@@ -285,14 +292,18 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         try {
           for (;;) {
             const startedAt = Date.now()
-            const result = await client.awaitPurchaseApproval(id.value)
+            const result = await client.awaitPurchaseApproval(id.value, who.person)
             if (result.outcome !== 'still_waiting') {
-              return jsonResult(withUnknownOutcomeNamed(result))
+              return markServedWithoutPerson(
+                jsonResult(withUnknownOutcomeNamed(result)),
+                'await_purchase_approval',
+                who.person,
+              )
             }
             if (Date.now() >= deadline) {
               // Not a failure: nobody has answered yet. Saying so, and being callable again, is what
               // keeps this honest when the host gives us less time than the person takes.
-              return jsonResult(result)
+              return markServedWithoutPerson(jsonResult(result), 'await_purchase_approval', who.person)
             }
             await ctx?.reportProgress('waiting for the account holder to answer')
 
@@ -310,8 +321,10 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       get_purchase_status: async (args) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
+        const who = readPerson(args, 'get_purchase_status', id.value)
+        if (!who.ok) return who.result
         try {
-          const result = await client.getPurchaseStatus(id.value)
+          const result = await client.getPurchaseStatus(id.value, who.person)
           // PCI: redaction is the client's guarantee (see redact.ts), applied inside
           // ShataleClient.request rather than at four call sites.
           //
@@ -319,7 +332,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           // card", AND THAT STOPPED BEING TRUE IN SHAT-2781. A read no longer moves the purchase:
           // the approve button drives it. Corrected rather than deleted, because it was the reason
           // this line existed and the next reader deserves to know the reason changed.
-          return jsonResult(result)
+          return markServedWithoutPerson(jsonResult(result), 'get_purchase_status', who.person)
         } catch (err) {
           return errorResult(err, 'purchase_status_failed')
         }
@@ -328,13 +341,16 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       cancel_purchase: async (args) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
+        const who = readPerson(args, 'cancel_purchase', id.value)
+        if (!who.ok) return who.result
         try {
           const result = await client.cancelPurchase(
             id.value,
             args.reason ? String(args.reason) : undefined,
+            who.person,
           )
           // Belt-and-braces: cancel's response also carries the payment block.
-          return jsonResult(result)
+          return markServedWithoutPerson(jsonResult(result), 'cancel_purchase', who.person)
         } catch (err) {
           return errorResult(err, 'purchase_cancel_failed')
         }
