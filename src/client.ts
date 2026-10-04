@@ -338,13 +338,13 @@ export class ShataleClient {
   async awaitPurchaseApproval(
     id: string,
     publisherUserId?: string,
-  ): Promise<{ outcome: string; purchase?: unknown }> {
+  ): Promise<{ outcome: string; reason?: string; purchase?: unknown }> {
     return this.request(
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/await-approval${personQuery(publisherUserId)}`,
       undefined,
       'caller-id',
-    ) as Promise<{ outcome: string; purchase?: unknown }>
+    ) as Promise<{ outcome: string; reason?: string; purchase?: unknown }>
   }
 
   // ⚠️ THE PERSON GOES IN THE QUERY AND IN THE BODY, THE SAME STRING. The API reads the body field
