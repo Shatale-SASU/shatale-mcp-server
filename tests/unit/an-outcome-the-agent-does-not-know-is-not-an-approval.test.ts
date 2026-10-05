@@ -99,6 +99,8 @@ describe('the rule is in code and in the description', () => {
     expect(tool!.description).toMatch(/\bended\b/)
     expect(tool!.description).toMatch(/Only approved means approved/)
     expect(tool!.description, 'the description must say what approved + not_required means').toMatch(/not_required/)
+    expect(tool!.description, 'a blocked purchase is ended, never approved').toMatch(/blocked is never approved: it comes back ended/)
+    expect(tool!.description).toMatch(/publisher_frozen/)
     expect(tool!.description, 'an expired hold is an ended purchase, and the description must say so').toMatch(/payment hold expired/)
     expect(tool!.description).toMatch(/including one not listed here, as not approved/)
   })
