@@ -34,6 +34,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   and closes the session, which is right for a pipe and wrong twice on HTTP, where that stdout is
   nobody's channel and one malformed frame would tear down a session shared with others.
 
+### Changed
+- **`await_purchase_approval` knows a fifth outcome, `ended`, and says that only `approved` is
+  approval** (SHAT-4363, paired with shatale-api #3203). A cancelled, abandoned or failed purchase —
+  or one stopped without the person being asked — used to come back from the API as `declined`, and an
+  agent told the person they had said no. By the owner's decision (29.09.2026) it is a different
+  message: the API now answers `ended` with a `reason` (`cancelled`, `abandoned`, `failed`, or the
+  `block_reason`). The tool passes it through unchanged and its description names it. **Backward
+  compatible:** any outcome this release does not recognise is passed through unchanged with a `note`
+  saying it is NOT approved; nothing here ever produces `approved` from another word.
+  `approved` may now carry `reason: not_required` — the publisher's policy allowed the purchase and the
+  person was never asked; `approved` without a reason is the person's yes. The description says so.
+  A purchase whose payment hold expired now answers `ended` with `reason: expired` (it used to answer
+  `expired`, which reads as "the question ran out of time" — about a person who may have said yes).
+  **Release order:** this package ships BEFORE the API change (coordinator, 04.10).
+
 ### Security
 - **The PCI scrub no longer passes what lies below its depth limit** (SHAT-4307). On a path off the
   card allowlist, anything nested deeper than `SCRUB_MAX_DEPTH` (12) used to come back exactly as it
