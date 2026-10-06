@@ -96,6 +96,52 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 }
 ```
 
+## Remote transport (streamable HTTP)
+
+The server speaks **stdio by default** — that is what Claude Desktop, Cursor and every other local
+MCP client use, and nothing below changes it. A second transport exists for callers that cannot
+spawn a child process, such as a web application.
+
+The transport is chosen explicitly. It is never inferred from the environment: a server that guesses
+comes up speaking a protocol nobody on the other end is speaking, which looks like a hang rather
+than a misconfiguration.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHATALE_MCP_TRANSPORT` | `stdio` | `stdio` or `http`. An unrecognised value is refused, not defaulted. |
+| `SHATALE_MCP_HTTP_PORT` | `3000` | Port for the HTTP endpoint. A value that is not a port is refused. |
+| `SHATALE_MCP_HTTP_HOST` | `127.0.0.1` | Interface to bind. Loopback unless you choose otherwise. |
+
+```bash
+SHATALE_MCP_TRANSPORT=http \
+SHATALE_MCP_HTTP_PORT=3000 \
+SHATALE_API_KEY=sk_sandbox_... \
+  npx shatale-mcp-server
+```
+
+Callers present the publisher key as a bearer token:
+
+```
+POST / HTTP/1.1
+Authorization: Bearer sk_sandbox_...
+Content-Type: application/json
+Accept: application/json, text/event-stream
+```
+
+A request with **no key** is refused with `401 {"error":"missing_key"}`; a request whose key is
+**not accepted** is refused with `401 {"error":"key_not_accepted"}`. The two are kept apart
+deliberately — a caller that has not been wired up yet and a caller wired to the wrong server are
+different problems, and a single "unauthorized" for both sends them to the same dead end. No refusal
+ever echoes key material.
+
+> ⚠️ **HTTP mode requires a key.** Guest mode has no publisher key to authenticate callers against,
+> so `SHATALE_MCP_TRANSPORT=http` without `SHATALE_API_KEY` refuses to start rather than listening on
+> a network and admitting everyone.
+
+Both transports advertise the **same tools** — they are built from one roster rather than two lists
+that agree today, and a test asks both running transports and compares the sets.
+
+
 ## Tools
 
 <!-- BEGIN-generated:shatale-tool-matrix -->
