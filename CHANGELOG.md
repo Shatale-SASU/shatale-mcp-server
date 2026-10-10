@@ -35,6 +35,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   nobody's channel and one malformed frame would tear down a session shared with others.
 
 ### Changed
+- **`await_purchase_approval` says that a blocked purchase is `ended`, never `approved`** (SHAT-4825,
+  paired with shatale-api #3583). Description and README only — no behaviour change: the tool still
+  passes the outcome through unchanged, and anything unrecognised is still NOT approved. The rule the
+  description now states: any block answers `ended` with `reason` = the `block_reason` (`blocked` if
+  empty); the person's own answer is kept (`blocked`/`approval_denied` → `declined`,
+  `approval_expired` → `expired`); `user_hint_email_required` → `still_waiting`; a publisher freeze
+  while the question is open → `ended`/`publisher_frozen` whatever the answer. `approved` is only an
+  unblocked purchase: the person's yes (no reason) or `reason: not_required`. **Release order:** this
+  text is safe to ship before the API change.
 - **`await_purchase_approval` knows a fifth outcome, `ended`, and says that only `approved` is
   approval** (SHAT-4363, paired with shatale-api #3203). A cancelled, abandoned or failed purchase —
   or one stopped without the person being asked — used to come back from the API as `declined`, and an

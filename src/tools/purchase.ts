@@ -166,9 +166,13 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
         description:
           'Wait for the person to answer a purchase that needs their approval, instead of polling. ' +
           'Returns approved, declined, expired, ended — or still_waiting, which means nobody has answered ' +
-          'yet and you may call this again. ended means there will be no answer: the purchase was ' +
-          'cancelled, abandoned or failed, its payment hold expired, or it was stopped without the person ' +
-          'being asked; its reason field ' +
+          'yet and you may call this again. A purchase that is blocked is never approved: it comes back ' +
+          'ended, with its reason field naming the block (or blocked when none is given), except that ' +
+          'the person\'s own answer stays what it is — declined (they said no) or expired (the question ' +
+          'ran out of time) — and still_waiting is the wait for an email address the person must give. ' +
+          'ended means there will be no answer: the purchase was cancelled, abandoned or failed, its ' +
+          'payment hold expired, it was blocked, or the publisher was frozen while the question was open ' +
+          '(reason publisher_frozen, whatever the answer); its reason field ' +
           'says which, so tell the person what happened, not that they declined. approved with reason ' +
           'not_required means the publisher\'s policy allowed the purchase and the person was never asked; ' +
           'approved without a reason means the person approved it. Only approved means approved: treat ' +
