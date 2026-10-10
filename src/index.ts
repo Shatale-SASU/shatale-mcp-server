@@ -20,7 +20,6 @@ import { createCredentialTools } from './tools/credentials.js'
 import { createCheckoutTools } from './tools/checkout.js'
 import { createRevealTools } from './tools/reveal.js'
 import { createSandboxTools } from './tools/sandbox.js'
-import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
 import { createCommonTools, isSandboxKey } from './tools/common.js'
 import type { ToolContext, ToolDefinition, ToolHandler } from './types.js'
@@ -225,9 +224,8 @@ const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE
 // deployed" — has been met on both halves, measured. See src/tools/credentials.ts for the probe and
 // its control. A flag whose condition is satisfied is a switch nobody looks at again, and the next
 // reader takes it for a live decision.
-// SHAT-1662: see src/tools/onboarding.ts — the register→status loop cannot close on any
-// deployed backend, so the pair stays unadvertised until Funnel B is merged AND deployed.
-const onboardingEnabled = (process.env.SHATALE_ONBOARDING_ENABLED ?? '').toLowerCase() === 'true'
+// SHATALE_ONBOARDING_ENABLED is gone (SHAT-4435): register_user_profile and get_onboarding_status were
+// the only things it gated, and the API removed the /v1/onboarding/* routes they called (funnel B).
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -259,9 +257,6 @@ registerModule(createCatalogTools(client))
 
 // Register authenticated tools once a key is present.
 if (!isGuest) {
-  // Onboarding moves no money and touches no PAN — available in demo and live.
-  registerModule(createOnboardingTools(client, { enabled: onboardingEnabled }))
-
   if (isSandbox) {
     // Demo: request_purchase runs the ordinary path — the server stamps the environment from the
     // key (SHAT-2373), so nothing here reaches live money; the client-side refusal was removed in

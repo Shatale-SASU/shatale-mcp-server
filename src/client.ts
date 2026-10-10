@@ -488,46 +488,6 @@ export class ShataleClient {
     )
   }
 
-  // ---- Onboarding / User Resolution ----
-
-  async registerUserProfile(input: {
-    publisher_user_id: string
-    user_claims: { email: string; name?: string; phone?: string; country?: string }
-    intended_use?: string
-    idempotency_key?: string
-  }): Promise<unknown> {
-    // ⚠️ SHAT-2633: THIS FORWARDED A KEY AND DID NOT ENFORCE ONE, WHICH IS NOT THE SAME THING.
-    //
-    // `idempotency_key` was an optional field on the input, passed straight through. A caller who
-    // supplied one got idempotency; a caller who did not — which is every caller that does not know
-    // to — got none. SHAT-1104 was closed over the word "all" with this counted as done, and an
-    // optional field satisfies "the tool accepts a key" while satisfying nothing about the request
-    // that actually leaves.
-    //
-    // An explicit key still wins: registration is addressed by publisher_user_id, so deriving from
-    // it means a retry of the same registration de-dups, while a caller who genuinely wants to
-    // repeat one can say so.
-    return this.request(
-      'POST',
-      '/v1/onboarding/register',
-      {
-        ...input,
-        idempotency_key:
-          input.idempotency_key ?? deriveOperationKey('register_user_profile', input.publisher_user_id),
-      },
-      'fixed',
-    )
-  }
-
-  async getOnboardingStatus(sessionId: string): Promise<unknown> {
-    return this.request(
-      'GET',
-      `/v1/onboarding/sessions/${encodeURIComponent(sessionId)}`,
-      undefined,
-      'caller-id',
-    )
-  }
-
   // ---- Common ----
 
   async listMCCCodes(query?: string): Promise<unknown> {

@@ -4,7 +4,6 @@ import type { AddressInfo } from 'node:net'
 import { ShataleClient } from '../../src/client.js'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
 import { createCheckoutTools } from '../../src/tools/checkout.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
@@ -79,7 +78,6 @@ beforeAll(async () => {
   modules = [
     createPurchaseTools(client, { isSandbox: false }),
     createCredentialTools(client, { emailsEnabled: true }),
-    createOnboardingTools(client, { enabled: true }),
     createCatalogTools(client),
     createCheckoutTools(client),
     createRevealTools(client),
@@ -114,10 +112,6 @@ const args: Record<string, Record<string, unknown>> = {
   },
   get_credential_status: { credential_request_id: 'c_1' },
   get_credential_emails: { credential_request_id: 'c_1' },
-  register_user_profile: {
-    publisher_user_id: 'u', user_claims: { email: 'a@b.test', name: 'N', country: 'FR' }, intended_use: 'purchase',
-  },
-  get_onboarding_status: { session_id: 's_1' },
   search_merchants: { query: 'nike' },
   get_merchant_details: { merchant_id: 'm_1' },
   list_mcc_codes: { query: 'clothing' },
