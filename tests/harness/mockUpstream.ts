@@ -142,12 +142,6 @@ export class MockUpstream {
     if (method === 'GET' && path.startsWith('/v1/credentials/')) {
       return ok({ credential_id: path.split('/').pop(), status: 'issued' })
     }
-    if (method === 'POST' && path === '/v1/onboarding/register') {
-      return ok({ session_id: 'sess_mock_1', status: 'pending_verification' })
-    }
-    if (method === 'GET' && path.startsWith('/v1/onboarding/sessions/')) {
-      return ok({ session_id: path.split('/').pop(), status: 'pending_verification' })
-    }
     if (method === 'POST' && path === '/v1/sandbox/authorizations') {
       return ok({ decision: 'approved', explanation: 'all_rules_passed', sandbox: true })
     }

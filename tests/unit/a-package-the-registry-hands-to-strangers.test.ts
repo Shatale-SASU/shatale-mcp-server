@@ -34,7 +34,6 @@ import { createCheckoutTools } from '../../src/tools/checkout.js'
 import { createCommonTools } from '../../src/tools/common.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
 import { createGuestTools } from '../../src/tools/guest.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createPurchaseTools } from '../../src/tools/purchase.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
 import { createSandboxTools } from '../../src/tools/sandbox.js'
@@ -60,7 +59,6 @@ function allTools(): { name: string; description: string }[] {
     createCommonTools(c),
     createCredentialTools(c),
     createGuestTools(c),
-    createOnboardingTools(c),
     createPurchaseTools(c, { isSandbox: true }),
     createRevealTools(c),
     createSandboxTools(c),

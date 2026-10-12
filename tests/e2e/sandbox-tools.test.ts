@@ -17,10 +17,9 @@ describeIfKey('Sandbox Mode (with API key)', () => {
 
   afterAll(() => client.close())
 
-  test('lists exactly what sandbox mode advertises (the onboarding pair stays withheld)', async () => {
+  test('lists exactly what sandbox mode advertises (the funnel-B onboarding pair is gone)', async () => {
     const tools = await client.listTools()
-    // 17. Two tools are withheld because their flow cannot complete on any deployed backend:
-    // the register→status onboarding pair (the session id is never persisted, SHAT-1662).
+    // The register→status onboarding pair no longer exists (removed in SHAT-4435, funnel B).
     // Kept in lockstep with mock-contract.test.ts.
     //
     // This file is key-gated (describe.skip without SHATALE_TEST_KEY), so a stale count
@@ -72,8 +71,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('get_credential_status')
     expect(tools).toContain('get_credential_emails')
 
-    // Onboarding tools stay hidden: RegisterUserProfile never persists the session id it
-    // returns, so the second step 404s forever (SHAT-1662). Behind SHATALE_ONBOARDING_ENABLED.
+    // The funnel-B onboarding tools were removed with the API's /v1/onboarding/* routes (SHAT-4435).
     expect(tools).not.toContain('register_user_profile')
     expect(tools).not.toContain('get_onboarding_status')
 

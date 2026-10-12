@@ -38,16 +38,14 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 21 backed tools; the two unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 21 backed tools; the two funnel-B tools are gone', async () => {
     const res = await client.send('tools/list')
     // 21, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
-    //   register_user_profile  \ the register→status loop cannot close on ANY
-    //   get_onboarding_status  / deployed backend — the session id is never
-    //                            persisted, so the second step 404s forever
-    //                            (SHAT-1662)
+    //   register_user_profile  \ removed in SHAT-4435: the API dropped the
+    //   get_onboarding_status  / /v1/onboarding/* routes (funnel B), so both would 404
     //
     // ⚠️ get_credential_emails WAS THE THIRD, and it is here now. Its suppression named a
     // condition — "#361 merged AND deployed" — and both halves have been met: the route is
@@ -239,57 +237,6 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(mock.lastRequest('POST', '/v1/sandbox/purchases/')).toBeDefined()
   })
 
-  // Same two-layer gate as get_credential_emails: unlisted AND uncallable. The
-  // dispatch resolves handlers, not the advertised list, so a listing-only gate
-  // leaves the tool reachable by name — and this pair must not reach the backend at
-  // all, because the call succeeds and hands back a session id that will never
-  // resolve. A silent dead end is worse than a refusal.
-  test('the onboarding pair is not callable while gated (flag off)', async () => {
-    for (const name of ['register_user_profile', 'get_onboarding_status']) {
-      const result = await client.callTool(name, {
-        publisher_user_id: 'pub-1',
-        user_claims: { email: 'a@b.com', name: 'Mock User' },
-        session_id: 'sess_mock_1',
-      })
-      expect(ToolResultText(result)).toContain(`Unknown tool: ${name}`)
-    }
-    expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeUndefined()
-  })
-
-  // And the gate opens. A gate nobody has seen open is a gate that may simply be a
-  // deletion — this is the shape the deploy takes once Funnel B is merged AND
-  // deployed, which is the flip condition, not "the backend flag is on".
-  test('the onboarding pair returns when SHATALE_ONBOARDING_ENABLED=true', async () => {
-    const flagged = new McpTestClient(
-      {
-        SHATALE_API_KEY: 'sk_sandbox_mock',
-        SHATALE_API_URL: mock.url,
-        SHATALE_ONBOARDING_ENABLED: 'true',
-      },
-      'mock-contract-onboarding-on',
-    )
-    try {
-      await flagged.initialize()
-      const res = await flagged.send('tools/list')
-      const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
-      expect(names).toContain('register_user_profile')
-      expect(names).toContain('get_onboarding_status')
-
-      const result = await flagged.callTool('register_user_profile', {
-        publisher_user_id: 'pub-1',
-        user_claims: { email: 'a@b.com', name: 'Mock User' },
-      })
-      expect(ToolResultText(result)).toContain('sess_mock_1')
-      expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
-    } finally {
-      await flagged.close()
-    }
-  })
-
-  // With the flag off (default), the gate must hold at BOTH layers: unlisted
-  // (asserted above) AND uncallable — the dispatch resolves handlers, not the
-  // advertised list, so a listing-only gate would leave the tool reachable by
-  // name and 404ing against its not-yet-deployed backend.
   // ⚠️ THE "NOT CALLABLE WHILE GATED" TEST IS GONE WITH ITS SUBJECT (SHAT-2527). It asserted that
   // the tool answers "Unknown tool" while the flag is off, and there is no flag: the condition it
   // named — "#361 merged AND deployed" — has been met on both halves. Keeping it would demand the

@@ -70,14 +70,13 @@ describe('SHAT-2633: every write carries an idempotency key', () => {
   // standing between a broken parser and a guard that reports success for ever.
   test('the writers were actually found', () => {
     const writers = writeMethods()
-    expect(writers.length).toBeGreaterThanOrEqual(8)
+    expect(writers.length).toBeGreaterThanOrEqual(7) // 8 until SHAT-4435 removed registerUserProfile; 7 measured
     const names = writers.map((w) => w.name)
     // Named individually because each of these fell out of a hand-written list at some point.
     expect(names).toContain('cancelPurchase')
     expect(names).toContain('sandboxApprovePurchase')
     expect(names).toContain('createSandboxUser')
     expect(names).toContain('sandboxCompleteOnboarding')
-    expect(names).toContain('registerUserProfile')
     expect(names.filter((n) => /^requestPurchase$/.test(n))).toHaveLength(1)
   })
 

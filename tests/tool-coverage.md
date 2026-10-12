@@ -46,8 +46,6 @@ Last updated: 2026-09-28 (SHAT-3023 — the checkout identity tools gain Validat
 | 10 | `cancel_purchase` | ✅ | - | - | - | happy-path |
 | 11 | `request_temporary_credentials` | ✅ | - | - | - | happy-path |
 | 12 | `get_credential_status` | ✅ | - | - | - | happy-path |
-| 13 | `register_user_profile` | ✅ | ✅ | - | - | happy-path, validation |
-| 14 | `get_onboarding_status` | ✅ | - | - | - | happy-path |
 | 15 | `sandbox_simulate_authorization` | ✅ | ✅ | ✅ | - | mock-contract, sandbox-tools, validation, happy-path |
 | 16 | `sandbox_create_user` | ✅ | ✅ | ✅ | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 17 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
@@ -62,16 +60,16 @@ Last updated: 2026-09-28 (SHAT-3023 — the checkout identity tools gain Validat
 
 ## Coverage Summary
 
-- **Tools defined in code**: 23
-- **Happy path**: 23/23
-- **Input validation**: 9/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Tools defined in code**: 21
+- **Happy path**: 21/21
+- **Input validation**: 8/21 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 36 "sends nothing and says why" cases
   — 12 tools × 3, counted with `--reporter=verbose` on 2026-09-28 — plus its positive controls),
   which this table predates. The two checkout identity tools joined that list with SHAT-3023; the
   sentence said 28 before, against 30 cases at the time.
-- **Contract (Zod)**: 12/23
-- **Security edge cases**: 5/23 + global injection/leak tests + `request_purchase` sandbox-guard
+- **Contract (Zod)**: 12/21
+- **Security edge cases**: 5/21 + global injection/leak tests + `request_purchase` sandbox-guard
 
 > These four fractions are no longer hand-maintained claims: `tool-coverage-matches-the-roster.test.ts`
 > counts the ✅ in each column and the live roster, and fails if either half of a fraction drifts.
@@ -90,10 +88,10 @@ all. Unit tests under `tests/unit` are not listed here.
 | `guest-mode.test.ts` | 16 | No |
 | `security.test.ts` | 18 | No |
 | `contract.test.ts` | 7 | Partial |
-| `mock-contract.test.ts` | 14 | No (mock upstream) |
+| `mock-contract.test.ts` | 12 | No (mock upstream) |
 | `sandbox-tools.test.ts` | 6 | Yes |
-| `validation.test.ts` | 9 | Yes |
-| `happy-path-all-tools.test.ts` | 12 | Partial |
+| `validation.test.ts` | 8 | Yes |
+| `happy-path-all-tools.test.ts` | 10 | Partial |
 | `stdio-hardening.test.ts` | 5 | No |
 | `where-a-live-key-may-be-sent.test.ts` | 8 | No |
 | `wire-fixtures.test.ts` | 4 | No (mock upstream) |

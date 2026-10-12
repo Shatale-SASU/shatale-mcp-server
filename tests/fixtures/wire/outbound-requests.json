@@ -164,27 +164,5 @@
     "struct_hint": "apps/api/api/v1/purchases.go checkout-identity route",
     "method": "GET",
     "path": "/v1/purchases/pur_fixture_4/checkout-identity"
-  },
-  {
-    "label": "register_user_profile",
-    "struct_hint": "apps/api/api/v1/onboarding.go register request struct",
-    "method": "POST",
-    "path": "/v1/onboarding/register",
-    "body": {
-      "publisher_user_id": "pub-1",
-      "user_claims": {
-        "email": "fixture@test.shatale.com",
-        "name": "Fixture User",
-        "country": "FR"
-      },
-      "intended_use": "purchase",
-      "idempotency_key": "<derived-string>"
-    }
-  },
-  {
-    "label": "get_onboarding_status",
-    "struct_hint": "apps/api/api/v1/onboarding.go session status route",
-    "method": "GET",
-    "path": "/v1/onboarding/sessions/sess_fixture_1"
   }
 ]
