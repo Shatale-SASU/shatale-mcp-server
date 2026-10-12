@@ -18,6 +18,7 @@
     "forbidden",
     "gateway_not_available",
     "idempotency_key_conflict",
+    "immediate_start_required",
     "internal_error",
     "invalid_report",
     "invalid_request",
