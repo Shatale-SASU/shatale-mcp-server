@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-09-28 (SHAT-3023 — the checkout identity tools gain Validation; rows 19, 20, 23 name the files that walk the whole purchase)
+Last updated: 2026-10-14 (SHAT-6105 — rows 19, 20 add the-checkout-identity-names-the-person: the person on the checkout-identity route)
 
 > ⚠️ **THIS IS A HAND-MAINTAINED SNAPSHOT, AND IT HAD DRIFTED BY THREE TOOLS.** The matrix listed
 > 17 rows and reported "Happy path 17/17 (100%)" while the code defined **20** tools. The three it
@@ -52,8 +52,8 @@ Last updated: 2026-09-28 (SHAT-3023 — the checkout identity tools gain Validat
 | 16 | `sandbox_create_user` | ✅ | ✅ | ✅ | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 17 | `sandbox_complete_onboarding` | ✅ | - | ✅ | - | mock-contract, happy-path |
 | 18 | `sandbox_approve_purchase` | ✅ | - | ✅ | - | mock-contract, happy-path |
-| 19 | `get_checkout_cardholder` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
-| 20 | `get_checkout_customer` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
+| 19 | `get_checkout_cardholder` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract, the-checkout-identity-names-the-person |
+| 20 | `get_checkout_customer` | ✅ | ✅ | ✅ | ✅ | checkout-tools, mock-contract, wire-fixtures, no-tool-result-carries-a-card, ids-never-reach-the-api-unvalidated, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract, the-checkout-identity-names-the-person |
 | 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 | 22 | `await_purchase_approval` | ✅ | ✅ | - | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 23 | `reveal_card` | ✅ | ✅ | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
@@ -101,3 +101,5 @@ all. Unit tests under `tests/unit` are not listed here.
 | `the-banner-says-where-it-points.test.ts` | 4 | No |
 | `one-purchase-walked-through-the-contract.test.ts` | 7 | Partial |
 | `two-transports-one-roster.test.ts` | 6 | No (synthetic key) |
+| `the-checkout-identity-names-the-person.test.ts` | 5 | No (mock upstream) |
+| `request-purchase-drops-undeclared-fields.test.ts` | 1 | No (mock upstream) |

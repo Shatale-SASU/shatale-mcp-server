@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 1.4.0 — unreleased (prepared 2026-10-14, SHAT-2600)
+
+> Why a minor and not a patch: two tools gain an input field (`publisher_user_id`). It is optional and
+> every 1.3.0 call keeps working unchanged, but the published tool schema grows — the same reasoning
+> that made reveal_card's person a minor in 1.2.0. Built from main at 9f3bd86, whose `dist/` was
+> byte-identical to the published 1.3.0 tarball: the change below is the whole content of this release.
+
+### Security
+- **`get_checkout_cardholder` and `get_checkout_customer` send the person** (SHAT-6105). Both read
+  `GET /v1/purchases/{id}/checkout-identity`, which returns the BUYER'S name and email. shatale-api
+  gates that route by person (`PurchaseBelongsToPerson`), but only when the caller names one: an empty
+  scope passes the gate without reading the row. This server never named one, so through MCP any
+  person of a publisher could read another person's checkout identity by purchase id. Both tools now
+  accept an optional `publisher_user_id` and send it as the query parameter the API reads
+  (`?publisher_user_id=`), exactly as `reveal_card` has since 1.2.0.
+  **Backward compatible:** without the field the request goes out exactly as 1.3.0 sent it (no query
+  at all), and the result carries `_meta.deprecation` (`checkout_identity_without_person`) plus one
+  stderr line per call. A field that is present but blank is refused before anything is sent. A future
+  release will make it required, as for `reveal_card`.
+
+### Tests
+- `tests/e2e/the-checkout-identity-names-the-person.test.ts` — through the built server over stdio,
+  asserting on the wire: the person arrives as the query, unscoped calls carry no query and the
+  deprecation, blank is refused unsent. Wire fixtures for both tools now record the `query`.
+- `tests/e2e/request-purchase-drops-undeclared-fields.test.ts` (SHAT-4116, the half in this server):
+  a field `request_purchase` does not declare — e.g. a `purchase_id` the model invented — never
+  reaches `POST /v1/purchases`. No behaviour change; the answer the ticket left unmeasured is now held.
+
 ## 1.3.0 — 2026-10-09
 
 ### Added

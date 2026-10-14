@@ -477,12 +477,19 @@ export class ShataleClient {
     )
   }
 
-  async getCheckoutIdentity(id: string): Promise<unknown> {
+  // ⚠️ `publisherUserId` TRAVELS EXACTLY AS IT DOES FOR THE CARD (SHAT-6105). shatale-api's
+  // CheckoutIdentity reads the person from the query of this route (personScopeOfRequest) and gates
+  // the read with PurchaseBelongsToPerson — but an EMPTY scope passes that gate without reading the
+  // row, so until this client sent it, the buyer's name and email went to any caller holding the
+  // publisher's key and a purchase id. `undefined` is the deprecated transition: the request goes out
+  // exactly as 1.3.0 sent it, with no query at all.
+  async getCheckoutIdentity(id: string, publisherUserId?: string): Promise<unknown> {
     // The id sits in the MIDDLE and the path ends in a noun — the shape that fooled the old
     // heuristic in both of its incarnations. It is still a caller's id.
     return this.request(
       'GET',
-      `/v1/purchases/${encodeURIComponent(id)}/checkout-identity`,
+      `/v1/purchases/${encodeURIComponent(id)}/checkout-identity` +
+        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
       undefined,
       'caller-id',
     )
