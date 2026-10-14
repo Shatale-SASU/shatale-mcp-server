@@ -259,7 +259,9 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
     // about a mode boundary rather than a broken fixture. Worth writing down: which MODE a tool
     // exists in is part of its contract, and the fixture file is now the only place that records it
     // for these two.
-    await live.callTool('get_checkout_cardholder', { purchase_id: 'pur_fixture_3' })
+    // ⚠️ THE PERSON TRAVELS ON THIS ROUTE TOO (SHAT-6105), as the query parameter shatale-api's
+    // CheckoutIdentity reads; 1.3.0 sent neither tool's person, and the `query` key is the change.
+    await live.callTool('get_checkout_cardholder', { purchase_id: 'pur_fixture_3', publisher_user_id: 'usr_fixture_3' })
     captured.push({
       label: 'get_checkout_cardholder (LIVE + money-GO only; shares one route with get_checkout_customer)',
       struct_hint: 'apps/api/api/v1/purchases.go checkout-identity route',
@@ -282,7 +284,7 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_5/card-credentials'),
     })
 
-    await live.callTool('get_checkout_customer', { purchase_id: 'pur_fixture_4' })
+    await live.callTool('get_checkout_customer', { purchase_id: 'pur_fixture_4', publisher_user_id: 'usr_fixture_4' })
     captured.push({
       label: 'get_checkout_customer (LIVE + money-GO only; same route, different half of the response)',
       struct_hint: 'apps/api/api/v1/purchases.go checkout-identity route',

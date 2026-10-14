@@ -1,8 +1,9 @@
 import type { ShataleClient } from '../client.js'
-import type { ToolModule } from '../types.js'
+import type { ToolCallResult, ToolModule } from '../types.js'
 import { jsonResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
 import { requireId, exactStringFields, describeShape } from '../validate.js'
+import { forLog } from '../log-value.js'
 
 // A merchant checkout form can ask for the CARDHOLDER and the BUYER separately. Shatale returns them
 // as two honest, legitimately-distinct identities (they need not match — the pool card is Shatale's,
@@ -46,6 +47,34 @@ const purchaseIdProperty = {
     type: 'string' as const,
     description: 'The purchase ID (from request_purchase) whose checkout this identity is for',
   },
+  publisher_user_id: {
+    type: 'string' as const,
+    description:
+      'The same publisher_user_id the purchase was requested for (the person it belongs to). Pass ' +
+      "it: the API then returns this identity only to the person whose purchase it is. Omitting it " +
+      'still works for now but is DEPRECATED and will become an error.',
+  },
+}
+
+// ⚠️ THE PERSON, NOT ONLY THE PUBLISHER (SHAT-6105). The same gap reveal_card closed in 1.2.0
+// (SHAT-3023 / SHAT-4016), on the route that carries the BUYER'S name and email: the API checks the
+// person only when the caller names one, and this tool never did. So any person of a publisher could
+// name another person's purchase id and read that person's identity. ABSENT stays served — published
+// 1.0.x–1.3.0 callers send purchase_id alone, and the owner's rule is that an upgrade does not break
+// them — and says so in `_meta` and on stderr, exactly like reveal_card. PRESENT BUT UNUSABLE (empty,
+// whitespace, not a string) is refused before anything is sent.
+export const CHECKOUT_IDENTITY_WITHOUT_PERSON_DEPRECATION =
+  'This checkout identity tool was called without publisher_user_id. This still works but is ' +
+  'DEPRECATED: pass the publisher_user_id the purchase was requested for. Without it the API can ' +
+  'check only the publisher, not the person, and a future release will refuse the call.'
+
+function withPersonNotice(result: ToolCallResult, person: string | undefined): ToolCallResult {
+  if (person === undefined) {
+    result._meta = {
+      deprecation: { code: 'checkout_identity_without_person', message: CHECKOUT_IDENTITY_WITHOUT_PERSON_DEPRECATION },
+    }
+  }
+  return result
 }
 
 function hasKeys(v: unknown): v is Record<string, unknown> {
@@ -64,11 +93,23 @@ function identityUnavailable(which: string) {
 }
 
 export function createCheckoutTools(client: ShataleClient): ToolModule {
-  const fetchIdentity = async (args: Record<string, unknown>) => {
+  const fetchIdentity = async (tool: string, args: Record<string, unknown>) => {
     const id = requireId(args, 'purchase_id')
     if (!id.ok) return { ok: false as const, result: id.result }
-    const data = (await client.getCheckoutIdentity(id.value)) as IdentityResponse
-    return { ok: true as const, data }
+    let person: string | undefined
+    if (args.publisher_user_id !== undefined) {
+      const p = requireId(args, 'publisher_user_id')
+      if (!p.ok) return { ok: false as const, result: p.result }
+      person = p.value
+    } else {
+      // The ids are the CALLER'S; forLog quotes and escapes them so a newline cannot forge a line.
+      process.stderr.write(
+        `shatale-mcp-server: DEPRECATED — ${tool} for purchase ${forLog(id.value)} without ` +
+          `publisher_user_id; served unscoped. ${CHECKOUT_IDENTITY_WITHOUT_PERSON_DEPRECATION}\n`,
+      )
+    }
+    const data = (await client.getCheckoutIdentity(id.value, person)) as IdentityResponse
+    return { ok: true as const, data, person }
   }
 
   return {
@@ -102,7 +143,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
     handlers: {
       get_checkout_cardholder: async (args) => {
         try {
-          const got = await fetchIdentity(args)
+          const got = await fetchIdentity('get_checkout_cardholder', args)
           if (!got.ok) return got.result
           // Fail loud, never an empty-but-successful identity: an agent handed `{}` at a live merchant
           // form would hallucinate a cardholder name/address into real fields. A missing/empty half is
@@ -112,10 +153,13 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           }
           const billing = exactStringFields(got.data.billing_identity, BILLING_FIELDS)
           if (!billing.ok) return identityUnrecognised('cardholder/billing', describeShape(billing.report))
-          return jsonResult({
-            billing_identity: billing.fields,
-            _note: 'Cardholder/billing identity only. Card number/expiry/CVV are entered out-of-band, not returned here.',
-          })
+          return withPersonNotice(
+            jsonResult({
+              billing_identity: billing.fields,
+              _note: 'Cardholder/billing identity only. Card number/expiry/CVV are entered out-of-band, not returned here.',
+            }),
+            got.person,
+          )
         } catch (err) {
           return errorResult(err, 'checkout_cardholder_failed')
         }
@@ -123,16 +167,19 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
 
       get_checkout_customer: async (args) => {
         try {
-          const got = await fetchIdentity(args)
+          const got = await fetchIdentity('get_checkout_customer', args)
           if (!got.ok) return got.result
           if (!hasKeys(got.data.merchant_customer_identity)) {
             return identityUnavailable('buyer/customer')
           }
           const customer = exactStringFields(got.data.merchant_customer_identity, CUSTOMER_FIELDS)
           if (!customer.ok) return identityUnrecognised('buyer/customer', describeShape(customer.report))
-          return jsonResult({
-            merchant_customer_identity: customer.fields,
-          })
+          return withPersonNotice(
+            jsonResult({
+              merchant_customer_identity: customer.fields,
+            }),
+            got.person,
+          )
         } catch (err) {
           return errorResult(err, 'checkout_customer_failed')
         }
