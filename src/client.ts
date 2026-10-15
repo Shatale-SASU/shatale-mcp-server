@@ -530,7 +530,7 @@ export class ShataleClient {
   }
 
   // SHAT-6291: GET /v1/purchases/{id}/shipping-address — the person's delivery address, released only
-  // for a purchase that is payment_ready or completed; every read is journaled by the API and visible
+  // for a purchase that is payment_ready while the person's account is active; every read is journaled by the API and visible
   // to the person. The person travels as ?publisher_user_id= exactly as for the card and the checkout
   // identity. Read-only: no address ever goes the other way through this server.
   async getShippingAddress(id: string, publisherUserId?: string): Promise<unknown> {

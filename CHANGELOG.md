@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   (the person travels as `?publisher_user_id=`, as for `reveal_card`). Returns the `shipping_address`
   object (`recipient_name, company, line1, line2, postal_code, city, region, country, phone,
   delivery_notes`) and refuses a shape that differs, naming keys and never values. The address is
-  personal data, released only once the purchase is payment_ready or completed; every read is journaled
+  personal data, released only while the purchase is payment_ready and the person's account is active (not after completion); every read is journaled
   and visible to the person; the description says so and limits its use to that purchase's delivery.
   Available wherever the checkout tools are (sandbox, and live with money-GO).
 - **`publisher_user_id` is required on `get_shipping_address`**: the API answers 400 `invalid_request`
@@ -33,7 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **The 404 answers of that route are kept apart, branching strictly on the body's `code`** (every 404
   there carries one): `not_found` (generic: an id that is not yours, does not exist or is in the other
   environment), `shipping_address_missing` (the person has none; a `next_action` of type `open_url` is
-  surfaced when the API sends one), `shipping_address_not_ready` (not yet payment_ready/completed) and
+  surfaced when the API sends one), `shipping_address_not_ready` (the purchase is not payment_ready, or the person's account is not active, or it has already completed) and
   `shipping_not_required` (the purchase was created without `requires_shipping`). A 404 with any other
   or no `code` is its own `shipping_address_unrecognised_refusal`, never folded into one of the four.
   The codes are matched in a route-local table (`src/errors.ts`), NOT added to `FORWARDED_CODES`, which

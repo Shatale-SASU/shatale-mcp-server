@@ -147,9 +147,10 @@ export const SHIPPING_ADDRESS_404: Record<string, { message: string; suggested_f
       'profile, then call this tool again. Do not guess or invent an address.',
   },
   shipping_address_not_ready: {
-    message: 'The purchase has not reached the stage where its shipping address is released.',
+    message: 'The shipping address is not released for this purchase right now.',
     suggested_fix:
-      'The address is released only once the purchase is payment_ready or completed. Check ' +
+      'The address is released only while the purchase is payment_ready and the person\'s account is ' +
+      'active; it is not released before that, nor after the purchase has completed. Check ' +
       'get_purchase_status (and await_purchase_approval if the person has not approved yet), then ' +
       'call this tool again. Do not try to obtain the address another way.',
   },

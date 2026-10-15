@@ -161,6 +161,16 @@ describe('SHAT-6291: shipping address', () => {
       expect(tool.description).toContain('No money moves')
     })
 
+    test('requires_shipping is never fabricated: a response without the key is passed through without it', async () => {
+      purchaseAnswer = { status: 200, body: { purchase_id: 'pur_plain', status: 'payment_ready' } }
+      const res = await client.callTool('request_purchase', { ...base, description: 'plain response' })
+      expect(res.isError, text(res)).toBeFalsy()
+      expect(JSON.parse(text(res))).not.toHaveProperty('requires_shipping')
+      // and a true that the API did send is passed through as sent
+      purchaseAnswer = { status: 200, body: { purchase_id: 'pur_s', status: 'pending', requires_shipping: true } }
+      expect(JSON.parse(text(await client.callTool('request_purchase', { ...base, description: 'with true' }))).requires_shipping).toBe(true)
+    })
+
     test('the blocked shipping_address_required outcome reaches the agent with its open_url', async () => {
       purchaseAnswer = { status: 200, body: BLOCKED }
       const res = await client.callTool('request_purchase', { ...base, description: 'blocked', requires_shipping: true })
@@ -178,7 +188,7 @@ describe('SHAT-6291: shipping address', () => {
       const tool = (await client.send('tools/list')).result.tools.find((t: { name: string }) => t.name === 'get_shipping_address')
       expect(tool, 'get_shipping_address is not advertised').toBeDefined()
       expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(['publisher_user_id', 'purchase_id'])
-      for (const phrase of ['PERSONAL DATA', 'payment_ready', 'completed', 'journaled', 'visible to the person', 'delivery']) {
+      for (const phrase of ['PERSONAL DATA', 'payment_ready', 'account is active', 'not after completion', 'journaled', 'visible to the person', 'delivery']) {
         expect(tool.description, `description lacks "${phrase}"`).toContain(phrase)
       }
     })
@@ -241,7 +251,7 @@ describe('SHAT-6291: shipping address', () => {
       // not_found is the generic refusal about the id/environment, not any shipping reason.
       expect(results[0].suggested_fix).toMatch(/Verify the id/)
       expect(results[1].suggested_fix).toMatch(/add a shipping address/)
-      expect(results[2].suggested_fix).toMatch(/payment_ready or completed/)
+      expect(results[2].suggested_fix).toMatch(/only while the purchase is payment_ready and the person's account is active/)
       expect(results[3].message).toMatch(/without requires_shipping/)
       for (const r of results.slice(1)) expect(r.suggested_fix).not.toMatch(/SHATALE_API_URL|Verify the id/)
     })

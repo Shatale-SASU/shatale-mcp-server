@@ -152,13 +152,13 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
         name: 'get_shipping_address',
         description:
           "Read the person's delivery address for THIS purchase, to complete a merchant's shipping " +
-          'form. It is PERSONAL DATA. It is released only after the purchase is payment_ready or ' +
-          'completed, and only for a purchase that asked for shipping (request_purchase with ' +
+          'form. It is PERSONAL DATA. It is released only while the purchase is payment_ready ' +
+          'AND the person\'s account is active (not after completion), and only for a purchase that asked for shipping (request_purchase with ' +
           'requires_shipping: true). EVERY read is journaled and is visible to the person in their ' +
           'account. Use it only to complete this purchase\'s delivery: do not store it, do not reuse ' +
           'it for another purchase, and do not repeat it back or send it anywhere else. If it comes ' +
           'back as missing, send the person to add an address (follow next_action open_url when it is ' +
-          'given); if not ready, wait for the purchase to reach payment_ready; if shipping is not ' +
+          'given); if not ready, wait for the purchase to be payment_ready (and the account active); if shipping is not ' +
           'required, the purchase was created without requires_shipping; not_found means check the ' +
           'ids.',
         inputSchema: {
