@@ -157,8 +157,10 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           'requires_shipping: true). EVERY read is journaled and is visible to the person in their ' +
           'account. Use it only to complete this purchase\'s delivery: do not store it, do not reuse ' +
           'it for another purchase, and do not repeat it back or send it anywhere else. If it comes ' +
-          'back as missing, send the person to add an address; if not ready, wait for the purchase to ' +
-          'reach payment_ready; if not available, there is nothing to read.',
+          'back as missing, send the person to add an address (follow next_action open_url when it is ' +
+          'given); if not ready, wait for the purchase to reach payment_ready; if shipping is not ' +
+          'required, the purchase was created without requires_shipping; not_found means check the ' +
+          'ids.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -170,10 +172,10 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
               type: 'string' as const,
               description:
                 'The same publisher_user_id the purchase was requested for (the person it belongs to). ' +
-                'Pass it: the API then releases the address only to the person whose purchase it is.',
+                'REQUIRED: the API answers 400 without it, and releases the address only to the person whose purchase it is.',
             },
           },
-          required: ['purchase_id'],
+          required: ['purchase_id', 'publisher_user_id'],
         },
       },
     ],
@@ -182,15 +184,11 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
         try {
           const id = requireId(args, 'purchase_id')
           if (!id.ok) return id.result
-          // Present-but-blank is refused; ABSENT is sent unscoped, as for the other two reads. There
-          // is no deprecation mark here: this tool is new in 1.5.0, so there is no older caller to
-          // protect, and the API still gates the read on the key's publisher and the purchase state.
-          let person: string | undefined
-          if (args.publisher_user_id !== undefined) {
-            const p = requireId(args, 'publisher_user_id')
-            if (!p.ok) return p.result
-            person = p.value
-          }
+          // REQUIRED, unlike the other two reads: the API answers 400 invalid_request without the
+          // person, so a missing or blank one is refused here, before anything is sent.
+          const p = requireId(args, 'publisher_user_id')
+          if (!p.ok) return p.result
+          const person = p.value
           const data = (await client.getShippingAddress(id.value, person)) as {
             purchase_id?: unknown
             shipping_address?: unknown
@@ -198,8 +196,8 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           }
           if (!hasKeys(data?.shipping_address)) {
             return refusal({
-              code: 'shipping_address_not_available',
-              message: 'No shipping address is available for this purchase.',
+              code: 'shipping_address_unrecognised',
+              message: 'The API answered without a shipping address object.',
               suggested_fix: 'Do not invent an address. Check get_purchase_status and the person on the purchase.',
             })
           }

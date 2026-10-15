@@ -177,7 +177,6 @@ describe('SHAT-6291: shipping address', () => {
     test('is on the roster with the personal-data promises in its description', async () => {
       const tool = (await client.send('tools/list')).result.tools.find((t: { name: string }) => t.name === 'get_shipping_address')
       expect(tool, 'get_shipping_address is not advertised').toBeDefined()
-      expect(tool.inputSchema.required).toEqual(['purchase_id'])
       expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(['publisher_user_id', 'purchase_id'])
       for (const phrase of ['PERSONAL DATA', 'payment_ready', 'completed', 'journaled', 'visible to the person', 'delivery']) {
         expect(tool.description, `description lacks "${phrase}"`).toContain(phrase)
@@ -195,11 +194,13 @@ describe('SHAT-6291: shipping address', () => {
       expect(sent.query).toEqual({ publisher_user_id: 'usr+6291/Ж' })
     })
 
-    test('without publisher_user_id the call carries no query', async () => {
-      addressAnswer = { status: 200, body: { purchase_id: 'pur_ship_2', shipping_address: ADDRESS } }
+    test('publisher_user_id is REQUIRED: missing is refused before anything is sent (the API would answer 400)', async () => {
+      const tool = (await client.send('tools/list')).result.tools.find((t: { name: string }) => t.name === 'get_shipping_address')
+      expect(tool.inputSchema.required).toEqual(['purchase_id', 'publisher_user_id'])
+      const before = seen.length
       const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_ship_2' })
-      expect(res.isError, text(res)).toBeFalsy()
-      expect(last('GET', '/v1/purchases/pur_ship_2/shipping-address')!.query).toEqual({})
+      expect(res.isError).toBe(true)
+      expect(seen.length).toBe(before)
     })
 
     test('blank ids are refused before anything is sent', async () => {
@@ -211,18 +212,19 @@ describe('SHAT-6291: shipping address', () => {
 
     test('a response in a different shape is refused, naming keys and never values', async () => {
       addressAnswer = { status: 200, body: { purchase_id: 'p', shipping_address: { line1: '1 Rue Fixture', street: 'x' } } }
-      const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_shape' })
+      const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_shape', publisher_user_id: 'u1' })
       expect(res.isError).toBe(true)
       const out = JSON.parse(text(res))
       expect(out.error.code).toBe('shipping_address_unrecognised')
       expect(text(res)).not.toContain('1 Rue Fixture')
     })
 
-    test('the three 404 reasons give three distinct results', async () => {
+    test('the four 404 codes give four distinct results, branched on `code` alone', async () => {
       const answers: Array<[string, unknown]> = [
-        ['shipping_address_missing', { error: 'x', code: 'shipping_address_missing' }],
+        ['not_found', { error: 'purchase not found', code: 'not_found', suggested_fix: 'x', request_id: 'req_1' }],
+        ['shipping_address_missing', { error: 'x', code: 'shipping_address_missing', state: 'action_required', requirements: [{ type: 'shipping_address', status: 'missing' }] }],
         ['shipping_address_not_ready', { error: 'x', code: 'shipping_address_not_ready' }],
-        ['shipping_address_not_available', { error: 'shipping address not available' }],
+        ['shipping_not_required', { error: 'x', code: 'shipping_not_required' }],
       ]
       const results: Array<{ code: string; message: string; suggested_fix: string }> = []
       for (const [expected, body] of answers) {
@@ -230,24 +232,42 @@ describe('SHAT-6291: shipping address', () => {
         const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_404', publisher_user_id: 'u1' })
         expect(res.isError, expected).toBe(true)
         const e = JSON.parse(text(res)).error
-        expect(e.code).toBe(expected)
         results.push(e)
+        if (expected !== 'not_found') expect(e.code).toBe(expected)
       }
-      expect(new Set(results.map((r) => r.code)).size).toBe(3)
-      expect(new Set(results.map((r) => r.message)).size).toBe(3)
-      expect(new Set(results.map((r) => r.suggested_fix)).size).toBe(3)
-      // Plainly worded, and none of them blames the id in the path or the deployment.
-      expect(results[0].suggested_fix).toMatch(/add a shipping address/)
-      expect(results[1].suggested_fix).toMatch(/payment_ready or completed/)
-      for (const r of results.slice(0, 2)) expect(r.suggested_fix).not.toMatch(/SHATALE_API_URL|Verify the id/)
+      expect(new Set(results.map((r) => r.code)).size).toBe(4)
+      expect(new Set(results.map((r) => r.message)).size).toBe(4)
+      expect(new Set(results.map((r) => r.suggested_fix)).size).toBe(4)
+      // not_found is the generic refusal about the id/environment, not any shipping reason.
+      expect(results[0].suggested_fix).toMatch(/Verify the id/)
+      expect(results[1].suggested_fix).toMatch(/add a shipping address/)
+      expect(results[2].suggested_fix).toMatch(/payment_ready or completed/)
+      expect(results[3].message).toMatch(/without requires_shipping/)
+      for (const r of results.slice(1)) expect(r.suggested_fix).not.toMatch(/SHATALE_API_URL|Verify the id/)
     })
 
-    test('a 404 with an unreadable body or an unlisted code is the third answer, not a guess', async () => {
-      for (const body of [{ code: 'something_else' }, 'not json at all', null]) {
+    test('shipping_address_missing surfaces next_action open_url when the API sends it, and only then', async () => {
+      addressAnswer = { status: 404, body: { code: 'shipping_address_missing', next_action: { type: 'open_url', url: 'https://app.example.test/profile', extra: 'x' } } }
+      let e = JSON.parse(text(await client.callTool('get_shipping_address', { purchase_id: 'pur_na', publisher_user_id: 'u1' }))).error
+      expect(e.next_action).toEqual({ type: 'open_url', url: 'https://app.example.test/profile' })
+      addressAnswer = { status: 404, body: { code: 'shipping_address_missing' } }
+      e = JSON.parse(text(await client.callTool('get_shipping_address', { purchase_id: 'pur_na', publisher_user_id: 'u1' }))).error
+      expect(e).not.toHaveProperty('next_action')
+      // a next_action of another kind is not forwarded
+      addressAnswer = { status: 404, body: { code: 'shipping_address_missing', next_action: { type: 'run', url: 'x' } } }
+      e = JSON.parse(text(await client.callTool('get_shipping_address', { purchase_id: 'pur_na', publisher_user_id: 'u1' }))).error
+      expect(e).not.toHaveProperty('next_action')
+    })
+
+    test('a 404 with an unknown or absent code is its own unrecognised result, folded into none of the four', async () => {
+      const known = ['not_found', 'shipping_address_missing', 'shipping_address_not_ready', 'shipping_not_required']
+      for (const body of [{ code: 'something_else' }, { error: 'shipping address not available' }, 'not json at all', null]) {
         addressAnswer = { status: 404, body }
-        const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_404b' })
+        const res = await client.callTool('get_shipping_address', { purchase_id: 'pur_404b', publisher_user_id: 'u1' })
         expect(res.isError).toBe(true)
-        expect(JSON.parse(text(res)).error.code).toBe('shipping_address_not_available')
+        const code = JSON.parse(text(res)).error.code
+        expect(code).toBe('shipping_address_unrecognised_refusal')
+        expect(known).not.toContain(code)
       }
     })
   })

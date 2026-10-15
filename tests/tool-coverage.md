@@ -104,4 +104,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `two-transports-one-roster.test.ts` | 6 | No (synthetic key) |
 | `the-checkout-identity-names-the-person.test.ts` | 5 | No (mock upstream) |
 | `request-purchase-drops-undeclared-fields.test.ts` | 1 | No (mock upstream) |
-| `shipping-address.test.ts` | 15 | No (scripted upstream) |
+| `shipping-address.test.ts` | 16 | No (scripted upstream) |

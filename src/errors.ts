@@ -28,12 +28,15 @@ export interface StructuredError {
   suggested_fix: string
   /** The server-side correlation id for THIS call, when the backend sent one. */
   request_id?: string
+  /** SHAT-6291: where to send the person, when the API names one (open_url only). */
+  next_action?: { type: 'open_url'; url: string }
 }
 
 export class ShataleApiError extends Error {
   readonly code: string
   readonly suggested_fix: string
   readonly request_id?: string
+  readonly next_action?: { type: 'open_url'; url: string }
 
   constructor(err: StructuredError) {
     super(err.message)
@@ -41,11 +44,13 @@ export class ShataleApiError extends Error {
     this.code = err.code
     this.suggested_fix = err.suggested_fix
     this.request_id = err.request_id
+    this.next_action = err.next_action
   }
 
   toStructured(): StructuredError {
     const out: StructuredError = { code: this.code, message: this.message, suggested_fix: this.suggested_fix }
     if (this.request_id) out.request_id = this.request_id
+    if (this.next_action) out.next_action = this.next_action
     return out
   }
 }
@@ -150,21 +155,49 @@ export const SHIPPING_ADDRESS_404: Record<string, { message: string; suggested_f
   },
 }
 
-export const SHIPPING_ADDRESS_NOT_AVAILABLE = {
-  code: 'shipping_address_not_available',
-  message: 'No shipping address is available for this purchase.',
+export const SHIPPING_NOT_REQUIRED = {
+  message: 'This purchase was created without requires_shipping, so it has no shipping address to read.',
   suggested_fix:
-    'This is neither a missing address nor a purchase that is still too early. The purchase may not ' +
-    'need shipping, may not belong to this publisher_user_id, or may be unknown to this environment. ' +
-    'Check the purchase_id and publisher_user_id, and do not retry unchanged.',
+    'Nothing is wrong with the request. If the goods are physical, the purchase has to be requested ' +
+    'again with requires_shipping: true; otherwise there is no delivery address to fill in. Do not ' +
+    'invent one.',
 } as const
 
-/** The route-local code in a 404 body, only if it is one of {@link SHIPPING_ADDRESS_404}. */
+/** A 404 whose `code` is none of the four the API sends here. Its own result, never folded into one of them. */
+export const SHIPPING_ADDRESS_UNRECOGNISED = {
+  code: 'shipping_address_unrecognised_refusal',
+  message: 'The API refused the shipping-address read in a way this tool does not recognise.',
+  suggested_fix:
+    'None of the known reasons applies, so no advice about the cause is given. Do not retry unchanged ' +
+    'and do not invent an address. This is a mismatch between this MCP server and the Shatale API: ' +
+    'upgrade shatale-mcp-server, or report it with this message.',
+} as const
+
+/**
+ * The `code` of a 404 on the shipping-address route, if it is one of the four the API sends there:
+ * the generic `not_found` (an id that is not yours, does not exist, or is in the other environment) and
+ * the three in {@link SHIPPING_ADDRESS_404} plus `shipping_not_required`. Branching is strictly on this
+ * field; the rest of the body is dropped unread.
+ */
 export function extractShippingAddressCode(body: unknown): string | undefined {
   if (typeof body !== 'object' || body === null) return undefined
   const code = (body as Record<string, unknown>).code
   if (typeof code !== 'string') return undefined
+  if (code === 'not_found' || code === 'shipping_not_required') return code
   return Object.prototype.hasOwnProperty.call(SHIPPING_ADDRESS_404, code) ? code : undefined
+}
+
+/**
+ * The `next_action` of an `open_url` kind, when the 404 carries one (shipping_address_missing
+ * sometimes does). Only type and url are read, both must be plain strings; nothing else passes.
+ */
+export function extractOpenUrlAction(body: unknown): { type: 'open_url'; url: string } | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const na = (body as Record<string, unknown>).next_action
+  if (typeof na !== 'object' || na === null) return undefined
+  const { type, url } = na as Record<string, unknown>
+  if (type !== 'open_url' || typeof url !== 'string' || url.length === 0 || url.length > 2048) return undefined
+  return { type: 'open_url', url }
 }
 
 export function extractRequestId(body: unknown): string | undefined {

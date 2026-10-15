@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, extractShippingAddressCode, SHIPPING_ADDRESS_404, SHIPPING_ADDRESS_NOT_AVAILABLE, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 import { forLog } from './log-value.js'
 
@@ -262,23 +262,36 @@ export class ShataleClient {
         let requestId: string | undefined
         let forwarded: string | undefined
         let shippingCode: string | undefined
+        let shippingAction: { type: 'open_url'; url: string } | undefined
         try {
           const body = await res.json()
           requestId = extractRequestId(body)
           forwarded = extractForwardedCode(body)
-          if (shippingAddress404 && res.status === 404) shippingCode = extractShippingAddressCode(body)
+          if (shippingAddress404 && res.status === 404) {
+            shippingCode = extractShippingAddressCode(body)
+            shippingAction = extractOpenUrlAction(body)
+          }
         } catch {
           requestId = undefined
           forwarded = undefined
           shippingCode = undefined
+          shippingAction = undefined
         }
-        if (shippingAddress404 && res.status === 404) {
-          const known = shippingCode ? SHIPPING_ADDRESS_404[shippingCode] : undefined
+        // SHAT-6291: EVERY 404 on the shipping-address route carries a `code`; branch on it alone.
+        // `not_found` is the generic refusal and falls through to the ordinary 404 mapping below.
+        if (shippingAddress404 && res.status === 404 && shippingCode !== 'not_found') {
+          const known =
+            shippingCode === 'shipping_not_required'
+              ? SHIPPING_NOT_REQUIRED
+              : shippingCode
+                ? SHIPPING_ADDRESS_404[shippingCode]
+                : undefined
           throw new ShataleApiError({
-            code: shippingCode ?? SHIPPING_ADDRESS_NOT_AVAILABLE.code,
-            message: known?.message ?? SHIPPING_ADDRESS_NOT_AVAILABLE.message,
-            suggested_fix: known?.suggested_fix ?? SHIPPING_ADDRESS_NOT_AVAILABLE.suggested_fix,
+            code: shippingCode ?? SHIPPING_ADDRESS_UNRECOGNISED.code,
+            message: known?.message ?? SHIPPING_ADDRESS_UNRECOGNISED.message,
+            suggested_fix: known?.suggested_fix ?? SHIPPING_ADDRESS_UNRECOGNISED.suggested_fix,
             ...(requestId ? { request_id: requestId } : {}),
+            ...(shippingCode === 'shipping_address_missing' && shippingAction ? { next_action: shippingAction } : {}),
           })
         }
         // Согласованный отказ доносится ДОСЛОВНО и НЕ попадает в наш конверт. Иначе именованное
