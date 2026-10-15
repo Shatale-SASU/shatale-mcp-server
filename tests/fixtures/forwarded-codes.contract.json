@@ -24,6 +24,7 @@
     "invalid_request",
     "kyb_phase1_required",
     "kyb_phase2_required",
+    "kyb_restricted",
     "kyc_level_not_raised",
     "kyc_level_raise_not_recorded",
     "limit_currency_contradiction",
