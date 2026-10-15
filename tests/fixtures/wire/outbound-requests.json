@@ -145,6 +145,31 @@
     }
   },
   {
+    "label": "request_purchase (requires_shipping: true is a bare boolean; no address key exists on this route)",
+    "struct_hint": "apps/api/api/v1/purchases.go create request struct, requires_shipping (SHAT-6280 F1)",
+    "method": "POST",
+    "path": "/v1/purchases",
+    "body": {
+      "publisher_user_id": "pub-1",
+      "agent_id": "agent-1",
+      "merchant_ref": "amazon.com",
+      "amount_cents": 4999,
+      "currency": "EUR",
+      "description": "Fixture purchase with delivery",
+      "requires_shipping": true,
+      "idempotency_key": "<derived-string>"
+    }
+  },
+  {
+    "label": "get_shipping_address (LIVE + money-GO and sandbox; read-only, journaled by the API)",
+    "struct_hint": "apps/api/api/v1/purchases.go shipping-address route (SHAT-6280 F1)",
+    "method": "GET",
+    "path": "/v1/purchases/pur_fixture_6/shipping-address",
+    "query": {
+      "publisher_user_id": "usr_fixture_6"
+    }
+  },
+  {
     "label": "get_checkout_cardholder (LIVE + money-GO only; shares one route with get_checkout_customer)",
     "struct_hint": "apps/api/api/v1/purchases.go checkout-identity route",
     "method": "GET",

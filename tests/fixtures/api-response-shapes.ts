@@ -75,3 +75,24 @@ export function checkoutIdentity(): {
     merchant_customer_identity: { ...API_CHECKOUT_IDENTITY.merchant_customer_identity },
   }
 }
+
+/**
+ * GET /v1/purchases/{id}/shipping-address, 200 (SHAT-6280 F1 contract, read by SHAT-6291).
+ * `shipping_address` carries exactly these ten string keys; an empty value is "".
+ */
+export const API_SHIPPING_ADDRESS = Object.freeze({
+  recipient_name: 'Fixture User',
+  company: '',
+  line1: '1 Rue Fixture',
+  line2: '',
+  postal_code: 'FX-000',
+  city: 'Fixture City',
+  region: '',
+  country: 'FR',
+  phone: '',
+  delivery_notes: '',
+})
+
+export function shippingAddress(purchaseId: string): { purchase_id: string; shipping_address: Record<string, string>; bound_via: string } {
+  return { purchase_id: purchaseId, shipping_address: { ...API_SHIPPING_ADDRESS }, bound_via: 'approval' }
+}

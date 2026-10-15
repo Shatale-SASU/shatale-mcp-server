@@ -118,6 +118,55 @@ export function forwardedRefusal(code: string, requestId?: string): ShataleApiEr
   return new ShataleApiError(e)
 }
 
+/**
+ * SHAT-6291: THE THREE WAYS `GET /v1/purchases/{id}/shipping-address` ANSWERS 404, KEPT APART.
+ *
+ * One status, three different states of the world, and the agent must act differently on each:
+ * the person has no address yet (send them to add one), the purchase has not reached the stage that
+ * releases the address (wait, then ask again), or there is nothing to release for this purchase
+ * (do not retry). The generic 404 envelope blames the id in the path or the deployment, which is
+ * wrong for all three.
+ *
+ * ⚠️ THIS IS A ROUTE-LOCAL TABLE ON PURPOSE, NOT AN ENTRY IN FORWARDED_CODES. That dictionary is
+ * one half of a pair of byte-identical files in two repositories (SHAT-3371); these codes are
+ * meaningful on this one route only, and widening the global list would forward them from every
+ * route. Same discipline as {@link extractForwardedCode}: one field by name, matched against a closed
+ * list, everything else in the body dropped unread. A 404 whose body carries none of them is the
+ * third answer ("not available"), which is also what an unreadable body means.
+ */
+export const SHIPPING_ADDRESS_404: Record<string, { message: string; suggested_fix: string }> = {
+  shipping_address_missing: {
+    message: 'The person has no shipping address on file for this purchase.',
+    suggested_fix:
+      'Nothing is wrong with the request. Tell the person to add a shipping address in their Shatale ' +
+      'profile, then call this tool again. Do not guess or invent an address.',
+  },
+  shipping_address_not_ready: {
+    message: 'The purchase has not reached the stage where its shipping address is released.',
+    suggested_fix:
+      'The address is released only once the purchase is payment_ready or completed. Check ' +
+      'get_purchase_status (and await_purchase_approval if the person has not approved yet), then ' +
+      'call this tool again. Do not try to obtain the address another way.',
+  },
+}
+
+export const SHIPPING_ADDRESS_NOT_AVAILABLE = {
+  code: 'shipping_address_not_available',
+  message: 'No shipping address is available for this purchase.',
+  suggested_fix:
+    'This is neither a missing address nor a purchase that is still too early. The purchase may not ' +
+    'need shipping, may not belong to this publisher_user_id, or may be unknown to this environment. ' +
+    'Check the purchase_id and publisher_user_id, and do not retry unchanged.',
+} as const
+
+/** The route-local code in a 404 body, only if it is one of {@link SHIPPING_ADDRESS_404}. */
+export function extractShippingAddressCode(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const code = (body as Record<string, unknown>).code
+  if (typeof code !== 'string') return undefined
+  return Object.prototype.hasOwnProperty.call(SHIPPING_ADDRESS_404, code) ? code : undefined
+}
+
 export function extractRequestId(body: unknown): string | undefined {
   if (typeof body !== 'object' || body === null) return undefined
   const id = (body as Record<string, unknown>).request_id

@@ -1,6 +1,6 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { AddressInfo } from 'node:net'
-import { cardCredentials, checkoutIdentity } from '../fixtures/api-response-shapes'
+import { cardCredentials, checkoutIdentity, shippingAddress } from '../fixtures/api-response-shapes'
 
 export interface CapturedRequest {
   method: string
@@ -122,6 +122,10 @@ export class MockUpstream {
     // API's, so the suite proved a boundary for a field that never arrives.
     if (method === 'GET' && /\/v1\/purchases\/[^/]+\/card-credentials$/.test(path)) {
       return ok(cardCredentials())
+    }
+    // Ordered BEFORE the generic read for the same reason as the two branches above (SHAT-6291).
+    if (method === 'GET' && /\/v1\/purchases\/[^/]+\/shipping-address$/.test(path)) {
+      return ok(shippingAddress(path.split('/')[3]))
     }
     if (method === 'GET' && path.startsWith('/v1/purchases/')) {
       return ok({ purchase_id: path.split('/').pop(), status: 'pending' })

@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 1.5.0 — unreleased (prepared 2026-10-15, SHAT-6291)
+
+> Why a minor and not a patch: one tool gains an optional input field (`requires_shipping`) and one
+> tool is new (`get_shipping_address`). Every 1.4.0 call keeps working unchanged. Contract source:
+> SHAT-6280 F1 (shatale-api). **Merge and publish only after the shatale-api F1 change is on main** —
+> the API must accept `requires_shipping` and serve the shipping-address route.
+
+### Added
+- **`request_purchase` accepts `requires_shipping`** (optional boolean), sent as `requires_shipping`
+  on `POST /v1/purchases` and omitted from the body when the caller did not give it. The tool takes NO
+  address fields — the API rejects them with 400, and this server never builds them. The new blocked
+  outcome is described to the agent in the tool description: `block_reason: shipping_address_required`,
+  `state: action_required`, `requirements: [{type: shipping_address, status: missing}]` and a
+  `next_action` of type `open_url`. The agent must send the person to that URL; no money moves until an
+  address exists. The response is passed through as the API sends it.
+- **`get_shipping_address(purchase_id, publisher_user_id?)`** — `GET /v1/purchases/{id}/shipping-address`
+  (the person travels as `?publisher_user_id=`, as for `reveal_card`). Returns the `shipping_address`
+  object (`recipient_name, company, line1, line2, postal_code, city, region, country, phone,
+  delivery_notes`) and refuses a shape that differs, naming keys and never values. The address is
+  personal data, released only once the purchase is payment_ready or completed; every read is journaled
+  and visible to the person; the description says so and limits its use to that purchase's delivery.
+  Available wherever the checkout tools are (sandbox, and live with money-GO).
+- **The three 404 answers of that route are kept apart**, each with its own code and plain advice:
+  `shipping_address_missing` (the person has none: send them to add one),
+  `shipping_address_not_ready` (the purchase is not yet payment_ready/completed: wait) and
+  `shipping_address_not_available` (a 404 with neither code: nothing to read, do not retry). The two
+  codes are matched in a route-local table (`src/errors.ts`), NOT added to `FORWARDED_CODES`, which is
+  half of a byte-identical pair with shatale-api (SHAT-3371).
+
+### Changed
+- The derived idempotency key of `request_purchase` includes `requires_shipping` when it is `true`, so
+  the same purchase with and without delivery is not collapsed into one. Keys derived without it are
+  byte-identical to 1.4.0.
+
+### Not in this release
+- `request_shipping_address` — the server door for it does not exist yet.
+
+### Tests
+- `tests/e2e/shipping-address.test.ts` — through the built server over stdio, on the wire:
+  `requires_shipping` passed through and omitted; address keys never sent; the blocked
+  `shipping_address_required` outcome reaches the agent with its `open_url`; `get_shipping_address`
+  success and its query; each of the three 404 reasons gives a distinct result.
+
 ## 1.4.0 — unreleased (prepared 2026-10-14, SHAT-2600)
 
 > Why a minor and not a patch: two tools gain an input field (`publisher_user_id`). It is optional and

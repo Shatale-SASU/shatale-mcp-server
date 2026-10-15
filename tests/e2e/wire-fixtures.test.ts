@@ -252,6 +252,30 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'POST', '/v1/purchases'),
     })
 
+    // SHAT-6291: the flag travels as a bare boolean and nothing about an address does.
+    await live.callTool('request_purchase', {
+      publisher_user_id: 'pub-1',
+      agent_id: 'agent-1',
+      merchant: 'amazon.com',
+      amount: 49.99,
+      currency: 'EUR',
+      description: 'Fixture purchase with delivery',
+      requires_shipping: true,
+    })
+    captured.push({
+      label: 'request_purchase (requires_shipping: true is a bare boolean; no address key exists on this route)',
+      struct_hint: 'apps/api/api/v1/purchases.go create request struct, requires_shipping (SHAT-6280 F1)',
+      ...describeLast(mock, 'POST', '/v1/purchases'),
+    })
+
+    // get_shipping_address (SHAT-6291): same route family and the same person-on-the-query as the card.
+    await live.callTool('get_shipping_address', { purchase_id: 'pur_fixture_6', publisher_user_id: 'usr_fixture_6' })
+    captured.push({
+      label: 'get_shipping_address (LIVE + money-GO and sandbox; read-only, journaled by the API)',
+      struct_hint: 'apps/api/api/v1/purchases.go shipping-address route (SHAT-6280 F1)',
+      ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_6/shipping-address'),
+    })
+
     // /!\ THE CHECKOUT TOOLS LIVE HERE AND NOT IN THE SANDBOX BLOCK, and finding that out was the
     // first thing this expansion measured. index.ts registers createCheckoutTools ONLY under
     // `isLive && moneyGo` — the backend rejects sandbox keys on that route — so capturing them with

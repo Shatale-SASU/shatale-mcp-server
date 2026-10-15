@@ -92,6 +92,15 @@ function identityUnavailable(which: string) {
   })
 }
 
+// SHAT-6291: the delivery address, in the API's own names. shatale-api answers
+// GET /v1/purchases/{id}/shipping-address with exactly these ten string keys inside `shipping_address`
+// (an empty value is ""). Strict for the reason BILLING_FIELDS is: an agent typing a renamed field
+// into a delivery form reports success on a parcel that goes nowhere.
+const SHIPPING_ADDRESS_FIELDS = [
+  'recipient_name', 'company', 'line1', 'line2', 'postal_code', 'city', 'region', 'country', 'phone',
+  'delivery_notes',
+] as const
+
 export function createCheckoutTools(client: ShataleClient): ToolModule {
   const fetchIdentity = async (tool: string, args: Record<string, unknown>) => {
     const id = requireId(args, 'purchase_id')
@@ -139,8 +148,85 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           required: ['purchase_id'],
         },
       },
+      {
+        name: 'get_shipping_address',
+        description:
+          "Read the person's delivery address for THIS purchase, to complete a merchant's shipping " +
+          'form. It is PERSONAL DATA. It is released only after the purchase is payment_ready or ' +
+          'completed, and only for a purchase that asked for shipping (request_purchase with ' +
+          'requires_shipping: true). EVERY read is journaled and is visible to the person in their ' +
+          'account. Use it only to complete this purchase\'s delivery: do not store it, do not reuse ' +
+          'it for another purchase, and do not repeat it back or send it anywhere else. If it comes ' +
+          'back as missing, send the person to add an address; if not ready, wait for the purchase to ' +
+          'reach payment_ready; if not available, there is nothing to read.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            purchase_id: {
+              type: 'string' as const,
+              description: 'The purchase ID (from request_purchase) whose delivery address is needed',
+            },
+            publisher_user_id: {
+              type: 'string' as const,
+              description:
+                'The same publisher_user_id the purchase was requested for (the person it belongs to). ' +
+                'Pass it: the API then releases the address only to the person whose purchase it is.',
+            },
+          },
+          required: ['purchase_id'],
+        },
+      },
     ],
     handlers: {
+      get_shipping_address: async (args) => {
+        try {
+          const id = requireId(args, 'purchase_id')
+          if (!id.ok) return id.result
+          // Present-but-blank is refused; ABSENT is sent unscoped, as for the other two reads. There
+          // is no deprecation mark here: this tool is new in 1.5.0, so there is no older caller to
+          // protect, and the API still gates the read on the key's publisher and the purchase state.
+          let person: string | undefined
+          if (args.publisher_user_id !== undefined) {
+            const p = requireId(args, 'publisher_user_id')
+            if (!p.ok) return p.result
+            person = p.value
+          }
+          const data = (await client.getShippingAddress(id.value, person)) as {
+            purchase_id?: unknown
+            shipping_address?: unknown
+            bound_via?: unknown
+          }
+          if (!hasKeys(data?.shipping_address)) {
+            return refusal({
+              code: 'shipping_address_not_available',
+              message: 'No shipping address is available for this purchase.',
+              suggested_fix: 'Do not invent an address. Check get_purchase_status and the person on the purchase.',
+            })
+          }
+          const addr = exactStringFields(data.shipping_address, SHIPPING_ADDRESS_FIELDS)
+          if (!addr.ok) {
+            return refusal({
+              code: 'shipping_address_unrecognised',
+              message:
+                `The shipping address came back in a shape this tool does not recognise (${describeShape(addr.report)}), so none of it is handed over.`,
+              suggested_fix:
+                'Do not fill the delivery form from this response. This is a contract mismatch between ' +
+                'this MCP server and the Shatale API — upgrade shatale-mcp-server, or report it.',
+            })
+          }
+          return jsonResult({
+            purchase_id: typeof data.purchase_id === 'string' ? data.purchase_id : id.value,
+            shipping_address: addr.fields,
+            ...(typeof data.bound_via === 'string' ? { bound_via: data.bound_via } : {}),
+            _note:
+              'Personal data, journaled and visible to the person. Use it only to complete this ' +
+              "purchase's delivery.",
+          })
+        } catch (err) {
+          return errorResult(err, 'shipping_address_failed')
+        }
+      },
+
       get_checkout_cardholder: async (args) => {
         try {
           const got = await fetchIdentity('get_checkout_cardholder', args)
