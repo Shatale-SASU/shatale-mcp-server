@@ -19,6 +19,7 @@ export interface PurchaseInput {
     country?: string
   }
   idempotency_key?: string
+  requires_shipping?: boolean
 }
 
 /** Credential request input */

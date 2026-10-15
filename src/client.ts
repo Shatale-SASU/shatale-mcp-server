@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 import { forLog } from './log-value.js'
 
@@ -70,14 +70,18 @@ export function deriveIdempotencyKey(input: PurchaseInput, amountCents: number):
   // JSON.stringify (not a space-join): fields can contain spaces, so a delimiter
   // join lets two DIFFERENT purchases canonicalize to the same string and collide
   // onto one key (e.g. merchant="nike 4999 EUR" vs description carrying "4999 EUR").
-  const canonical = JSON.stringify([
+  const parts: unknown[] = [
     input.publisher_user_id,
     input.agent_id,
     input.merchant,
     amountCents,
     input.currency,
     input.description,
-  ])
+  ]
+  // SHAT-6291: the same purchase with and without delivery is a different purchase, so it must not
+  // share a key. Appended ONLY when true: every key derived before 1.5.0 stays byte-identical.
+  if (input.requires_shipping === true) parts.push('requires_shipping')
+  const canonical = JSON.stringify(parts)
   return 'mcp-' + createHash('sha256').update(canonical).digest('hex').slice(0, 32)
 }
 
@@ -101,6 +105,9 @@ export function toPurchaseWireBody(
     description: input.description,
   }
   if (input.user_hint) body.user_hint = input.user_hint
+  // SHAT-6291: a flag only. The API refuses address keys on this route (400), so none is ever built
+  // here. Omitted when the caller did not say, so a 1.4.0-shaped call is byte-identical on the wire.
+  if (input.requires_shipping !== undefined) body.requires_shipping = input.requires_shipping
   // Explicit caller key wins; otherwise a DETERMINISTIC key (not random) so
   // retries of the same logical purchase de-dup rather than double-charge.
   if (input.idempotency_key) body.idempotency_key = input.idempotency_key
@@ -180,6 +187,8 @@ export class ShataleClient {
     path: string,
     body?: unknown,
     addressing: RequestAddressing = 'unknown',
+    // SHAT-6291: set only by the shipping-address read, whose 404 has three meanings (errors.ts).
+    shippingAddress404 = false,
   ): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -252,13 +261,38 @@ export class ShataleClient {
         // бы в исключение о клиенте вместо отказа сервера.
         let requestId: string | undefined
         let forwarded: string | undefined
+        let shippingCode: string | undefined
+        let shippingAction: { type: 'open_url'; url: string } | undefined
         try {
           const body = await res.json()
           requestId = extractRequestId(body)
           forwarded = extractForwardedCode(body)
+          if (shippingAddress404 && res.status === 404) {
+            shippingCode = extractShippingAddressCode(body)
+            shippingAction = extractOpenUrlAction(body)
+          }
         } catch {
           requestId = undefined
           forwarded = undefined
+          shippingCode = undefined
+          shippingAction = undefined
+        }
+        // SHAT-6291: EVERY 404 on the shipping-address route carries a `code`; branch on it alone.
+        // `not_found` is the generic refusal and falls through to the ordinary 404 mapping below.
+        if (shippingAddress404 && res.status === 404 && shippingCode !== 'not_found') {
+          const known =
+            shippingCode === 'shipping_not_required'
+              ? SHIPPING_NOT_REQUIRED
+              : shippingCode
+                ? SHIPPING_ADDRESS_404[shippingCode]
+                : undefined
+          throw new ShataleApiError({
+            code: shippingCode ?? SHIPPING_ADDRESS_UNRECOGNISED.code,
+            message: known?.message ?? SHIPPING_ADDRESS_UNRECOGNISED.message,
+            suggested_fix: known?.suggested_fix ?? SHIPPING_ADDRESS_UNRECOGNISED.suggested_fix,
+            ...(requestId ? { request_id: requestId } : {}),
+            ...(shippingCode === 'shipping_address_missing' && shippingAction ? { next_action: shippingAction } : {}),
+          })
         }
         // Согласованный отказ доносится ДОСЛОВНО и НЕ попадает в наш конверт. Иначе именованное
         // предупреждение «не повторяй на живом ключе» становится «проверь id в пути» — то есть
@@ -492,6 +526,21 @@ export class ShataleClient {
         (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
       undefined,
       'caller-id',
+    )
+  }
+
+  // SHAT-6291: GET /v1/purchases/{id}/shipping-address — the person's delivery address, released only
+  // for a purchase that is payment_ready while the person's account is active; every read is journaled by the API and visible
+  // to the person. The person travels as ?publisher_user_id= exactly as for the card and the checkout
+  // identity. Read-only: no address ever goes the other way through this server.
+  async getShippingAddress(id: string, publisherUserId?: string): Promise<unknown> {
+    return this.request(
+      'GET',
+      `/v1/purchases/${encodeURIComponent(id)}/shipping-address` +
+        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
+      undefined,
+      'caller-id',
+      true,
     )
   }
 

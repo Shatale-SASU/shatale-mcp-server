@@ -1,6 +1,6 @@
 # MCP Tool Test Coverage Matrix
 
-Last updated: 2026-10-14 (SHAT-6105 — rows 19, 20 add the-checkout-identity-names-the-person: the person on the checkout-identity route)
+Last updated: 2026-10-15 (SHAT-6291 — row 24 get_shipping_address; request_purchase gains requires_shipping). Before that 2026-10-14 (SHAT-6105 — rows 19, 20 add the-checkout-identity-names-the-person: the person on the checkout-identity route)
 
 > ⚠️ **THIS IS A HAND-MAINTAINED SNAPSHOT, AND IT HAD DRIFTED BY THREE TOOLS.** The matrix listed
 > 17 rows and reported "Happy path 17/17 (100%)" while the code defined **20** tools. The three it
@@ -41,7 +41,7 @@ Last updated: 2026-10-14 (SHAT-6105 — rows 19, 20 add the-checkout-identity-na
 | 5 | `list_mcc_codes` | ✅ | - | ✅ | - | happy-path, contract |
 | 6 | `search_merchants` | ✅ | - | ✅ | - | sandbox-tools, contract |
 | 7 | `get_merchant_details` | ✅ | - | - | - | happy-path |
-| 8 | `request_purchase` | ✅ | ✅ | - | - | happy-path, validation |
+| 8 | `request_purchase` | ✅ | ✅ | - | - | happy-path, validation, shipping-address |
 | 9 | `get_purchase_status` | ✅ | - | - | - | happy-path |
 | 10 | `cancel_purchase` | ✅ | - | - | - | happy-path |
 | 11 | `request_temporary_credentials` | ✅ | - | - | - | happy-path |
@@ -57,21 +57,22 @@ Last updated: 2026-10-14 (SHAT-6105 — rows 19, 20 add the-checkout-identity-na
 | 21 | `get_credential_emails` | ✅ | ✅ | ✅ | ✅ | contract, mock-contract, sandbox-tools, wire-fixtures, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card |
 | 22 | `await_purchase_approval` | ✅ | ✅ | - | - | mock-contract, wire-fixtures, ids-never-reach-the-api-unvalidated |
 | 23 | `reveal_card` | ✅ | ✅ | ✅ | ✅ | the-reveal-tool-asks-the-allowlisted-path, wire-fixtures, our-card-is-the-tool-we-issued, ids-never-reach-the-api-unvalidated, no-tool-result-carries-a-card, the-end-of-a-purchase-reads-the-apis-own-names, one-purchase-walked-through-the-contract |
+| 24 | `get_shipping_address` | ✅ | ✅ | ✅ | ✅ | shipping-address |
 
 > **Note (v0.4.0, SHAT-1488):** sandbox surface realigned to deployed backend routes. Removed `sandbox_create_test_user`, `sandbox_decline_request`, `sandbox_reset` (non-deployed routes); renamed `sandbox_approve_request` → `sandbox_approve_purchase`. `request_purchase` was **blocked when a sandbox key is set** — no longer true since SHAT-2373 made `/v1/purchases` serve sandbox keys deliberately (environment stamped from the key). The client-side refusal was removed in SHAT-2611; `sandbox_simulate_authorization` remains the narrower tool for a policy decision without a purchase.
 
 ## Coverage Summary
 
-- **Tools defined in code**: 23
-- **Happy path**: 23/23
-- **Input validation**: 9/23 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
+- **Tools defined in code**: 24
+- **Happy path**: 24/24
+- **Input validation**: 10/24 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
   (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 36 "sends nothing and says why" cases
   — 12 tools × 3, counted with `--reporter=verbose` on 2026-09-28 — plus its positive controls),
   which this table predates. The two checkout identity tools joined that list with SHAT-3023; the
   sentence said 28 before, against 30 cases at the time.
-- **Contract (Zod)**: 12/23
-- **Security edge cases**: 5/23 + global injection/leak tests + `request_purchase` sandbox-guard
+- **Contract (Zod)**: 13/24
+- **Security edge cases**: 6/24 + global injection/leak tests + `request_purchase` sandbox-guard
 
 > These four fractions are no longer hand-maintained claims: `tool-coverage-matches-the-roster.test.ts`
 > counts the ✅ in each column and the live roster, and fails if either half of a fraction drifts.
@@ -103,3 +104,4 @@ all. Unit tests under `tests/unit` are not listed here.
 | `two-transports-one-roster.test.ts` | 6 | No (synthetic key) |
 | `the-checkout-identity-names-the-person.test.ts` | 5 | No (mock upstream) |
 | `request-purchase-drops-undeclared-fields.test.ts` | 1 | No (mock upstream) |
+| `shipping-address.test.ts` | 17 | No (scripted upstream) |

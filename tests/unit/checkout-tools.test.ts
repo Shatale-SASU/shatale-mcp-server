@@ -28,9 +28,9 @@ function fakeClient(getCheckoutIdentity?: (id: string) => Promise<unknown>) {
 const parse = (result: { content: { text: string }[] }) => JSON.parse(result.content[0].text)
 
 describe('checkout identity tools', () => {
-  test('exposes exactly the two split methods', () => {
+  test('exposes exactly the two split methods and the shipping-address read', () => {
     const mod = createCheckoutTools(fakeClient())
-    expect(mod.tools.map(t => t.name).sort()).toEqual(['get_checkout_cardholder', 'get_checkout_customer'])
+    expect(mod.tools.map(t => t.name).sort()).toEqual(['get_checkout_cardholder', 'get_checkout_customer', 'get_shipping_address'])
   })
 
   // D6 (Fable): no description may steer an LLM to the old, deleted `get_checkout_card` name (which

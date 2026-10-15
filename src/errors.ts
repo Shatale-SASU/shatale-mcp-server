@@ -28,12 +28,15 @@ export interface StructuredError {
   suggested_fix: string
   /** The server-side correlation id for THIS call, when the backend sent one. */
   request_id?: string
+  /** SHAT-6291: where to send the person, when the API names one (open_url only). */
+  next_action?: { type: 'open_url'; url: string }
 }
 
 export class ShataleApiError extends Error {
   readonly code: string
   readonly suggested_fix: string
   readonly request_id?: string
+  readonly next_action?: { type: 'open_url'; url: string }
 
   constructor(err: StructuredError) {
     super(err.message)
@@ -41,11 +44,13 @@ export class ShataleApiError extends Error {
     this.code = err.code
     this.suggested_fix = err.suggested_fix
     this.request_id = err.request_id
+    this.next_action = err.next_action
   }
 
   toStructured(): StructuredError {
     const out: StructuredError = { code: this.code, message: this.message, suggested_fix: this.suggested_fix }
     if (this.request_id) out.request_id = this.request_id
+    if (this.next_action) out.next_action = this.next_action
     return out
   }
 }
@@ -116,6 +121,84 @@ export function forwardedRefusal(code: string, requestId?: string): ShataleApiEr
   const e: StructuredError = { code, message: known.message, suggested_fix: known.suggested_fix }
   if (requestId) e.request_id = requestId
   return new ShataleApiError(e)
+}
+
+/**
+ * SHAT-6291: THE THREE WAYS `GET /v1/purchases/{id}/shipping-address` ANSWERS 404, KEPT APART.
+ *
+ * One status, three different states of the world, and the agent must act differently on each:
+ * the person has no address yet (send them to add one), the purchase has not reached the stage that
+ * releases the address (wait, then ask again), or there is nothing to release for this purchase
+ * (do not retry). The generic 404 envelope blames the id in the path or the deployment, which is
+ * wrong for all three.
+ *
+ * ⚠️ THIS IS A ROUTE-LOCAL TABLE ON PURPOSE, NOT AN ENTRY IN FORWARDED_CODES. That dictionary is
+ * one half of a pair of byte-identical files in two repositories (SHAT-3371); these codes are
+ * meaningful on this one route only, and widening the global list would forward them from every
+ * route. Same discipline as {@link extractForwardedCode}: one field by name, matched against a closed
+ * list, everything else in the body dropped unread. A 404 whose body carries none of them is the
+ * third answer ("not available"), which is also what an unreadable body means.
+ */
+export const SHIPPING_ADDRESS_404: Record<string, { message: string; suggested_fix: string }> = {
+  shipping_address_missing: {
+    message: 'The person has no shipping address on file for this purchase.',
+    suggested_fix:
+      'Nothing is wrong with the request. Tell the person to add a shipping address in their Shatale ' +
+      'profile, then call this tool again. Do not guess or invent an address.',
+  },
+  shipping_address_not_ready: {
+    message: 'The shipping address is not released for this purchase right now.',
+    suggested_fix:
+      'The address is released only while the purchase is payment_ready and the person\'s account is ' +
+      'active; it is not released before that, nor after the purchase has completed. Check ' +
+      'get_purchase_status (and await_purchase_approval if the person has not approved yet), then ' +
+      'call this tool again. Do not try to obtain the address another way.',
+  },
+}
+
+export const SHIPPING_NOT_REQUIRED = {
+  message: 'This purchase was created without requires_shipping, so it has no shipping address to read.',
+  suggested_fix:
+    'Nothing is wrong with the request. If the goods are physical, the purchase has to be requested ' +
+    'again with requires_shipping: true; otherwise there is no delivery address to fill in. Do not ' +
+    'invent one.',
+} as const
+
+/** A 404 whose `code` is none of the four the API sends here. Its own result, never folded into one of them. */
+export const SHIPPING_ADDRESS_UNRECOGNISED = {
+  code: 'shipping_address_unrecognised_refusal',
+  message: 'The API refused the shipping-address read in a way this tool does not recognise.',
+  suggested_fix:
+    'None of the known reasons applies, so no advice about the cause is given. Do not retry unchanged ' +
+    'and do not invent an address. This is a mismatch between this MCP server and the Shatale API: ' +
+    'upgrade shatale-mcp-server, or report it with this message.',
+} as const
+
+/**
+ * The `code` of a 404 on the shipping-address route, if it is one of the four the API sends there:
+ * the generic `not_found` (an id that is not yours, does not exist, or is in the other environment) and
+ * the three in {@link SHIPPING_ADDRESS_404} plus `shipping_not_required`. Branching is strictly on this
+ * field; the rest of the body is dropped unread.
+ */
+export function extractShippingAddressCode(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const code = (body as Record<string, unknown>).code
+  if (typeof code !== 'string') return undefined
+  if (code === 'not_found' || code === 'shipping_not_required') return code
+  return Object.prototype.hasOwnProperty.call(SHIPPING_ADDRESS_404, code) ? code : undefined
+}
+
+/**
+ * The `next_action` of an `open_url` kind, when the 404 carries one (shipping_address_missing
+ * sometimes does). Only type and url are read, both must be plain strings; nothing else passes.
+ */
+export function extractOpenUrlAction(body: unknown): { type: 'open_url'; url: string } | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const na = (body as Record<string, unknown>).next_action
+  if (typeof na !== 'object' || na === null) return undefined
+  const { type, url } = na as Record<string, unknown>
+  if (type !== 'open_url' || typeof url !== 'string' || url.length === 0 || url.length > 2048) return undefined
+  return { type: 'open_url', url }
 }
 
 export function extractRequestId(body: unknown): string | undefined {
