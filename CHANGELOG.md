@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 2.0.0 — unreleased (prepared 2026-10-17, SHAT-5075)
+
+> **BREAKING.** Two tools and one environment variable are removed. Semver calls that a major, even
+> though neither tool was advertised by default: a deployment that set `SHATALE_ONBOARDING_ENABLED=true`
+> loses both tools and gets `Unknown tool` for them. No tool list of any default mode changes
+> (guest 7, sandbox 22, live without money-GO 7, live + money-GO 18).
+>
+> Built on top of the unreleased 1.5.0 below, so **publish only after the shatale-api F1 change that
+> 1.5.0 waits for is on main**: a 2.0.0 tarball contains the 1.5.0 shipping-address tools.
+
+### Removed (BREAKING)
+- **`register_user_profile` and `get_onboarding_status`** (SHAT-5075), with their client methods
+  `registerUserProfile` / `getOnboardingStatus`, their zod schema and `src/tools/onboarding.ts`.
+  Funnel B was removed from the API in SHAT-4435: `POST /v1/onboarding/register` and
+  `GET /v1/onboarding/sessions/{id}` answer 404 `onboarding_funnel_disabled`, so a call could only
+  fail. The tool list in every mode (guest 7, sandbox 22, live 7, live + money-GO 18) is unchanged:
+  the pair was not in it.
+- **`SHATALE_ONBOARDING_ENABLED`** — the switch that held the pair back. It is no longer read; setting
+  it does nothing. The README matrix loses its two "+ flags" columns, which had become copies of the
+  columns beside them.
+
+### Changed
+- **The live mode without money-GO is no longer called "onboarding-only".** It serves the seven
+  public tools and no onboarding tool at all, so the name promised something that did not exist. The
+  startup banner now reads `live(no-money-GO)`, `explain_shatale` and `list_capabilities` say
+  "LIVE (money tools off)" and describe the real tool set, and SECURITY.md says the same. Anything
+  that matches the old banner text `live(onboarding-only)` must be updated.
+- The mock upstream used by the tests answers the dead `/v1/onboarding/*` routes the way the real API
+  does: 404 `onboarding_funnel_disabled`.
+
+### Tests
+- The tests of the pair are deleted with it. `mock-contract` now asserts the pair is `Unknown tool`
+  by name, with and without the retired flag, and that neither call reaches `/v1/onboarding/*`;
+  `no-sandbox-tool-is-offered-to-a-live-key` asks the running server in every mode. The README gate's
+  controls moved their plants off the removed row (to `request_purchase`).
+
 ## 1.5.0 — unreleased (prepared 2026-10-15, SHAT-6291)
 
 > Why a minor and not a patch: one tool gains an optional input field (`requires_shipping`) and one

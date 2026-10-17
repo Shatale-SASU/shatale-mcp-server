@@ -4,6 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
+| 2.0.x   | Yes       |
 | 1.5.x   | Yes       |
 | 1.4.x   | Yes       |
 | 1.3.x   | Yes       |
@@ -40,7 +41,7 @@ If you discover a security vulnerability, please report it responsibly:
 
 This MCP server is designed with the following security principles:
 
-- **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true, in three deliberate acts with no accidental path between them: a live key (`sk_live_*`) supplied WITHOUT `SHATALE_MODE=live` refuses to start; `SHATALE_MODE=live` supplied WITHOUT a live key also refuses; and the purchase/credential tools are registered only when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. A live key with the mode and no money-GO runs onboarding-only.
+- **Live keys are GATED, not rejected.** This line used to say production keys were rejected at startup, and that stopped being true in v0.4 — an operator reading it would believe real money movement was impossible through this server. What is actually true, in three deliberate acts with no accidental path between them: a live key (`sk_live_*`) supplied WITHOUT `SHATALE_MODE=live` refuses to start; `SHATALE_MODE=live` supplied WITHOUT a live key also refuses; and the purchase/credential tools are registered only when `SHATALE_MONEY_GO` matches the deploy-time SHA-256. A live key with the mode and no money-GO serves only the seven public tools (simulation, discovery, catalog).
 - **The card we issued IS returned, deliberately. The person's card never is.**
   Until 2026-08-27 this bullet said PAN and CVV were stripped from every response this server
   returns. That is no longer true, by decision, and the reason is a distinction the earlier text

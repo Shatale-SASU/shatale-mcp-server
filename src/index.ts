@@ -20,7 +20,6 @@ import { createCredentialTools } from './tools/credentials.js'
 import { createCheckoutTools } from './tools/checkout.js'
 import { createRevealTools } from './tools/reveal.js'
 import { createSandboxTools } from './tools/sandbox.js'
-import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
 import { createCommonTools, isSandboxKey } from './tools/common.js'
 import type { ToolContext, ToolDefinition, ToolHandler } from './types.js'
@@ -45,7 +44,7 @@ const apiKey = process.env.SHATALE_API_KEY ?? ''
 // its comment says it exists because such keys "previously fell into a phantom 'production' mode
 // that could never authenticate". But `sh_live_anything` satisfied isLive, so it walked straight
 // past that guard into live mode — measured, not reasoned: with SHATALE_MODE=live the server
-// STARTED and reported "live(onboarding-only) mode, 7 tools". The phantom mode the guard was written
+// STARTED and reported "live(onboarding-only) mode, 7 tools" (SHAT-5075: that mode is now named live(no-money-GO)). The phantom mode the guard was written
 // to remove was recreated by a line above it.
 //
 // ⚠️ AND THE ERROR MESSAGE WAS ALREADY RIGHT while the code was wrong: it says "a live key
@@ -209,10 +208,10 @@ if (!isGuest && !isSandbox && !isLive) {
   process.exit(1)
 }
 
-// Separate gate for MONEY movement in live mode. Onboarding (no money) is always
-// available once authenticated; purchase/credentials (which move money / issue
+// Separate gate for MONEY movement in live mode. Without it only the public tools are
+// served; purchase/credentials (which move money / issue
 // cards) additionally require an explicit money-GO token. This keeps
-// registration (free) and payment (real €) on DIFFERENT gates (council + Fable).
+// (free) and payment (real €) on DIFFERENT gates (council + Fable).
 // SHATALE_MONEY_GO is Sergey's opaque go-code; money turns on ONLY when its
 // SHA-256 equals SHATALE_MONEY_GO_SHA256 (exact match, resolveMoneyGo). The
 // earlier length+deny-list heuristic kept the fatal polarity — an unknown ≥4-char
@@ -225,9 +224,9 @@ const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE
 // deployed" — has been met on both halves, measured. See src/tools/credentials.ts for the probe and
 // its control. A flag whose condition is satisfied is a switch nobody looks at again, and the next
 // reader takes it for a live decision.
-// SHAT-1662: see src/tools/onboarding.ts — the register→status loop cannot close on any
-// deployed backend, so the pair stays unadvertised until Funnel B is merged AND deployed.
-const onboardingEnabled = (process.env.SHATALE_ONBOARDING_ENABLED ?? '').toLowerCase() === 'true'
+// SHAT-5075: the onboarding pair (register_user_profile / get_onboarding_status) and its flag
+// SHATALE_ONBOARDING_ENABLED are gone. Funnel B was removed in SHAT-4435: /v1/onboarding/* answers
+// 404 onboarding_funnel_disabled, so there is no backend a flag could ever wait for.
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -259,9 +258,6 @@ registerModule(createCatalogTools(client))
 
 // Register authenticated tools once a key is present.
 if (!isGuest) {
-  // Onboarding moves no money and touches no PAN — available in demo and live.
-  registerModule(createOnboardingTools(client, { enabled: onboardingEnabled }))
-
   if (isSandbox) {
     // Demo: request_purchase runs the ordinary path — the server stamps the environment from the
     // key (SHAT-2373), so nothing here reaches live money; the client-side refusal was removed in
@@ -295,7 +291,8 @@ if (!isGuest) {
     registerModule(createRevealTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
-    // live mode is onboarding-only (can drive registration, cannot move money).
+    // live mode serves the seven public tools only (simulate, discover, catalog): no purchase,
+    // no credential, no onboarding tool, and nothing that moves money.
     registerModule(createPurchaseTools(client, { isSandbox: false }))
     registerModule(createCredentialTools(client))
     registerModule(createCheckoutTools(client))
@@ -595,7 +592,7 @@ async function main() {
   // log — "where is this thing pointed?" — could not be answered from it. `(default)` marks the
   // case nobody chose: an unset variable is how a process ends up talking to production without
   // anyone deciding that it should.
-  const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(onboarding-only)'
+  const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(no-money-GO)'
   const where = apiUrlWasGiven ? apiBaseUrl.origin : `${apiBaseUrl.origin} (default)`
   const banner = `Shatale MCP server started (${mode} mode, ${allTools.length} tools, api=${where})`
 

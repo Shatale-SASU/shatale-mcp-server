@@ -48,7 +48,7 @@ function handleExplainShatale(ctx: GuestContext) {
       ? 'DEMO (SANDBOX)'
       : ctx.moneyEnabled
         ? 'LIVE (money-GO)'
-        : 'LIVE (onboarding-only)'
+        : 'LIVE (money tools off)'
   const toolNames = ctx.getToolNames().filter((n) => n !== 'explain_shatale')
   const toolList = toolNames.map((n) => `- \`${n}\``).join('\n')
 
@@ -84,16 +84,16 @@ your key, so you exercise the same contract an outsider uses without moving real
 sandbox_simulate_authorization when you want to test a POLICY decision alone, with no purchase.`
       : ctx.moneyEnabled
         ? `## You are in LIVE mode with money-GO (\`sk_live_*\` + SHATALE_MODE=live + SHATALE_MONEY_GO)
-Real production APIs. Onboarding, request_purchase and credentials move REAL money.
+Real production APIs. request_purchase and credentials move REAL money.
 Two different cards, and only one of them ever reaches you: THE CARD WE ISSUE for a purchase is
 returned in full, deliberately — you cannot fill a merchant checkout with a masked number. THE
 PERSON'S OWN CARD is never returned, in any mode, on any path; it is the funding instrument and it
 stays on our side. Which one you get is decided by the endpoint called, not by anything in the
 response body. request_purchase returns last4 + constraints; the full card comes from the reveal
 path.`
-        : `## You are in LIVE mode, onboarding-only (\`sk_live_*\` + SHATALE_MODE=live, no money-GO)
-Real production APIs, but MONEY tools are disabled. You can drive a real user to Shatale
-onboarding (registration + card + limits); request_purchase/credentials require SHATALE_MONEY_GO.`
+        : `## You are in LIVE mode without money-GO (\`sk_live_*\` + SHATALE_MODE=live, no money-GO)
+Real production APIs, but purchase and credential tools are NOT registered: only the public
+simulation, discovery and catalog tools are available. request_purchase/credentials require SHATALE_MONEY_GO.`
 
   return textResult(`# What is Shatale?
 
@@ -116,8 +116,8 @@ ${toolList}
 ## Modes
 - **GUEST** (no key): explore, simulate, generate policy — no real call or payment
 - **DEMO / SANDBOX** (\`sk_sandbox_*\`): full API with test data, no real money
-- **LIVE** (\`sk_live_*\` + \`SHATALE_MODE=live\`): real production APIs. Onboarding is available;
-  money tools (purchase/credentials) additionally require \`SHATALE_MONEY_GO\`. A bare live key
+- **LIVE** (\`sk_live_*\` + \`SHATALE_MODE=live\`): real production APIs. Without money-GO only the public
+  tools are served; purchase/credential tools additionally require \`SHATALE_MONEY_GO\`. A bare live key
   without \`SHATALE_MODE=live\` is refused (fat-finger guard).
 
 ## Card handling — two different cards, and which one reaches you
