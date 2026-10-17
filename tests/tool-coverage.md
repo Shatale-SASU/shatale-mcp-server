@@ -65,8 +65,8 @@ Last updated: 2026-10-17 (SHAT-5075 — rows 13, 14 register_user_profile and ge
 - **Happy path**: 22/22
 - **Input validation**: 9/22 as recorded here. Since SHAT-2526 every id-taking tool also refuses a
   missing, empty or whitespace id before any request leaves the process
-  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 36 "sends nothing and says why" cases
-  — 12 tools × 3, counted with `--reporter=verbose` on 2026-09-28 — plus its positive controls),
+  (`tests/unit/ids-never-reach-the-api-unvalidated.test.ts`, 33 "sends nothing and says why" cases
+  — 11 tools × 3, counted with `--reporter=verbose` on 2026-09-28 (12 × 3 = 36 until SHAT-5075 removed get_onboarding_status; recounted 2026-10-17: 33) — plus its positive controls),
   which this table predates. The two checkout identity tools joined that list with SHAT-3023; the
   sentence said 28 before, against 30 cases at the time.
 - **Contract (Zod)**: 13/22
@@ -89,7 +89,7 @@ all. Unit tests under `tests/unit` are not listed here.
 | `guest-mode.test.ts` | 16 | No |
 | `security.test.ts` | 18 | No |
 | `contract.test.ts` | 7 | Partial |
-| `mock-contract.test.ts` | 13 | No (mock upstream) |
+| `mock-contract.test.ts` | 14 | No (mock upstream) |
 | `sandbox-tools.test.ts` | 6 | Yes |
 | `validation.test.ts` | 9 | Yes |
 | `happy-path-all-tools.test.ts` | 10 | Partial |

@@ -43,7 +43,7 @@ describe('Security: Key Validation', () => {
   // recognised AS LIVE and then refused for lacking intent. That recognition was the defect: the
   // backend has never issued `sh_live_` (identity mints only sk_live_ and sk_sandbox_), so with
   // SHATALE_MODE=live SET, the same key walked past the unrecognized-key guard and STARTED the
-  // server in live mode — measured, "live(onboarding-only) mode, 7 tools".
+  // server in live mode — measured, "live(onboarding-only) mode, 7 tools" (the old name of the mode; now live(no-money-GO)).
   //
   // So the property worth pinning is not which sentence is printed. It is that a key with this
   // prefix cannot run the server, with or without the intent flag. Asserting the sentence would
@@ -92,7 +92,7 @@ describe('Security: Key Validation', () => {
 
   // A live key WITH explicit intent is ACCEPTED — the MCP now has a working
   // normal/prod mode (SHAT two-mode design). Without money-GO it starts in
-  // onboarding-only live mode and does NOT hit the fat-finger refusal.
+  // live mode without money-GO and does NOT hit the fat-finger refusal.
   test('accepts sk_live_ key WITH SHATALE_MODE=live (starts live mode)', async () => {
     const { stderr } = await spawnAndCapture({
       SHATALE_API_KEY: 'sk_live_TESTING_ONLY',

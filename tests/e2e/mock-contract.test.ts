@@ -44,7 +44,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
-    //   register_user_profile  \ removed in 1.6.0 (SHAT-5075): Funnel B is gone from the API
+    //   register_user_profile  \ removed in 2.0.0 (SHAT-5075): Funnel B is gone from the API
     //   get_onboarding_status  / (SHAT-4435), /v1/onboarding/* answers 404
     //                            onboarding_funnel_disabled. They were held behind a flag
     //                            from SHAT-1662; now there is no code to hold.
@@ -270,6 +270,25 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     }
     expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeUndefined()
     expect(mock.lastRequest('GET', '/v1/onboarding/sessions/')).toBeUndefined()
+  })
+
+  // SHAT-5075: the mock must tell the truth about a route the real API has buried. Both removed
+  // routes, every method: 404 with the tombstone's code. A mock that answered 200 here would let a
+  // resurrected tool pass every test in this file against a backend that cannot exist.
+  test('the mock answers the dead /v1/onboarding/* routes as the real API does: 404 onboarding_funnel_disabled', async () => {
+    for (const [method, path] of [['POST', '/v1/onboarding/register'], ['GET', '/v1/onboarding/sessions/sess_x']] as const) {
+      const res = await fetch(`${mock.url}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: method === 'POST' ? '{}' : undefined,
+      })
+      expect(res.status, `${method} ${path}`).toBe(404)
+      const body = (await res.json()) as { code?: string; suggested_fix?: string }
+      expect(body.code).toBe('onboarding_funnel_disabled')
+      expect(body.suggested_fix).toMatch(/enrollment/)
+    }
+    // Positive control, same instrument: a live route of the same mock is not a 404.
+    expect((await fetch(`${mock.url}/v1/mcc-codes`)).status).toBe(200)
   })
 
   // With the flag off (default), the gate must hold at BOTH layers: unlisted

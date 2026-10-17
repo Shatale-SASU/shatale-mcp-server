@@ -146,11 +146,19 @@ export class MockUpstream {
     if (method === 'GET' && path.startsWith('/v1/credentials/')) {
       return ok({ credential_id: path.split('/').pop(), status: 'issued' })
     }
-    if (method === 'POST' && path === '/v1/onboarding/register') {
-      return ok({ session_id: 'sess_mock_1', status: 'pending_verification' })
-    }
-    if (method === 'GET' && path.startsWith('/v1/onboarding/sessions/')) {
-      return ok({ session_id: path.split('/').pop(), status: 'pending_verification' })
+    // SHAT-5075: the onboarding funnel is gone from the real API (SHAT-4435), and this is what it
+    // answers on every method of /v1/onboarding/*: a 404 tombstone, body copied from
+    // shatale-api apps/api/onboarding_tombstone.go. This used to answer 200 with a session, which
+    // made a removed route look alive to anything that still called it.
+    if (path.startsWith('/v1/onboarding/')) {
+      return {
+        status: 404,
+        payload: {
+          code: 'onboarding_funnel_disabled',
+          error: 'this is not the entrance: the onboarding funnel is switched off',
+          suggested_fix: 'use the enrollment funnel: /v1/enrollment/{token}/send-code, /verify-code, /complete',
+        },
+      }
     }
     if (method === 'POST' && path === '/v1/sandbox/authorizations') {
       return ok({ decision: 'approved', explanation: 'all_rules_passed', sandbox: true })
