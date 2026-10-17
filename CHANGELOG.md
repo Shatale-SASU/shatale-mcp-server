@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 1.6.0 — unreleased (prepared 2026-10-17, SHAT-5075)
+
+> Why a minor and not a patch: two tools leave the code. Neither was ever advertised by default
+> (they sat behind `SHATALE_ONBOARDING_ENABLED` since SHAT-1662), so no 1.5.0 tool list changes; a
+> deployment that set the flag loses two tools and gets `Unknown tool` for them. Built on top of the
+> unreleased 1.5.0 below, so **publish only after the shatale-api F1 change that 1.5.0 waits for is on
+> main**: a 1.6.0 tarball contains the 1.5.0 shipping-address tools.
+
+### Removed
+- **`register_user_profile` and `get_onboarding_status`** (SHAT-5075), with their client methods
+  `registerUserProfile` / `getOnboardingStatus`, their zod schema and `src/tools/onboarding.ts`.
+  Funnel B was removed from the API in SHAT-4435: `POST /v1/onboarding/register` and
+  `GET /v1/onboarding/sessions/{id}` answer 404 `onboarding_funnel_disabled`, so a call could only
+  fail. The tool list in every mode (guest 7, sandbox 22, live 7, live + money-GO 18) is unchanged:
+  the pair was not in it.
+- **`SHATALE_ONBOARDING_ENABLED`** — the switch that held the pair back. It is no longer read; setting
+  it does nothing. The README matrix loses its two "+ flags" columns, which had become copies of the
+  columns beside them.
+
+### Tests
+- The tests of the pair are deleted with it. `mock-contract` now asserts the pair is `Unknown tool`
+  by name, with and without the retired flag, and that neither call reaches `/v1/onboarding/*`;
+  `no-sandbox-tool-is-offered-to-a-live-key` asks the running server in every mode. The README gate's
+  controls moved their plants off the removed row (to `request_purchase`).
+
 ## 1.5.0 — unreleased (prepared 2026-10-15, SHAT-6291)
 
 > Why a minor and not a patch: one tool gains an optional input field (`requires_shipping`) and one

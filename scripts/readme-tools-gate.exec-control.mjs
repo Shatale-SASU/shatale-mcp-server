@@ -30,7 +30,6 @@ const sig = (e) => [
   (e.SHATALE_API_KEY ?? '').slice(0, 11),
   e.SHATALE_MODE ?? '',
   e.SHATALE_MONEY_GO ? 'go' : '',
-  e.SHATALE_ONBOARDING_ENABLED ?? '',
   e.SHATALE_CREDENTIAL_EMAILS_ENABLED ?? '',
 ].join('|')
 
