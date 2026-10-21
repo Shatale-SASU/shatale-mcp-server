@@ -2,7 +2,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolCallResult, ToolModule } from '../types.js'
 import { jsonResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
-import { requireId, exactStringFields, describeShape } from '../validate.js'
+import { requireId, requirePersonId, exactStringFields, describeShape } from '../validate.js'
 import { forLog } from '../log-value.js'
 
 // A merchant checkout form can ask for the CARDHOLDER and the BUYER separately. Shatale returns them
@@ -107,7 +107,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
     if (!id.ok) return { ok: false as const, result: id.result }
     let person: string | undefined
     if (args.publisher_user_id !== undefined) {
-      const p = requireId(args, 'publisher_user_id')
+      const p = requirePersonId(args)
       if (!p.ok) return { ok: false as const, result: p.result }
       person = p.value
     } else {
@@ -186,7 +186,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
           if (!id.ok) return id.result
           // REQUIRED, unlike the other two reads: the API answers 400 invalid_request without the
           // person, so a missing or blank one is refused here, before anything is sent.
-          const p = requireId(args, 'publisher_user_id')
+          const p = requirePersonId(args)
           if (!p.ok) return p.result
           const person = p.value
           const data = (await client.getShippingAddress(id.value, person)) as {

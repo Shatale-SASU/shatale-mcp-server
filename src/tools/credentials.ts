@@ -3,11 +3,11 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
-import { requireId } from '../validate.js'
+import { requireId, personIdSchema } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const requestCredentialsSchema = z.object({
-  publisher_user_id: z.string().min(1, 'publisher_user_id is required'),
+  publisher_user_id: personIdSchema,
   agent_id: z.string().min(1, 'agent_id is required'),
   merchant_domain: z.string().min(1, 'merchant_domain is required'),
   purpose: z.string().min(1, 'purpose is required'),
