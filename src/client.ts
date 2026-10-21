@@ -467,8 +467,26 @@ export class ShataleClient {
 
   // Emails received on a credential's relay address (verification/OTP mail). Publisher-scoped
   // by the API key on the backend; the agent reads the code it needs to finish signup.
-  async getCredentialEmails(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}/emails`, undefined, 'caller-id')
+  //
+  // 🔴 SHAT-6689: AND PERSON-SCOPED. The relay inbox belongs to ONE person, so the read names them
+  // with `?publisher_user_id=`. Without it the publisher's key read the mail of ANY person of that
+  // publisher — verification codes and confirmation links addressed to someone else.
+  //
+  // The id is sent ONCE: the server refuses the parameter repeated with different values (400), and
+  // a blank value counts as absent.
+  //
+  // ⚠️ encodeURIComponent, NOT URLSearchParams — AND THE DIFFERENCE IS VISIBLE ON THE WIRE. The two
+  // disagree about the space: URLSearchParams writes `+`, encodeURIComponent writes `%20`. Both
+  // decode back to a space in Go's url.Query(), so either would work — but the card, the checkout
+  // and the shipping address all send this same field with encodeURIComponent. Two spellings of one
+  // field is how `publisher_user_id` drifted into two meanings before (#111); one rule, one spelling.
+  async getCredentialEmails(id: string, publisherUserId: string): Promise<unknown> {
+    return this.request(
+      'GET',
+      `/v1/credentials/${encodeURIComponent(id)}/emails?publisher_user_id=${encodeURIComponent(publisherUserId)}`,
+      undefined,
+      'caller-id',
+    )
   }
 
   // ---- Checkout identity ----
