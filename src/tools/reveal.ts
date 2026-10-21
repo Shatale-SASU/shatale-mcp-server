@@ -2,7 +2,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
-import { requireId, exactStringFields, describeShape } from '../validate.js'
+import { requireId, requirePersonId, exactStringFields, describeShape } from '../validate.js'
 import { forLog } from '../log-value.js'
 
 // reveal_card — the agent-scoped reveal of the card Shatale issued for THIS purchase (SHAT-3023).
@@ -115,7 +115,7 @@ export function createRevealTools(client: ShataleClient): ToolModule {
         // compatibility path meant for callers that never knew the field.
         let personValue: string | undefined
         if (args.publisher_user_id !== undefined) {
-          const person = requireId(args, 'publisher_user_id')
+          const person = requirePersonId(args)
           if (!person.ok) return person.result
           personValue = person.value
         } else {

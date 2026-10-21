@@ -66,6 +66,50 @@ export function requireId(
 }
 
 /**
+ * SHAT-4823 — requirePersonId is requireId's rule for ONE field, publisher_user_id, MINUS the trim.
+ *
+ * ⚠️ THE TRIM IN requireId IS DELIBERATE AND STAYS (see its comment): a path-parameter id of "   "
+ * is not an id, and trimming it is the only way "   " does not become an encoded space in a URL.
+ * publisher_user_id is NOT a path parameter. It travels as the query `?publisher_user_id=` and the
+ * API decides what it means — purchases/service.go:1608 PersonScope: EMPTY AFTER TrimSpace means
+ * "the field is absent", anything else is used AS SENT.
+ *
+ * ⇒ If we trim here, we answer a question that belongs to the API, and we answer it differently
+ * from the API: a caller who sends " u1 " would be scoped to "u1" through this server and to " u1 "
+ * when calling the API directly. Same input, two meanings, and the difference is invisible to the
+ * caller. So: blank is refused (it is "absent", and a caller who tried to name a person and got it
+ * wrong has made a mistake worth telling them about), and everything else leaves UNCHANGED.
+ *
+ * One rule for every tool that takes this field — reveal_card, checkout_identity, request_purchase,
+ * request_credentials — so the next tool cannot drift simply by not knowing. mcp-server#99 adds
+ * three more (get_purchase_status, await_purchase_approval, cancel_purchase); they take this too.
+ */
+export const personIdSchema = z
+  .string({
+    required_error: 'publisher_user_id is required',
+    invalid_type_error: 'publisher_user_id must be a string',
+  })
+  .refine((v) => v.trim() !== '', { message: 'publisher_user_id must not be empty' })
+
+export function requirePersonId(
+  args: Record<string, unknown>,
+): { ok: true; value: string } | { ok: false; result: ToolCallResult } {
+  const parsed = z.object({ publisher_user_id: personIdSchema }).safeParse(args)
+  if (!parsed.success) {
+    const detail = parsed.error.issues.map((i) => i.message).join(', ')
+    return {
+      ok: false,
+      result: textResult(
+        `Invalid input: ${detail}. No request was sent — this is a problem with the arguments to ` +
+          `this tool, not with the server or with any record on it.`,
+        true,
+      ),
+    }
+  }
+  return { ok: true, value: parsed.data.publisher_user_id }
+}
+
+/**
  * requireFirstId is the same check for a handler that accepts an id under more than one name.
  * `sandbox_approve_purchase` takes `purchase_id` OR `request_id`; without this it did
  * `String(args.purchase_id ?? args.request_id ?? '')` and sent an empty segment when it had neither.
