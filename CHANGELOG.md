@@ -35,8 +35,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   that matches the old banner text `live(onboarding-only)` must be updated.
 - The mock upstream used by the tests answers the dead `/v1/onboarding/*` routes the way the real API
   does: 404 `onboarding_funnel_disabled`.
+- **`publisher_user_id` is no longer trimmed — one rule for every tool that takes it** (SHAT-4823).
+  The field is not a path parameter: it travels as `?publisher_user_id=` and the API decides what it
+  means (`PersonScope`: empty after trimming is "the field is absent", anything else is used **as
+  sent**). Trimming here answered a question that belongs to the API, and answered it differently —
+  a caller sending `" u1 "` was scoped to `u1` through this server and to `" u1 "` calling the API
+  directly. New `requirePersonId` / `personIdSchema` (`src/validate.ts`) carry the rule; `reveal_card`,
+  the two checkout reads, `request_purchase` and `request_temporary_credentials` all use it. Blank is
+  still refused — it means "absent", and a caller who tried to name a person and got it wrong has
+  made a mistake worth telling them about. `requireId` keeps its trim for PATH ids, where `"   "` is
+  not an id.
 
 ### Tests
+- **`one-rule-for-the-person-every-tool-takes`** — the person rule is checked where it is SPENT, on
+  the wire, for every one of the five call sites, with a planted mutant per site. Measured twice on
+  the way: a test that called the readers directly let a reverted `reveal.ts` through all 399 tests
+  (a reader can be correct while a tool does not use it), and a wire test for spaced ids alone let a
+  reverted zod schema through all 14 (that schema does not trim either — what it changes is blank).
+  Both gaps are now covered: spaced ids must arrive unchanged, blank ids must never leave at all.
 - The tests of the pair are deleted with it. `mock-contract` now asserts the pair is `Unknown tool`
   by name, with and without the retired flag, and that neither call reaches `/v1/onboarding/*`;
   `no-sandbox-tool-is-offered-to-a-live-key` asks the running server in every mode. The README gate's

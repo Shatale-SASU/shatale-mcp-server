@@ -3,6 +3,9 @@ import { requireId, requirePersonId, personIdSchema } from '../../src/validate.j
 import { vi } from 'vitest'
 import { ShataleClient } from '../../src/client.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
+import { createCheckoutTools } from '../../src/tools/checkout.js'
+import { createPurchaseTools } from '../../src/tools/purchase.js'
+import { createCredentialTools } from '../../src/tools/credentials.js'
 import { z } from 'zod'
 
 // SHAT-4823 — ONE RULE FOR publisher_user_id, ACROSS EVERY TOOL THAT TAKES IT.
@@ -84,6 +87,69 @@ describe('publisher_user_id: one rule, every tool', () => {
     expect(seen.join('\n')).toContain(encodeURIComponent('  u1  '))
     expect(seen.join('\n')).not.toContain('publisher_user_id=u1&')
     expect(seen.join('\n')).not.toMatch(/publisher_user_id=u1$/)
+  })
+
+  // ⚠️ ONE WIRE TEST IS NOT ENOUGH EITHER — MEASURED. With only the reveal_card wire above, the
+  // other four call sites (checkout.ts:110, checkout.ts:189, purchase.ts:10, credentials.ts:10)
+  // revert to requireId / bare z.string() WITHOUT A SINGLE RED TEST. Found by the second hand on
+  // #111: the mutant reddened on reveal and on nothing else. So every call site gets its own wire.
+  const SPACED = '  u1  '
+  const ENCODED = encodeURIComponent(SPACED)
+
+  type Call = readonly [string, (client: ShataleClient, person?: string) => Promise<unknown>]
+  const CALLS: ReadonlyArray<Call> = [
+    ['reveal_card', (c, person = SPACED) => createRevealTools(c).handlers.reveal_card({ purchase_id: 'pur_4823', publisher_user_id: person } as Record<string, unknown>)],
+    ['get_checkout_cardholder', (c, person = SPACED) => createCheckoutTools(c).handlers.get_checkout_cardholder({ purchase_id: 'pur_4823', publisher_user_id: person } as Record<string, unknown>)],
+    ['get_shipping_address', (c, person = SPACED) => createCheckoutTools(c).handlers.get_shipping_address({ purchase_id: 'pur_4823', publisher_user_id: person } as Record<string, unknown>)],
+    ['request_purchase', (c, person = SPACED) => createPurchaseTools(c, { isSandbox: true }).handlers.request_purchase({ publisher_user_id: person, agent_id: 'a1', merchant: 'm.example', amount: 1, currency: 'EUR', description: 'd' } as Record<string, unknown>)],
+    ['request_temporary_credentials', (c, person = SPACED) => createCredentialTools(c).handlers.request_temporary_credentials({ publisher_user_id: person, agent_id: 'a1', merchant_domain: 'm.example', purpose: 'p' } as Record<string, unknown>)],
+  ]
+
+  test.each(CALLS)('%s puts the id on the wire exactly as given', async (_name, call) => {
+    const seen: string[] = []
+    const fn = vi.fn(async (url: unknown, init?: unknown) => {
+      seen.push(String(url))
+      const body = (init as { body?: unknown } | undefined)?.body
+      if (typeof body === 'string') seen.push(body)
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fn)
+    try {
+      await call(new ShataleClient('https://api.example.test', 'sk_sandbox_abc'))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(seen.length, 'the tool made no request at all').toBeGreaterThan(0)
+    const wire = seen.join('\n')
+    // The id reaches the API either in the query (percent-encoded) or in a JSON body (raw).
+    expect(wire.includes(ENCODED) || wire.includes(JSON.stringify(SPACED))).toBe(true)
+    // And a trim anywhere on the path would have sent the bare value instead.
+    expect(wire).not.toContain('publisher_user_id=u1&')
+    expect(wire).not.toMatch(/publisher_user_id=u1$/m)
+    expect(wire).not.toContain('"publisher_user_id":"u1"')
+  })
+
+  // ⚠️ AND THE SPACED-ID WIRE DOES NOT COVER EVERYTHING EITHER — MEASURED on this very PR.
+  // Reverting purchase.ts:10 / credentials.ts:10 to a bare `z.string().min(1)` left ALL 14 tests
+  // green: that schema does not trim either, so a spaced id travels the same. What it DOES change
+  // is blank — "   " is three characters, `.min(1)` accepts it, and a blank person reaches the API
+  // as a present-but-meaningless scope. So blank has to be checked on the wire too: it must never
+  // leave the process at all.
+  test.each(CALLS)('%s refuses a blank id instead of putting it on the wire', async (_name, call) => {
+    const seen: string[] = []
+    const fn = vi.fn(async (url: unknown, init?: unknown) => {
+      seen.push(String(url))
+      const body = (init as { body?: unknown } | undefined)?.body
+      if (typeof body === 'string') seen.push(body)
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fn)
+    try {
+      await call(new ShataleClient('https://api.example.test', 'sk_sandbox_abc'), '   ')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(seen.join('\n'), 'a blank person id reached the API').toBe('')
   })
 
   // requireId keeps its trim for PATH ids — this change must not have touched it.
