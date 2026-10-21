@@ -218,7 +218,12 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       'wire-fixtures-emails',
     )
     await emails.initialize()
-    await emails.callTool('get_credential_emails', { credential_request_id: 'cred_fixture_2' })
+    // SHAT-6689: the person travels with the read, so the captured fixture shows the query the
+    // API actually receives — a fixture without it would document a call the server now refuses.
+    await emails.callTool('get_credential_emails', {
+      credential_request_id: 'cred_fixture_2',
+      publisher_user_id: 'user_fixture_2',
+    })
     captured.push({
       label: 'get_credential_emails',
       struct_hint: 'apps/api/api/v1/credentials.go emails route',

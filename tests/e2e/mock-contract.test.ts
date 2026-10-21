@@ -304,7 +304,13 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
   // the relay inbox, so a tool that stopped working is still caught — by what it DOES rather than
   // by what it refuses.
   test('get_credential_emails is callable now that its backend is deployed', async () => {
-    const result = await client.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+    // SHAT-6689: the read names the person whose relay inbox it is. Without the id the tool now
+    // refuses BEFORE the request, so this call carries it — the test is about the tool being
+    // callable, not about the old argument list.
+    const result = await client.callTool('get_credential_emails', {
+      credential_request_id: 'cred_mock_1',
+      publisher_user_id: 'user_mock_1',
+    })
     expect(ToolResultText(result)).not.toContain('Unknown tool')
     expect(mock.lastRequest('GET', '/v1/credentials/cred_mock_1/emails')).toBeDefined()
   })
@@ -327,7 +333,10 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
       const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
       expect(names).toContain('get_credential_emails')
 
-      const result = await flagged.callTool('get_credential_emails', { credential_request_id: 'cred_mock_1' })
+      const result = await flagged.callTool('get_credential_emails', {
+        credential_request_id: 'cred_mock_1',
+        publisher_user_id: 'user_mock_1',
+      })
       const text = ToolResultText(result)
       // The OTP body must reach the agent verbatim (it's the payload)...
       expect(text).toContain('483920')
