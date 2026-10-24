@@ -3,7 +3,7 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
-import { requireId, personIdSchema } from '../validate.js'
+import { requireId, requirePersonId, personIdSchema } from '../validate.js'
 
 // F-003: Zod input validation schemas
 const requestCredentialsSchema = z.object({
@@ -110,8 +110,14 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
               type: 'string',
               description: 'The credential request ID whose relay inbox to read',
             },
+            publisher_user_id: {
+              type: 'string',
+              description:
+                'The publisher-side user ID of the person this relay inbox belongs to. The mail ' +
+                'is theirs: naming someone else reads nothing (404), not someone else\'s messages.',
+            },
           },
-          required: ['credential_request_id'],
+          required: ['credential_request_id', 'publisher_user_id'],
         },
       },
     ] as ToolModule['tools'])
@@ -176,8 +182,13 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
       get_credential_emails: async (args) => {
         const emailsId = requireId(args, 'credential_request_id')
         if (!emailsId.ok) return emailsId.result
+        // SHAT-6689: the relay inbox belongs to ONE person, so the read names them. Checked HERE,
+        // before any request leaves: a blank or absent id is the caller's mistake, and the refusal
+        // says so instead of spending a round trip to be told the same thing.
+        const emailsPerson = requirePersonId(args)
+        if (!emailsPerson.ok) return emailsPerson.result
         try {
-          const result = await client.getCredentialEmails(emailsId.value) as Record<string, unknown>
+          const result = await client.getCredentialEmails(emailsId.value, emailsPerson.value) as Record<string, unknown>
           // Repeat the untrusted-content warning IN the payload, adjacent to the email bodies —
           // a note next to the hostile content survives the model's attention far better than a
           // tool description. (Server-side OTP extraction is the real fix: SHAT-1742.)

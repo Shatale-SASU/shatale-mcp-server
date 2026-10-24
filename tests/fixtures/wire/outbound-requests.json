@@ -127,7 +127,10 @@
     "label": "get_credential_emails",
     "struct_hint": "apps/api/api/v1/credentials.go emails route",
     "method": "GET",
-    "path": "/v1/credentials/cred_fixture_2/emails"
+    "path": "/v1/credentials/cred_fixture_2/emails",
+    "query": {
+      "publisher_user_id": "user_fixture_2"
+    }
   },
   {
     "label": "request_purchase (decimal amount → integer amount_cents, merchant → merchant_ref)",

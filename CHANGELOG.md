@@ -28,6 +28,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   columns beside them.
 
 ### Changed
+- **`get_credential_emails` now takes `publisher_user_id`, and it is required** (SHAT-6689). The
+  relay inbox belongs to ONE person: until now a publisher's API key read the verification mail of
+  **any** person of that publisher — codes and confirmation links addressed to someone else. The id
+  travels as `?publisher_user_id=` (the API reads it with `personScopeOfRequest`); a blank or absent
+  one is refused here, before the request leaves. ⚠️ **Callers must pass it**: a call with only
+  `credential_request_id` now returns an argument error instead of a stranger's mail.
+- Sent with `encodeURIComponent`, like the card, the checkout and the shipping address send the same
+  field — `URLSearchParams` would spell a space `+` where the rest of this client spells it `%20`.
+  Both decode to a space server-side, but one field with two spellings is how it drifted before.
 - **The live mode without money-GO is no longer called "onboarding-only".** It serves the seven
   public tools and no onboarding tool at all, so the name promised something that did not exist. The
   startup banner now reads `live(no-money-GO)`, `explain_shatale` and `list_capabilities` say
@@ -47,6 +56,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   not an id.
 
 ### Tests
+- `the-relay-inbox-belongs-to-one-person.test.ts` — four cases, all **on the wire**: the id reaches
+  the API untrimmed and exactly once; a missing id and a blank id each stop the call before any
+  request leaves; the tool declares the field required. Three mutants (check removed, id not sent,
+  id trimmed) each turn it red.
 - **`one-rule-for-the-person-every-tool-takes`** — the person rule is checked where it is SPENT, on
   the wire, for every one of the five call sites, with a planted mutant per site. Measured twice on
   the way: a test that called the readers directly let a reverted `reveal.ts` through all 399 tests
