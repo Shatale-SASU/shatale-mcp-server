@@ -38,6 +38,7 @@
     "not_found",
     "not_implemented",
     "payment_method_expired",
+    "plan_agent_in_testing",
     "plan_not_for_sale",
     "plan_terms_changed",
     "profile_field_required",
