@@ -34,8 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > loses both tools and gets `Unknown tool` for them. No tool list of any default mode changes
 > (guest 7, sandbox 22, live without money-GO 7, live + money-GO 18).
 >
-> Built on top of the unreleased 1.5.0 below, so **publish only after the shatale-api F1 change that
-> 1.5.0 waits for is on main**: a 2.0.0 tarball contains the 1.5.0 shipping-address tools.
+> Built on the never-published 1.5.0 below, so a 2.0.0 tarball contains its shipping-address tools.
+> Published 2026-10-17, once the shatale-api F1 change that 1.5.0 waited for was on main.
 
 ### Removed (BREAKING)
 - **`register_user_profile` and `get_onboarding_status`** (SHAT-5075), with their client methods
