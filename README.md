@@ -42,11 +42,11 @@ SHATALE_API_KEY=sk_sandbox_xxx npx shatale-mcp-server
 
 Free sandbox key, no card required → [admin.shatale.com/register?ref=mcp](https://admin.shatale.com/register?ref=mcp)
 
-> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 21 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674 and the card reveal (`reveal_card`) added by SHAT-3023. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
+> Guest = **explore**: 7 tools <!-- count:guest --> — two offline tools (`simulate_purchase_flow`, `generate_policy_template`), two discovery tools (`explain_shatale`, `list_capabilities`) and three catalog reads (`search_merchants`, `get_merchant_details`, `list_mcc_codes`). Sandbox = **build**: 22 tools <!-- count:sandbox --> — the full lifecycle, including the two checkout reads (`get_checkout_customer`, `get_checkout_cardholder`) opened in the sandbox by SHAT-2674, the card reveal (`reveal_card`) added by SHAT-3023 and the delivery-address read (`get_shipping_address`) added by SHAT-6291. The exact per-mode list is the [tool matrix](#tools) below, and it is generated from the running server, not written by hand.
 >
-> Two tools exist in the code and are deliberately not advertised, because a tool an agent can see is a tool it will try, and it cannot ask a follow-up question when the answer is a 404: `register_user_profile` / `get_onboarding_status` (the register→status loop cannot close on any deployed backend — the session id is never persisted, so the second step 404s forever). They return under `SHATALE_ONBOARDING_ENABLED` once that backend actually ships.
+> `register_user_profile` <!-- gone:register_user_profile --> and `get_onboarding_status` <!-- gone:get_onboarding_status --> were removed in 2.0.0 (SHAT-5075), together with the `SHATALE_ONBOARDING_ENABLED` switch that held them back: the API's `/v1/onboarding/*` routes answer 404 `onboarding_funnel_disabled`, so there is no backend the pair could return for. `request_purchase` reports when the person must finish onboarding.
 >
-> `get_credential_emails` used to be the third. Its suppression named a condition — "#361 merged AND deployed" — and both halves have since been met: the route is registered in `apps/api/main.go` with no flag beside it (the commit that added it says "revives #361"), and `GET /v1/credentials/{id}/emails` on the live API answers 401 from the auth middleware, where a path the router does not serve answers a plain `404 page not found`. Measured 2026-08-27, with that nonsense path as the control. The flag is removed rather than defaulted on: a switch whose condition is satisfied is one nobody looks at again, and the next reader takes it for a live decision.
+> `get_credential_emails` used to be another one held back. Its suppression named a condition — "#361 merged AND deployed" — and both halves have since been met: the route is registered in `apps/api/main.go` with no flag beside it (the commit that added it says "revives #361"), and `GET /v1/credentials/{id}/emails` on the live API answers 401 from the auth middleware, where a path the router does not serve answers a plain `404 page not found`. Measured 2026-08-27, with that nonsense path as the control. The flag is removed rather than defaulted on: a switch whose condition is satisfied is one nobody looks at again, and the next reader takes it for a live decision.
 >
 > **A live key moves real money, and this document used to say the opposite.** Since v0.4 a `sk_live_*` key IS accepted — but only together with `SHATALE_MODE=live`, and the purchase and credential tools are not even registered unless `SHATALE_MONEY_GO` hashes to the deploy-time `SHATALE_MONEY_GO_SHA256`. A live key WITHOUT the mode flag refuses to start, and the mode flag without a live key refuses too. A local IDE is still not a trust boundary for live payment credentials — that is an argument for not setting those variables, not a claim that the server prevents you.
 
@@ -96,39 +96,84 @@ Add to `.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 }
 ```
 
+## Remote transport (streamable HTTP)
+
+The server speaks **stdio by default** — that is what Claude Desktop, Cursor and every other local
+MCP client use, and nothing below changes it. A second transport exists for callers that cannot
+spawn a child process, such as a web application.
+
+The transport is chosen explicitly. It is never inferred from the environment: a server that guesses
+comes up speaking a protocol nobody on the other end is speaking, which looks like a hang rather
+than a misconfiguration.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHATALE_MCP_TRANSPORT` | `stdio` | `stdio` or `http`. An unrecognised value is refused, not defaulted. |
+| `SHATALE_MCP_HTTP_PORT` | `3000` | Port for the HTTP endpoint. A value that is not a port is refused. |
+| `SHATALE_MCP_HTTP_HOST` | `127.0.0.1` | Interface to bind. Loopback unless you choose otherwise. |
+
+```bash
+SHATALE_MCP_TRANSPORT=http \
+SHATALE_MCP_HTTP_PORT=3000 \
+SHATALE_API_KEY=sk_sandbox_... \
+  npx shatale-mcp-server
+```
+
+Callers present the publisher key as a bearer token:
+
+```
+POST / HTTP/1.1
+Authorization: Bearer sk_sandbox_...
+Content-Type: application/json
+Accept: application/json, text/event-stream
+```
+
+A request with **no key** is refused with `401 {"error":"missing_key"}`; a request whose key is
+**not accepted** is refused with `401 {"error":"key_not_accepted"}`. The two are kept apart
+deliberately — a caller that has not been wired up yet and a caller wired to the wrong server are
+different problems, and a single "unauthorized" for both sends them to the same dead end. No refusal
+ever echoes key material.
+
+> ⚠️ **HTTP mode requires a key.** Guest mode has no publisher key to authenticate callers against,
+> so `SHATALE_MCP_TRANSPORT=http` without `SHATALE_API_KEY` refuses to start rather than listening on
+> a network and admitting everyone.
+
+Both transports advertise the **same tools** — they are built from one roster rather than two lists
+that agree today, and a test asks both running transports and compares the sets.
+
+
 ## Tools
 
 <!-- BEGIN-generated:shatale-tool-matrix -->
 <!-- Generated by scripts/readme-tools-gate.mjs from the BUILT server over stdio. Do not edit by hand: run `npm run gate:readme -- --fix`. -->
 
-| Tool | guest (no key)  | sandbox  | sandbox + flags  | live, no money-GO  | live + money-GO  | live + money-GO + flags  |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| `explain_shatale` | yes | yes | yes | yes | yes | yes |
-| `simulate_purchase_flow` | yes | yes | yes | yes | yes | yes |
-| `generate_policy_template` | yes | yes | yes | yes | yes | yes |
-| `list_capabilities` | yes | yes | yes | yes | yes | yes |
-| `list_mcc_codes` | yes | yes | yes | yes | yes | yes |
-| `search_merchants` | yes | yes | yes | yes | yes | yes |
-| `get_merchant_details` | yes | yes | yes | yes | yes | yes |
-| `request_purchase` | — | yes | yes | — | yes | yes |
-| `get_purchase_status` | — | yes | yes | — | yes | yes |
-| `await_purchase_approval` | — | yes | yes | — | yes | yes |
-| `cancel_purchase` | — | yes | yes | — | yes | yes |
-| `request_temporary_credentials` | — | yes | yes | — | yes | yes |
-| `get_credential_status` | — | yes | yes | — | yes | yes |
-| `get_credential_emails` | — | yes | yes | — | yes | yes |
-| `sandbox_simulate_authorization` | — | yes | yes | — | — | — |
-| `sandbox_create_user` | — | yes | yes | — | — | — |
-| `sandbox_complete_onboarding` | — | yes | yes | — | — | — |
-| `sandbox_approve_purchase` | — | yes | yes | — | — | — |
-| `get_checkout_cardholder` | — | yes | yes | — | yes | yes |
-| `get_checkout_customer` | — | yes | yes | — | yes | yes |
-| `reveal_card` | — | yes | yes | — | yes | yes |
-| `register_user_profile` | — | — | yes | — | — | yes |
-| `get_onboarding_status` | — | — | yes | — | — | yes |
-| **total advertised** | **7** | **21** | **23** | **7** | **17** | **19** |
+| Tool | guest (no key)  | sandbox  | live, no money-GO  | live + money-GO  |
+|---|:-:|:-:|:-:|:-:|
+| `explain_shatale` | yes | yes | yes | yes |
+| `simulate_purchase_flow` | yes | yes | yes | yes |
+| `generate_policy_template` | yes | yes | yes | yes |
+| `list_capabilities` | yes | yes | yes | yes |
+| `list_mcc_codes` | yes | yes | yes | yes |
+| `search_merchants` | yes | yes | yes | yes |
+| `get_merchant_details` | yes | yes | yes | yes |
+| `request_purchase` | — | yes | — | yes |
+| `get_purchase_status` | — | yes | — | yes |
+| `await_purchase_approval` | — | yes | — | yes |
+| `cancel_purchase` | — | yes | — | yes |
+| `request_temporary_credentials` | — | yes | — | yes |
+| `get_credential_status` | — | yes | — | yes |
+| `get_credential_emails` | — | yes | — | yes |
+| `sandbox_simulate_authorization` | — | yes | — | — |
+| `sandbox_create_user` | — | yes | — | — |
+| `sandbox_complete_onboarding` | — | yes | — | — |
+| `sandbox_approve_purchase` | — | yes | — | — |
+| `get_checkout_cardholder` | — | yes | — | yes |
+| `get_checkout_customer` | — | yes | — | yes |
+| `get_shipping_address` | — | yes | — | yes |
+| `reveal_card` | — | yes | — | yes |
+| **total advertised** | **7** | **22** | **7** | **18** |
 
-Tools defined in the code: **23**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
+Tools defined in the code: **22**. A tool appears in a column only if the server actually returned it from `tools/list` in that mode — no column is a plan or an intention.
 
 #### What each tool does
 
@@ -141,7 +186,7 @@ Tools defined in the code: **23**. A tool appears in a column only if the server
 - `list_mcc_codes` — Search or list MCC (Merchant Category Codes) used for spending policy configuration.
 - `search_merchants` — Search the Shatale merchant catalog. Find merchants by category, capability, keyword, or country. Returns merchants with their MCP capabilities so you can determine which merchants support agent-driven purchases.
 - `get_merchant_details` — Get detailed information about a specific merchant, including their MCP server configuration, available tools, rate limits, and capabilities. Use this after search_merchants to get integration details.
-- `request_purchase` — Request a purchase on behalf of a user. Shatale checks it against the spending policies and answers with a STATUS to act on — it does not complete the payment. The answer may say the user must finish onboarding, that a delegation is missing, that policy blocked it, or that it is waiting for approval. When it reaches payment_ready a card has been issued for it and paying at the merchant is the next step, yours to take.
+- `request_purchase` — Request a purchase on behalf of a user. Shatale checks it against the spending policies and answers with a STATUS to act on — it does not complete the payment. The answer may say the user must finish onboarding, that a delegation is missing, that policy blocked it, or that it is waiting for approval. When it reaches payment_ready a card has been issued for it and paying at the merchant is the next step, yours to take. If the goods are physical, pass requires_shipping: true. When the person has no shipping address on file the answer is blocked with block_reason shipping_address_required, state action_required, requirements [{type: shipping_address, status: missing}] and a next_action of type open_url: send the person to that URL to add their address, and tell them why. No money moves until an address exists. Never put an address in this request — it is refused; once the purchase is payment_ready, read it with get_shipping_address.
 - `get_purchase_status` — Get the current status of a purchase request by its ID.
 - `await_purchase_approval` — Wait for the person to answer a purchase that needs their approval, instead of polling. Returns approved, declined, expired, ended — or still_waiting, which means nobody has answered yet and you may call this again. ended means there will be no answer: the purchase was cancelled, abandoned or failed, its payment hold expired, or it was stopped without the person being asked; its reason field says which, so tell the person what happened, not that they declined. approved with reason not_required means the publisher's policy allowed the purchase and the person was never asked; approved without a reason means the person approved it. Only approved means approved: treat any other outcome, including one not listed here, as not approved. It reads the decision; calling it never changes the purchase, and get_purchase_status keeps working alongside it.
 - `cancel_purchase` — Cancel a pending purchase request. Only works for purchases not yet executed.
@@ -154,9 +199,8 @@ Tools defined in the code: **23**. A tool appears in a column only if the server
 - `sandbox_approve_purchase` — Manually approve a sandbox purchase that is pending user/admin approval (simulates the human-in-the-loop approval beat).
 - `get_checkout_cardholder` — The CARDHOLDER / billing identity to put in a merchant's cardholder and billing-address fields: Shatale (the legal owner of the card being used). This is NOT the buyer — use get_checkout_customer for the buyer/customer fields. This returns an IDENTITY only: the card number, expiry and CVV are NOT returned here; card entry is handled out-of-band.
 - `get_checkout_customer` — The BUYER / customer identity to put in a merchant's name, email and customer/donor fields: the end-user this purchase is for. This is NOT the cardholder — use get_checkout_cardholder for the cardholder/billing fields.
+- `get_shipping_address` — Read the person's delivery address for THIS purchase, to complete a merchant's shipping form. It is PERSONAL DATA. It is released only while the purchase is payment_ready AND the person's account is active (not after completion), and only for a purchase that asked for shipping (request_purchase with requires_shipping: true). EVERY read is journaled and is visible to the person in their account. Use it only to complete this purchase's delivery: do not store it, do not reuse it for another purchase, and do not repeat it back or send it anywhere else. If it comes back as missing, send the person to add an address (follow next_action open_url when it is given); if not ready, wait for the purchase to be payment_ready (and the account active); if shipping is not required, the purchase was created without requires_shipping; not_found means check the ids.
 - `reveal_card` — Reveal the card credentials (number, expiry, CVV) of the Shatale card issued for THIS purchase, so the agent can complete a merchant checkout that has no out-of-band path. Only the card WE issued for this purchase is ever returned — a customer's own instrument is not available here and is stripped from any other response. Use get_checkout_cardholder and get_checkout_customer for the identity fields; this tool is only for the card fields. Every successful reveal is recorded in the credential access log.
-- `register_user_profile` — Submit user profile data to Shatale for a new user. The user will receive a verification link to confirm their identity and data. This does NOT create an active account — the user must verify. Use this when you have user details but no immediate purchase intent, or to pre-register before purchasing.
-- `get_onboarding_status` — Check the status of a user onboarding/registration session. Returns whether the user has verified their email, completed their profile, and granted any required consents.
 <!-- END-generated:shatale-tool-matrix -->
 
 ### Notes the matrix cannot carry
@@ -178,12 +222,8 @@ advertises it, so a prompt cannot survive here after its tool stops being reacha
 - *"Check the status of purchase pur_123"* <!-- prompt:get_purchase_status@sandbox -->
 - *"Cancel pending purchase pur_123"* <!-- prompt:cancel_purchase@sandbox -->
 
-Prompts removed from this list rather than fixed:
-
-- *"Register a new user with email …"* — the onboarding pair is not advertised by default, so this prompt returned `Unknown tool: register_user_profile`. It comes back when `SHATALE_ONBOARDING_ENABLED=true` has a backend behind it. <!-- prompt-unreachable:register_user_profile@sandbox -->
-
 *"Search for electronics merchants in Germany"* and *"What merchants are available in the travel
-category?"* were removed for a different reason: the tools work, the catalog is empty (see the
+category?"* were removed from this list rather than fixed: the tools work, the catalog is empty (see the
 note above), so those prompts led a reader to an empty list that looks like a broken integration.
 The gate cannot check this one — it never makes a network call — so it is a claim on a human,
 re-checked whenever the catalog policy changes.

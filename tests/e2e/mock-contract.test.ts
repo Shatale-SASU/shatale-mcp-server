@@ -38,16 +38,16 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     await mock.close()
   })
 
-  test('sandbox key unlocks the 21 backed tools; the two unbacked ones stay hidden', async () => {
+  test('sandbox key unlocks the 22 tools; the removed onboarding pair is not among them', async () => {
     const res = await client.send('tools/list')
-    // 21, and every one missing is missing on purpose — a tool we advertise is a
+    // 22, and every one missing is missing on purpose — a tool we advertise is a
     // tool an agent will try, and it cannot ask a follow-up question when the answer
     // is a 404.
     //
-    //   register_user_profile  \ the register→status loop cannot close on ANY
-    //   get_onboarding_status  / deployed backend — the session id is never
-    //                            persisted, so the second step 404s forever
-    //                            (SHAT-1662)
+    //   register_user_profile  \ removed in 2.0.0 (SHAT-5075): Funnel B is gone from the API
+    //   get_onboarding_status  / (SHAT-4435), /v1/onboarding/* answers 404
+    //                            onboarding_funnel_disabled. They were held behind a flag
+    //                            from SHAT-1662; now there is no code to hold.
     //
     // ⚠️ get_credential_emails WAS THE THIRD, and it is here now. Its suppression named a
     // condition — "#361 merged AND deployed" — and both halves have been met: the route is
@@ -75,7 +75,7 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     // them, which is the same shape as every defect this file's neighbours were written for: the
     // count is measured, the explanation of the count is not, and a reader checking WHY the number
     // is what it is gets last release's answer. Bump all three or none.
-    expect(res.result?.tools ?? []).toHaveLength(21)
+    expect(res.result?.tools ?? []).toHaveLength(22)
     const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
     expect(names).toContain('get_credential_emails')
     expect(names).not.toContain('register_user_profile')
@@ -239,51 +239,56 @@ describe('Mock Contract: sandbox mode (no live key)', () => {
     expect(mock.lastRequest('POST', '/v1/sandbox/purchases/')).toBeDefined()
   })
 
-  // Same two-layer gate as get_credential_emails: unlisted AND uncallable. The
-  // dispatch resolves handlers, not the advertised list, so a listing-only gate
-  // leaves the tool reachable by name — and this pair must not reach the backend at
-  // all, because the call succeeds and hands back a session id that will never
-  // resolve. A silent dead end is worse than a refusal.
-  test('the onboarding pair is not callable while gated (flag off)', async () => {
-    for (const name of ['register_user_profile', 'get_onboarding_status']) {
-      const result = await client.callTool(name, {
-        publisher_user_id: 'pub-1',
-        user_claims: { email: 'a@b.com', name: 'Mock User' },
-        session_id: 'sess_mock_1',
-      })
-      expect(ToolResultText(result)).toContain(`Unknown tool: ${name}`)
+  // SHAT-5075: the pair is removed, not gated. It must be unlisted (asserted above), uncallable by
+  // name, and the retired SHATALE_ONBOARDING_ENABLED must raise nothing — a leftover flag that
+  // still did something would be the removal not having happened. Neither call may reach the backend.
+  test('the removed onboarding pair is Unknown tool, with or without the retired flag', async () => {
+    const args = {
+      publisher_user_id: 'pub-1',
+      user_claims: { email: 'a@b.com', name: 'Mock User' },
+      session_id: 'sess_mock_1',
     }
-    expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeUndefined()
-  })
-
-  // And the gate opens. A gate nobody has seen open is a gate that may simply be a
-  // deletion — this is the shape the deploy takes once Funnel B is merged AND
-  // deployed, which is the flip condition, not "the backend flag is on".
-  test('the onboarding pair returns when SHATALE_ONBOARDING_ENABLED=true', async () => {
     const flagged = new McpTestClient(
       {
         SHATALE_API_KEY: 'sk_sandbox_mock',
         SHATALE_API_URL: mock.url,
         SHATALE_ONBOARDING_ENABLED: 'true',
       },
-      'mock-contract-onboarding-on',
+      'mock-contract-onboarding-retired-flag',
     )
     try {
       await flagged.initialize()
-      const res = await flagged.send('tools/list')
-      const names = (res.result?.tools ?? []).map((t: { name: string }) => t.name)
-      expect(names).toContain('register_user_profile')
-      expect(names).toContain('get_onboarding_status')
-
-      const result = await flagged.callTool('register_user_profile', {
-        publisher_user_id: 'pub-1',
-        user_claims: { email: 'a@b.com', name: 'Mock User' },
-      })
-      expect(ToolResultText(result)).toContain('sess_mock_1')
-      expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeDefined()
+      const names = ((await flagged.send('tools/list')).result?.tools ?? []).map((t: { name: string }) => t.name)
+      expect(names).toHaveLength(22)
+      for (const name of ['register_user_profile', 'get_onboarding_status']) {
+        expect(names).not.toContain(name)
+        expect(ToolResultText(await client.callTool(name, args))).toContain(`Unknown tool: ${name}`)
+        expect(ToolResultText(await flagged.callTool(name, args))).toContain(`Unknown tool: ${name}`)
+      }
     } finally {
       await flagged.close()
     }
+    expect(mock.lastRequest('POST', '/v1/onboarding/register')).toBeUndefined()
+    expect(mock.lastRequest('GET', '/v1/onboarding/sessions/')).toBeUndefined()
+  })
+
+  // SHAT-5075: the mock must tell the truth about a route the real API has buried. Both removed
+  // routes, every method: 404 with the tombstone's code. A mock that answered 200 here would let a
+  // resurrected tool pass every test in this file against a backend that cannot exist.
+  test('the mock answers the dead /v1/onboarding/* routes as the real API does: 404 onboarding_funnel_disabled', async () => {
+    for (const [method, path] of [['POST', '/v1/onboarding/register'], ['GET', '/v1/onboarding/sessions/sess_x']] as const) {
+      const res = await fetch(`${mock.url}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: method === 'POST' ? '{}' : undefined,
+      })
+      expect(res.status, `${method} ${path}`).toBe(404)
+      const body = (await res.json()) as { code?: string; suggested_fix?: string }
+      expect(body.code).toBe('onboarding_funnel_disabled')
+      expect(body.suggested_fix).toMatch(/enrollment/)
+    }
+    // Positive control, same instrument: a live route of the same mock is not a 404.
+    expect((await fetch(`${mock.url}/v1/mcc-codes`)).status).toBe(200)
   })
 
   // With the flag off (default), the gate must hold at BOTH layers: unlisted

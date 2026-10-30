@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { resolveTransport } from './transport-choice.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -19,7 +20,6 @@ import { createCredentialTools } from './tools/credentials.js'
 import { createCheckoutTools } from './tools/checkout.js'
 import { createRevealTools } from './tools/reveal.js'
 import { createSandboxTools } from './tools/sandbox.js'
-import { createOnboardingTools } from './tools/onboarding.js'
 import { createCatalogTools } from './tools/catalog.js'
 import { createCommonTools, isSandboxKey } from './tools/common.js'
 import type { ToolContext, ToolDefinition, ToolHandler } from './types.js'
@@ -44,7 +44,7 @@ const apiKey = process.env.SHATALE_API_KEY ?? ''
 // its comment says it exists because such keys "previously fell into a phantom 'production' mode
 // that could never authenticate". But `sh_live_anything` satisfied isLive, so it walked straight
 // past that guard into live mode — measured, not reasoned: with SHATALE_MODE=live the server
-// STARTED and reported "live(onboarding-only) mode, 7 tools". The phantom mode the guard was written
+// STARTED and reported "live(onboarding-only) mode, 7 tools" (SHAT-5075: that mode is now named live(no-money-GO)). The phantom mode the guard was written
 // to remove was recreated by a line above it.
 //
 // ⚠️ AND THE ERROR MESSAGE WAS ALREADY RIGHT while the code was wrong: it says "a live key
@@ -208,10 +208,10 @@ if (!isGuest && !isSandbox && !isLive) {
   process.exit(1)
 }
 
-// Separate gate for MONEY movement in live mode. Onboarding (no money) is always
-// available once authenticated; purchase/credentials (which move money / issue
+// Separate gate for MONEY movement in live mode. Without it only the public tools are
+// served; purchase/credentials (which move money / issue
 // cards) additionally require an explicit money-GO token. This keeps
-// registration (free) and payment (real €) on DIFFERENT gates (council + Fable).
+// (free) and payment (real €) on DIFFERENT gates (council + Fable).
 // SHATALE_MONEY_GO is Sergey's opaque go-code; money turns on ONLY when its
 // SHA-256 equals SHATALE_MONEY_GO_SHA256 (exact match, resolveMoneyGo). The
 // earlier length+deny-list heuristic kept the fatal polarity — an unknown ≥4-char
@@ -224,9 +224,9 @@ const moneyGo = resolveMoneyGo(process.env.SHATALE_MONEY_GO, process.env.SHATALE
 // deployed" — has been met on both halves, measured. See src/tools/credentials.ts for the probe and
 // its control. A flag whose condition is satisfied is a switch nobody looks at again, and the next
 // reader takes it for a live decision.
-// SHAT-1662: see src/tools/onboarding.ts — the register→status loop cannot close on any
-// deployed backend, so the pair stays unadvertised until Funnel B is merged AND deployed.
-const onboardingEnabled = (process.env.SHATALE_ONBOARDING_ENABLED ?? '').toLowerCase() === 'true'
+// SHAT-5075: the onboarding pair (register_user_profile / get_onboarding_status) and its flag
+// SHATALE_ONBOARDING_ENABLED are gone. Funnel B was removed in SHAT-4435: /v1/onboarding/* answers
+// 404 onboarding_funnel_disabled, so there is no backend a flag could ever wait for.
 
 const client = new ShataleClient(apiBase, apiKey)
 
@@ -258,9 +258,6 @@ registerModule(createCatalogTools(client))
 
 // Register authenticated tools once a key is present.
 if (!isGuest) {
-  // Onboarding moves no money and touches no PAN — available in demo and live.
-  registerModule(createOnboardingTools(client, { enabled: onboardingEnabled }))
-
   if (isSandbox) {
     // Demo: request_purchase runs the ordinary path — the server stamps the environment from the
     // key (SHAT-2373), so nothing here reaches live money; the client-side refusal was removed in
@@ -294,7 +291,8 @@ if (!isGuest) {
     registerModule(createRevealTools(client))
   } else if (isLive && moneyGo) {
     // Live + explicit money-GO: real purchase/credentials. Without money-GO,
-    // live mode is onboarding-only (can drive registration, cannot move money).
+    // live mode serves the seven public tools only (simulate, discover, catalog): no purchase,
+    // no credential, no onboarding tool, and nothing that moves money.
     registerModule(createPurchaseTools(client, { isSandbox: false }))
     registerModule(createCredentialTools(client))
     registerModule(createCheckoutTools(client))
@@ -483,81 +481,101 @@ function getPromptMessages(name: string, args: Record<string, string | undefined
   }
 }
 
-// Create server
-const server = new Server(
-  { name: 'shatale-mcp', version: VERSION },
-  { capabilities: { tools: {}, resources: {}, prompts: {} } },
-)
+/**
+ * Build a fully configured MCP server: the same tools, resources and prompts, whoever is asking.
+ *
+ * 🔴 IT IS A FACTORY BECAUSE ONE `Server` HOLDS ONE TRANSPORT, and from SHAT-3520 there are two.
+ * Before this, the server was a module-level singleton with its handlers registered as import side
+ * effects — fine while stdio was a 1:1 pipe to a single client, and wrong the moment a second
+ * client can arrive over HTTP: they would have shared one object, and two concurrent sessions would
+ * have crossed each other's replies.
+ *
+ * ⚠️ AND IT IS WHAT MAKES THE TWO TRANSPORTS SERVE ONE ROSTER RATHER THAN TWO LISTS THAT AGREE
+ * TODAY. `allTools` is built once, from this process's configuration, and both transports hand back
+ * that same array — so a tool cannot be present on one path and absent on the other, which is the
+ * failure acceptance ③ names and the kind that diverges silently. The guard measures it anyway, by
+ * asking both running transports rather than trusting this comment.
+ *
+ * ⚠️ THE STDIO HARDENING IS NOT INSTALLED HERE, ON PURPOSE. installStdioErrorHandling() writes a
+ * JSON-RPC parse-error frame to `process.stdout` and closes the session — correct for a 1:1 pipe,
+ * and wrong on HTTP twice over: the process's stdout is not any HTTP client's channel, and one
+ * client's malformed frame would tear down a session shared with others. The stdio entry point
+ * installs it on its own server.
+ */
+export function createConfiguredServer(): Server {
+  const server = new Server(
+    { name: 'shatale-mcp', version: VERSION },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } },
+  )
+  // Register list_tools handler
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return { tools: allTools }
+  })
 
-// F-009: harden the stdio session against malformed JSON-RPC frames.
-installStdioErrorHandling(server)
+  // Register call_tool handler
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params
+    const handler = allHandlers[name]
 
-// Register list_tools handler
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: allTools }
-})
+    if (!handler) {
+      return textResult(`Unknown tool: ${name}`, true)
+    }
 
-// Register call_tool handler
-server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-  const { name, arguments: args } = request.params
-  const handler = allHandlers[name]
+    // ⚠️ THE PROGRESS TOKEN IS THE CLIENT'S, AND ITS ABSENCE IS INFORMATION (SHAT-2802). A progress
+    // notification resets the client's request timeout only if the client asked for progress and
+    // enabled `resetTimeoutOnProgress` — both are the host's choice. When no token arrives there is
+    // nobody to notify and the SDK's 60s default stands, so a waiting tool must finish inside it
+    // rather than assume time it was never granted.
+    const progressToken = request.params._meta?.progressToken
+    const ctx: ToolContext = {
+      hasProgressToken: progressToken !== undefined && progressToken !== null,
+      reportProgress: async (message: string) => {
+        if (progressToken === undefined || progressToken === null) return
+        await extra.sendNotification({
+          method: 'notifications/progress',
+          params: { progressToken, progress: 0, message },
+        })
+      },
+    }
 
-  if (!handler) {
-    return textResult(`Unknown tool: ${name}`, true)
-  }
+    return handler(args ?? {}, ctx)
+  })
 
-  // ⚠️ THE PROGRESS TOKEN IS THE CLIENT'S, AND ITS ABSENCE IS INFORMATION (SHAT-2802). A progress
-  // notification resets the client's request timeout only if the client asked for progress and
-  // enabled `resetTimeoutOnProgress` — both are the host's choice. When no token arrives there is
-  // nobody to notify and the SDK's 60s default stands, so a waiting tool must finish inside it
-  // rather than assume time it was never granted.
-  const progressToken = request.params._meta?.progressToken
-  const ctx: ToolContext = {
-    hasProgressToken: progressToken !== undefined && progressToken !== null,
-    reportProgress: async (message: string) => {
-      if (progressToken === undefined || progressToken === null) return
-      await extra.sendNotification({
-        method: 'notifications/progress',
-        params: { progressToken, progress: 0, message },
-      })
-    },
-  }
+  // Register resources handlers (F-002)
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return { resources }
+  })
 
-  return handler(args ?? {}, ctx)
-})
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params.uri
+    const text = resourceContents[uri]
+    if (!text) {
+      throw new Error(`Resource not found: ${uri}`)
+    }
+    return { contents: [{ uri, text }] }
+  })
 
-// Register resources handlers (F-002)
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  return { resources }
-})
+  // Register prompts handlers (F-002)
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    // ⚠️ FILTERED LIKE THE TOOLS ARE, AND FOR THE SAME REASON. A prompt is an instruction the model
+    // will try to carry out; offering one whose tools are absent in this mode does not fail, it makes
+    // the model improvise. Guest has seven tools and no simulator, so a prompt needing
+    // sandbox_simulate_authorization is not offered there.
+    return { prompts: prompts.filter((p) => p.modes === 'any' || (p.modes === 'sandbox' && isSandbox)) }
+  })
 
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const uri = request.params.uri
-  const text = resourceContents[uri]
-  if (!text) {
-    throw new Error(`Resource not found: ${uri}`)
-  }
-  return { contents: [{ uri, text }] }
-})
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params
+    const prompt = prompts.find(p => p.name === name)
+    if (!prompt) {
+      throw new Error(`Prompt not found: ${name}`)
+    }
+    const messages = getPromptMessages(name, (args ?? {}) as Record<string, string | undefined>)
+    return { messages }
+  })
 
-// Register prompts handlers (F-002)
-server.setRequestHandler(ListPromptsRequestSchema, async () => {
-  // ⚠️ FILTERED LIKE THE TOOLS ARE, AND FOR THE SAME REASON. A prompt is an instruction the model
-  // will try to carry out; offering one whose tools are absent in this mode does not fail, it makes
-  // the model improvise. Guest has seven tools and no simulator, so a prompt needing
-  // sandbox_simulate_authorization is not offered there.
-  return { prompts: prompts.filter((p) => p.modes === 'any' || (p.modes === 'sandbox' && isSandbox)) }
-})
-
-server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params
-  const prompt = prompts.find(p => p.name === name)
-  if (!prompt) {
-    throw new Error(`Prompt not found: ${name}`)
-  }
-  const messages = getPromptMessages(name, (args ?? {}) as Record<string, string | undefined>)
-  return { messages }
-})
+  return server
+}
 
 // F-009: Process-level error handling for JSON-RPC edge cases
 process.on('uncaughtException', (err) => {
@@ -567,19 +585,72 @@ process.on('uncaughtException', (err) => {
 
 // Start server
 async function main() {
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
+  const transportChoice = resolveTransport(process.env.SHATALE_MCP_TRANSPORT)
 
-  // Log mode to stderr so it does not interfere with stdio transport
-  const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(onboarding-only)'
-  const toolCount = allTools.length
   // ⚠️ THE HOST IS IN THE BANNER, AND THAT IS THE WHOLE POINT OF SHAT-2711. Two runs against
   // different APIs used to print the same line, so the one question an operator asks of a startup
   // log — "where is this thing pointed?" — could not be answered from it. `(default)` marks the
   // case nobody chose: an unset variable is how a process ends up talking to production without
   // anyone deciding that it should.
+  const mode = isGuest ? 'guest' : isSandbox ? 'demo(sandbox)' : moneyGo ? 'live+money-GO' : 'live(no-money-GO)'
   const where = apiUrlWasGiven ? apiBaseUrl.origin : `${apiBaseUrl.origin} (default)`
-  process.stderr.write(`Shatale MCP server started (${mode} mode, ${toolCount} tools, api=${where})\n`)
+  const banner = `Shatale MCP server started (${mode} mode, ${allTools.length} tools, api=${where})`
+
+  if (transportChoice === 'stdio') {
+    const server = createConfiguredServer()
+    // F-009: harden the stdio session against malformed JSON-RPC frames. Installed HERE and not in
+    // the factory, because it is about a 1:1 pipe: see the note on createConfiguredServer.
+    installStdioErrorHandling(server)
+    await server.connect(new StdioServerTransport())
+    // Log mode to stderr so it does not interfere with stdio transport
+    process.stderr.write(`${banner} transport=stdio\n`)
+    return
+  }
+
+  // 🔴 HTTP WITHOUT A KEY TO CHECK AGAINST IS AN OPEN ENDPOINT, so it refuses to start rather than
+  // starting something that admits everyone. Guest mode has no publisher key by definition: on
+  // stdio that is a local process somebody launched deliberately, and over HTTP it would be a
+  // listener on a network that authenticates nothing.
+  if (isGuest) {
+    throw new Error(
+      'SHATALE_MCP_TRANSPORT=http requires a publisher key: set SHATALE_API_KEY. ' +
+        'Guest mode has no key to authenticate callers against, and this endpoint listens on a network.',
+    )
+  }
+
+  // ⚠️ LOOPBACK BY DEFAULT. A listener is reachable by whoever can route to the interface it binds,
+  // so the default has to be the one that cannot surprise anybody; exposing it is then a decision
+  // somebody makes and can be found in their configuration.
+  const host = process.env.SHATALE_MCP_HTTP_HOST?.trim() || '127.0.0.1'
+  const port = parsePort(process.env.SHATALE_MCP_HTTP_PORT)
+
+  // ⚠️ IMPORTED HERE AND NOT AT THE TOP, so that a stdio launch never loads it. See the note on
+  // transport-choice.ts: the cost was measured, and it is paid by every client that speaks stdio.
+  const { startHttpTransport } = await import('./http-transport.js')
+
+  await startHttpTransport({
+    port,
+    host,
+    expectedKey: apiKey as string,
+    createServer: createConfiguredServer,
+    onListening: (at) => {
+      process.stderr.write(`${banner} transport=http listening=${at.host}:${at.port}\n`)
+    },
+  })
+}
+
+/**
+ * ⚠️ REFUSED RATHER THAN DEFAULTED. A port that does not parse used to be the kind of thing a
+ * `Number(x) || 3000` swallows: the operator asked for one port, got another, and the first sign of
+ * it is a client that cannot connect to the port they configured.
+ */
+function parsePort(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return 3000
+  const n = Number(raw.trim())
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error(`SHATALE_MCP_HTTP_PORT=${JSON.stringify(raw)} is not a port number (1-65535).`)
+  }
+  return n
 }
 
 main().catch((err) => {

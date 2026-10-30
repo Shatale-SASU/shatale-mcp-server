@@ -252,6 +252,30 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'POST', '/v1/purchases'),
     })
 
+    // SHAT-6291: the flag travels as a bare boolean and nothing about an address does.
+    await live.callTool('request_purchase', {
+      publisher_user_id: 'pub-1',
+      agent_id: 'agent-1',
+      merchant: 'amazon.com',
+      amount: 49.99,
+      currency: 'EUR',
+      description: 'Fixture purchase with delivery',
+      requires_shipping: true,
+    })
+    captured.push({
+      label: 'request_purchase (requires_shipping: true is a bare boolean; no address key exists on this route)',
+      struct_hint: 'apps/api/api/v1/purchases.go create request struct, requires_shipping (SHAT-6280 F1)',
+      ...describeLast(mock, 'POST', '/v1/purchases'),
+    })
+
+    // get_shipping_address (SHAT-6291): same route family and the same person-on-the-query as the card.
+    await live.callTool('get_shipping_address', { purchase_id: 'pur_fixture_6', publisher_user_id: 'usr_fixture_6' })
+    captured.push({
+      label: 'get_shipping_address (LIVE + money-GO and sandbox; read-only, journaled by the API)',
+      struct_hint: 'apps/api/api/v1/purchases.go shipping-address route (SHAT-6280 F1)',
+      ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_6/shipping-address'),
+    })
+
     // /!\ THE CHECKOUT TOOLS LIVE HERE AND NOT IN THE SANDBOX BLOCK, and finding that out was the
     // first thing this expansion measured. index.ts registers createCheckoutTools ONLY under
     // `isLive && moneyGo` — the backend rejects sandbox keys on that route — so capturing them with
@@ -259,7 +283,9 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
     // about a mode boundary rather than a broken fixture. Worth writing down: which MODE a tool
     // exists in is part of its contract, and the fixture file is now the only place that records it
     // for these two.
-    await live.callTool('get_checkout_cardholder', { purchase_id: 'pur_fixture_3' })
+    // ⚠️ THE PERSON TRAVELS ON THIS ROUTE TOO (SHAT-6105), as the query parameter shatale-api's
+    // CheckoutIdentity reads; 1.3.0 sent neither tool's person, and the `query` key is the change.
+    await live.callTool('get_checkout_cardholder', { purchase_id: 'pur_fixture_3', publisher_user_id: 'usr_fixture_3' })
     captured.push({
       label: 'get_checkout_cardholder (LIVE + money-GO only; shares one route with get_checkout_customer)',
       struct_hint: 'apps/api/api/v1/purchases.go checkout-identity route',
@@ -282,42 +308,13 @@ describe('Wire fixtures: the exact bodies the built server sends', () => {
       ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_5/card-credentials'),
     })
 
-    await live.callTool('get_checkout_customer', { purchase_id: 'pur_fixture_4' })
+    await live.callTool('get_checkout_customer', { purchase_id: 'pur_fixture_4', publisher_user_id: 'usr_fixture_4' })
     captured.push({
       label: 'get_checkout_customer (LIVE + money-GO only; same route, different half of the response)',
       struct_hint: 'apps/api/api/v1/purchases.go checkout-identity route',
       ...describeLast(mock, 'GET', '/v1/purchases/pur_fixture_4/checkout-identity'),
     })
     live.close()
-
-    // ── Onboarding, behind its deploy flag ──────────────────────────────────
-    const onboarding = new McpTestClient(
-      {
-        SHATALE_API_KEY: 'sk_sandbox_mock',
-        SHATALE_API_URL: mock.url,
-        SHATALE_ONBOARDING_ENABLED: 'true',
-      },
-      'wire-fixtures-onboarding',
-    )
-    await onboarding.initialize()
-    await onboarding.callTool('register_user_profile', {
-      publisher_user_id: 'pub-1',
-      user_claims: { email: 'fixture@test.shatale.com', name: 'Fixture User', country: 'FR' },
-      intended_use: 'purchase',
-    })
-    captured.push({
-      label: 'register_user_profile',
-      struct_hint: 'apps/api/api/v1/onboarding.go register request struct',
-      ...describeLast(mock, 'POST', '/v1/onboarding/register'),
-    })
-
-    await onboarding.callTool('get_onboarding_status', { session_id: 'sess_fixture_1' })
-    captured.push({
-      label: 'get_onboarding_status',
-      struct_hint: 'apps/api/api/v1/onboarding.go session status route',
-      ...describeLast(mock, 'GET', '/v1/onboarding/sessions/'),
-    })
-    onboarding.close()
   })
 
   afterAll(async () => {

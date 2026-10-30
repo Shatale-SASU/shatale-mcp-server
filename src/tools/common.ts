@@ -86,7 +86,7 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
 
 // SHAT-1461: the tool list is built FROM THE ROUTER (ctx.getToolNames), never a hand-maintained per-mode
 // array. The old static lists drifted three ways at once: they used only three modes (the server has four —
-// live-money-GO and live-onboarding-only are distinct), they omitted seven registered tools (the whole
+// live-money-GO and live-without-money-GO are distinct), they omitted seven registered tools (the whole
 // checkout and onboarding groups) in every mode, and they named request_purchase as callable in sandbox where
 // it is client-blocked. Deriving the list from the tools this process actually registered makes all three
 // impossible by construction — the same fix explain_shatale already uses.
@@ -97,7 +97,7 @@ function handleListCapabilities(ctx: GuestContext) {
       ? 'DEMO (SANDBOX)'
       : ctx.moneyEnabled
         ? 'LIVE (money-GO)'
-        : 'LIVE (onboarding-only)'
+        : 'LIVE (money tools off)'
 
   const note = ctx.isGuest
     ? 'No API key configured — explore, simulate, and generate a policy. No real call or payment. Set SHATALE_API_KEY to unlock more tools.'
@@ -105,7 +105,7 @@ function handleListCapabilities(ctx: GuestContext) {
       ? 'Sandbox key — the full API against test data, no real money. request_purchase runs the ordinary path: the server stamps the environment from the key, so nothing here reaches live money. sandbox_simulate_authorization is the narrower tool for testing a policy decision without creating a purchase.'
       : ctx.moneyEnabled
         ? 'Live key with money-GO — real production APIs; the purchase and credential tools move REAL money.'
-        : 'Live key, onboarding-only — real APIs, but money tools are disabled (they require SHATALE_MONEY_GO).'
+        : 'Live key without money-GO — only the public simulation, discovery and catalog tools are available; purchase and credential tools are not registered (they require SHATALE_MONEY_GO).'
 
   const toolList = ctx
     .getToolNames()

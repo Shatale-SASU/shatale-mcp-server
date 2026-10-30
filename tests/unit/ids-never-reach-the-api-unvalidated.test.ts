@@ -5,7 +5,6 @@ import { createPurchaseTools } from '../../src/tools/purchase.js'
 import { createRevealTools } from '../../src/tools/reveal.js'
 import { createCheckoutTools } from '../../src/tools/checkout.js'
 import { createCredentialTools } from '../../src/tools/credentials.js'
-import { createOnboardingTools } from '../../src/tools/onboarding.js'
 import { createCatalogTools } from '../../src/tools/catalog.js'
 import { createSandboxTools } from '../../src/tools/sandbox.js'
 import type { ToolModule } from '../../src/types.js'
@@ -53,7 +52,6 @@ beforeAll(async () => {
     reveal: createRevealTools(client),
     checkout: createCheckoutTools(client),
     credentials: createCredentialTools(client, { emailsEnabled: true }),
-    onboarding: createOnboardingTools(client, { enabled: true }),
     catalog: createCatalogTools(client),
     sandbox: createSandboxTools(client),
   }
@@ -84,7 +82,6 @@ const idTools: Array<{ tool: string; missing: string }> = [
   { tool: 'cancel_purchase', missing: 'purchase_id' },
   { tool: 'get_credential_status', missing: 'credential_request_id' },
   { tool: 'get_credential_emails', missing: 'credential_request_id' },
-  { tool: 'get_onboarding_status', missing: 'session_id' },
   { tool: 'get_merchant_details', missing: 'merchant_id' },
   // ⚠️ ADDED WITH THE TOOL (SHAT-3023), and the comment above says why it has to be: reveal_card
   // shipped with a bare `.min(1)` and sent GET /v1/purchases/%20%20%20/card-credentials. This file

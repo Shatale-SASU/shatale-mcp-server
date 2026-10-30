@@ -3,12 +3,12 @@ import type { ShataleClient } from '../client.js'
 import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult } from '../errors.js'
-import { requireId } from '../validate.js'
+import { requireId, personIdSchema } from '../validate.js'
 import { readPerson, markServedWithoutPerson, PUBLISHER_USER_ID_PROPERTY } from '../person-scope.js'
 
 // F-003: Zod input validation schemas
 const requestPurchaseSchema = z.object({
-  publisher_user_id: z.string().min(1, 'publisher_user_id is required'),
+  publisher_user_id: personIdSchema,
   agent_id: z.string().min(1, 'agent_id is required'),
   merchant: z.string().min(1, 'merchant is required'),
   amount: z.number().positive('amount must be positive').max(100_000, 'amount exceeds maximum (100,000)'),
@@ -21,6 +21,7 @@ const requestPurchaseSchema = z.object({
     country: z.string().length(2).optional(),
   }).optional(),
   idempotency_key: z.string().optional(),
+  requires_shipping: z.boolean().optional(),
 })
 
 // redactPurchaseCard moved to src/redact.ts and is now applied inside ShataleClient.request, so the
@@ -98,7 +99,13 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
           'and answers with a STATUS to act on — it does not complete the payment. The answer may ' +
           'say the user must finish onboarding, that a delegation is missing, that policy blocked ' +
           'it, or that it is waiting for approval. When it reaches payment_ready a card has been ' +
-          'issued for it and paying at the merchant is the next step, yours to take.',
+          'issued for it and paying at the merchant is the next step, yours to take. If the goods are ' +
+          'physical, pass requires_shipping: true. When the person has no shipping address on file ' +
+          'the answer is blocked with block_reason shipping_address_required, state action_required, ' +
+          'requirements [{type: shipping_address, status: missing}] and a next_action of type ' +
+          'open_url: send the person to that URL to add their address, and tell them why. No money ' +
+          'moves until an address exists. Never put an address in this request — it is refused; ' +
+          'once the purchase is payment_ready, read it with get_shipping_address.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -135,6 +142,14 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
                 phone: { type: 'string', description: 'User phone number' },
                 country: { type: 'string', description: 'User country (ISO 3166-1 alpha-2)' },
               },
+            },
+            requires_shipping: {
+              type: 'boolean',
+              description:
+                'Set true when the purchase is for physical goods that must be delivered. Shatale ' +
+                'then needs the person\'s shipping address before any money moves, and answers ' +
+                'blocked/shipping_address_required with an open_url when there is none. A boolean ' +
+                'only: address fields are not accepted here and the API rejects them.',
             },
             idempotency_key: {
               type: 'string',
@@ -253,6 +268,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
             description: input.description,
             user_hint: input.user_hint,
             idempotency_key: input.idempotency_key,
+            requires_shipping: input.requires_shipping,
           })
           // PCI: never surface raw PAN/CVV into the agent context.
           return jsonResult(result)

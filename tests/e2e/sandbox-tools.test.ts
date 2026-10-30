@@ -72,8 +72,7 @@ describeIfKey('Sandbox Mode (with API key)', () => {
     expect(tools).toContain('get_credential_status')
     expect(tools).toContain('get_credential_emails')
 
-    // Onboarding tools stay hidden: RegisterUserProfile never persists the session id it
-    // returns, so the second step 404s forever (SHAT-1662). Behind SHATALE_ONBOARDING_ENABLED.
+    // Onboarding tools are removed (SHAT-5075): Funnel B is gone from the API (SHAT-4435).
     expect(tools).not.toContain('register_user_profile')
     expect(tools).not.toContain('get_onboarding_status')
 

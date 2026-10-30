@@ -6,7 +6,160 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## [Unreleased]
+## 2.0.0 — unreleased (prepared 2026-10-17, SHAT-5075)
+
+> **BREAKING.** Two tools and one environment variable are removed. Semver calls that a major, even
+> though neither tool was advertised by default: a deployment that set `SHATALE_ONBOARDING_ENABLED=true`
+> loses both tools and gets `Unknown tool` for them. No tool list of any default mode changes
+> (guest 7, sandbox 22, live without money-GO 7, live + money-GO 18).
+>
+> Built on top of the unreleased 1.5.0 below, so **publish only after the shatale-api F1 change that
+> 1.5.0 waits for is on main**: a 2.0.0 tarball contains the 1.5.0 shipping-address tools.
+
+### Removed (BREAKING)
+- **`register_user_profile` and `get_onboarding_status`** (SHAT-5075), with their client methods
+  `registerUserProfile` / `getOnboardingStatus`, their zod schema and `src/tools/onboarding.ts`.
+  Funnel B was removed from the API in SHAT-4435: `POST /v1/onboarding/register` and
+  `GET /v1/onboarding/sessions/{id}` answer 404 `onboarding_funnel_disabled`, so a call could only
+  fail. The tool list in every mode (guest 7, sandbox 22, live 7, live + money-GO 18) is unchanged:
+  the pair was not in it.
+- **`SHATALE_ONBOARDING_ENABLED`** — the switch that held the pair back. It is no longer read; setting
+  it does nothing. The README matrix loses its two "+ flags" columns, which had become copies of the
+  columns beside them.
+
+### Changed
+- **The live mode without money-GO is no longer called "onboarding-only".** It serves the seven
+  public tools and no onboarding tool at all, so the name promised something that did not exist. The
+  startup banner now reads `live(no-money-GO)`, `explain_shatale` and `list_capabilities` say
+  "LIVE (money tools off)" and describe the real tool set, and SECURITY.md says the same. Anything
+  that matches the old banner text `live(onboarding-only)` must be updated.
+- The mock upstream used by the tests answers the dead `/v1/onboarding/*` routes the way the real API
+  does: 404 `onboarding_funnel_disabled`.
+- **`publisher_user_id` is no longer trimmed — one rule for every tool that takes it** (SHAT-4823).
+  The field is not a path parameter: it travels as `?publisher_user_id=` and the API decides what it
+  means (`PersonScope`: empty after trimming is "the field is absent", anything else is used **as
+  sent**). Trimming here answered a question that belongs to the API, and answered it differently —
+  a caller sending `" u1 "` was scoped to `u1` through this server and to `" u1 "` calling the API
+  directly. New `requirePersonId` / `personIdSchema` (`src/validate.ts`) carry the rule; `reveal_card`,
+  the two checkout reads, `request_purchase` and `request_temporary_credentials` all use it. Blank is
+  still refused — it means "absent", and a caller who tried to name a person and got it wrong has
+  made a mistake worth telling them about. `requireId` keeps its trim for PATH ids, where `"   "` is
+  not an id.
+
+### Tests
+- **`one-rule-for-the-person-every-tool-takes`** — the person rule is checked where it is SPENT, on
+  the wire, for every one of the five call sites, with a planted mutant per site. Measured twice on
+  the way: a test that called the readers directly let a reverted `reveal.ts` through all 399 tests
+  (a reader can be correct while a tool does not use it), and a wire test for spaced ids alone let a
+  reverted zod schema through all 14 (that schema does not trim either — what it changes is blank).
+  Both gaps are now covered: spaced ids must arrive unchanged, blank ids must never leave at all.
+- The tests of the pair are deleted with it. `mock-contract` now asserts the pair is `Unknown tool`
+  by name, with and without the retired flag, and that neither call reaches `/v1/onboarding/*`;
+  `no-sandbox-tool-is-offered-to-a-live-key` asks the running server in every mode. The README gate's
+  controls moved their plants off the removed row (to `request_purchase`).
+
+## 1.5.0 — unreleased (prepared 2026-10-15, SHAT-6291)
+
+> Why a minor and not a patch: one tool gains an optional input field (`requires_shipping`) and one
+> tool is new (`get_shipping_address`). Every 1.4.0 call keeps working unchanged. Contract source:
+> SHAT-6280 F1 (shatale-api). **Merge and publish only after the shatale-api F1 change is on main** —
+> the API must accept `requires_shipping` and serve the shipping-address route.
+
+### Added
+- **`request_purchase` accepts `requires_shipping`** (optional boolean), sent as `requires_shipping`
+  on `POST /v1/purchases` and omitted from the body when the caller did not give it. The tool takes NO
+  address fields — the API rejects them with 400, and this server never builds them. The new blocked
+  outcome is described to the agent in the tool description: `block_reason: shipping_address_required`,
+  `state: action_required`, `requirements: [{type: shipping_address, status: missing}]` and a
+  `next_action` of type `open_url`. The agent must send the person to that URL; no money moves until an
+  address exists. The response is passed through as the API sends it.
+- **`get_shipping_address(purchase_id, publisher_user_id)`** — `GET /v1/purchases/{id}/shipping-address`
+  (the person travels as `?publisher_user_id=`, as for `reveal_card`). Returns the `shipping_address`
+  object (`recipient_name, company, line1, line2, postal_code, city, region, country, phone,
+  delivery_notes`) and refuses a shape that differs, naming keys and never values. The address is
+  personal data, released only while the purchase is payment_ready and the person's account is active (not after completion); every read is journaled
+  and visible to the person; the description says so and limits its use to that purchase's delivery.
+  Available wherever the checkout tools are (sandbox, and live with money-GO).
+- **`publisher_user_id` is required on `get_shipping_address`**: the API answers 400 `invalid_request`
+  without the person, so a missing or blank one is refused before anything is sent.
+- **The 404 answers of that route are kept apart, branching strictly on the body's `code`** (every 404
+  there carries one): `not_found` (generic: an id that is not yours, does not exist or is in the other
+  environment), `shipping_address_missing` (the person has none; a `next_action` of type `open_url` is
+  surfaced when the API sends one), `shipping_address_not_ready` (the purchase is not payment_ready, or the person's account is not active, or it has already completed) and
+  `shipping_not_required` (the purchase was created without `requires_shipping`). A 404 with any other
+  or no `code` is its own `shipping_address_unrecognised_refusal`, never folded into one of the four.
+  The codes are matched in a route-local table (`src/errors.ts`), NOT added to `FORWARDED_CODES`, which
+  is half of a byte-identical pair with shatale-api (SHAT-3371).
+
+### Changed
+- The derived idempotency key of `request_purchase` includes `requires_shipping` when it is `true`, so
+  the same purchase with and without delivery is not collapsed into one. Keys derived without it are
+  byte-identical to 1.4.0.
+
+### Not in this release
+- `request_shipping_address` — the server door for it does not exist yet.
+
+### Tests
+- `tests/e2e/shipping-address.test.ts` — through the built server over stdio, on the wire:
+  `requires_shipping` passed through and omitted; address keys never sent; the blocked
+  `shipping_address_required` outcome reaches the agent with its `open_url`; `get_shipping_address`
+  success and its query; publisher_user_id required; each of the four 404 codes gives a distinct result, and an unknown code its own.
+
+## 1.4.0 — unreleased (prepared 2026-10-14, SHAT-2600)
+
+> Why a minor and not a patch: two tools gain an input field (`publisher_user_id`). It is optional and
+> every 1.3.0 call keeps working unchanged, but the published tool schema grows — the same reasoning
+> that made reveal_card's person a minor in 1.2.0. Built from main at 9f3bd86, whose `dist/` was
+> byte-identical to the published 1.3.0 tarball: the change below is the whole content of this release.
+
+### Security
+- **`get_checkout_cardholder` and `get_checkout_customer` send the person** (SHAT-6105). Both read
+  `GET /v1/purchases/{id}/checkout-identity`, which returns the BUYER'S name and email. shatale-api
+  gates that route by person (`PurchaseBelongsToPerson`), but only when the caller names one: an empty
+  scope passes the gate without reading the row. This server never named one, so through MCP any
+  person of a publisher could read another person's checkout identity by purchase id. Both tools now
+  accept an optional `publisher_user_id` and send it as the query parameter the API reads
+  (`?publisher_user_id=`), exactly as `reveal_card` has since 1.2.0.
+  **Backward compatible:** without the field the request goes out exactly as 1.3.0 sent it (no query
+  at all), and the result carries `_meta.deprecation` (`checkout_identity_without_person`) plus one
+  stderr line per call. A field that is present but blank is refused before anything is sent. A future
+  release will make it required, as for `reveal_card`.
+
+### Tests
+- `tests/e2e/the-checkout-identity-names-the-person.test.ts` — through the built server over stdio,
+  asserting on the wire: the person arrives as the query, unscoped calls carry no query and the
+  deprecation, blank is refused unsent. Wire fixtures for both tools now record the `query`.
+- `tests/e2e/request-purchase-drops-undeclared-fields.test.ts` (SHAT-4116, the half in this server):
+  a field `request_purchase` does not declare — e.g. a `purchase_id` the model invented — never
+  reaches `POST /v1/purchases`. No behaviour change; the answer the ticket left unmeasured is now held.
+
+## 1.3.0 — 2026-10-09
+
+### Added
+
+- **A streamable-HTTP transport beside stdio** (SHAT-3520). The server spoke only stdio, so a client
+  that cannot spawn a child process — a web application — could not reach it through the public
+  contract at all. stdio remains the default and is unchanged: the transport is ADDED, and it is
+  chosen by an explicit `SHATALE_MCP_TRANSPORT`, never inferred from the environment. A value we do
+  not recognise is refused rather than folded into the default, because falling back starts stdio
+  for somebody who asked for HTTP and leaves them debugging a network they can reach.
+
+  The server build moved into a factory. It was a module-level singleton whose handlers were
+  registered as import side effects — sound while stdio is a 1:1 pipe to one client, and wrong the
+  moment a second client can arrive: they would have shared one object and crossed each other's
+  replies. Both transports now hand back the SAME roster rather than two lists that happen to agree
+  today, and a test asks BOTH RUNNING TRANSPORTS and compares the sets — a tool present on one path
+  and absent on the other is a divergence that would never announce itself.
+
+  HTTP requires the publisher key as a bearer token, compared in constant time and never echoed.
+  `missing_key` and `key_not_accepted` stay separate answers on purpose. Without a key to check
+  against, HTTP refuses to start rather than listening on a network that authenticates nothing; it
+  binds loopback unless told otherwise. Sessions are stateless — a server and a transport per
+  request — so two callers cannot observe each other.
+
+  The stdio hardening stays on the stdio path: it writes a parse-error frame to the process stdout
+  and closes the session, which is right for a pipe and wrong twice on HTTP, where that stdout is
+  nobody's channel and one malformed frame would tear down a session shared with others.
 
 ### Added
 - **`get_purchase_status`, `await_purchase_approval` and `cancel_purchase` accept `publisher_user_id`**
