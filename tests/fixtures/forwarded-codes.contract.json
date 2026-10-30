@@ -15,6 +15,7 @@
     "current_factor_invalid",
     "current_factor_locked",
     "current_factor_required",
+    "deadline_exceeded",
     "default_card_expired",
     "delegation_consent_missing",
     "empty_body",
