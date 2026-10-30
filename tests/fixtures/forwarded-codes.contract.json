@@ -44,6 +44,7 @@
     "profile_field_required",
     "purchase_terminal",
     "rate_limited",
+    "refund_exceeds_charge",
     "report_too_large",
     "reports_closed",
     "reports_not_wired",
