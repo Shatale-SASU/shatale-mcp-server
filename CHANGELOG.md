@@ -6,7 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## 2.0.0 — unreleased (prepared 2026-10-17, SHAT-5075)
+## 2.1.0 — unreleased
+
+### Added
+- **`get_purchase_status`, `await_purchase_approval` and `cancel_purchase` accept `publisher_user_id`**
+  — the same person the purchase was requested for — and send it to the API (SHAT-4788, the client half
+  of shatale-api SHAT-4785). A publisher API key is one key for all of that publisher's people, so
+  without it these three calls could read or cancel any person's purchase by id. On the wire it is the
+  query parameter `publisher_user_id` on the two reads, and on the cancel (`DELETE`) the same string in
+  the query **and** in the body. When shatale-api switches its person requirement on, a call without it
+  is answered `404 purchase not found` — the same answer as for a purchase that does not exist — so an
+  agent that never passes it would read its own live purchase as missing.
+
+### Deprecated
+- **The three tools above without `publisher_user_id`.** They still work exactly as in 1.2.x — same
+  request, no query, no body field — so nobody built on 1.2.0 breaks on upgrade. Each such call carries
+  `_meta.deprecation` (`code: purchase_access_without_person`) in its result and writes one line to
+  stderr (one per call, not per poll of an await). A `publisher_user_id` that is present but empty or
+  blank is refused before anything is sent. **Removal plan:** the argument becomes required once
+  shatale-api reports no `purchase_access_without_person_scope` lines by route after this release is in
+  use; the API's switch is turned on only after that.
+
+## 2.0.0 — 2026-10-17
 
 > **BREAKING.** Two tools and one environment variable are removed. Semver calls that a major, even
 > though neither tool was advertised by default: a deployment that set `SHATALE_ONBOARDING_ENABLED=true`
@@ -58,7 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `no-sandbox-tool-is-offered-to-a-live-key` asks the running server in every mode. The README gate's
   controls moved their plants off the removed row (to `request_purchase`).
 
-## 1.5.0 — unreleased (prepared 2026-10-15, SHAT-6291)
+## 1.5.0 — never published
 
 > Why a minor and not a patch: one tool gains an optional input field (`requires_shipping`) and one
 > tool is new (`get_shipping_address`). Every 1.4.0 call keeps working unchanged. Contract source:
@@ -105,7 +126,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `shipping_address_required` outcome reaches the agent with its `open_url`; `get_shipping_address`
   success and its query; publisher_user_id required; each of the four 404 codes gives a distinct result, and an unknown code its own.
 
-## 1.4.0 — unreleased (prepared 2026-10-14, SHAT-2600)
+## 1.4.0 — 2026-10-14
 
 > Why a minor and not a patch: two tools gain an input field (`publisher_user_id`). It is optional and
 > every 1.3.0 call keeps working unchanged, but the published tool schema grows — the same reasoning
@@ -160,25 +181,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   The stdio hardening stays on the stdio path: it writes a parse-error frame to the process stdout
   and closes the session, which is right for a pipe and wrong twice on HTTP, where that stdout is
   nobody's channel and one malformed frame would tear down a session shared with others.
-
-### Added
-- **`get_purchase_status`, `await_purchase_approval` and `cancel_purchase` accept `publisher_user_id`**
-  — the same person the purchase was requested for — and send it to the API (SHAT-4788, the client half
-  of shatale-api SHAT-4785). A publisher API key is one key for all of that publisher's people, so
-  without it these three calls could read or cancel any person's purchase by id. On the wire it is the
-  query parameter `publisher_user_id` on the two reads, and on the cancel (`DELETE`) the same string in
-  the query **and** in the body. When shatale-api switches its person requirement on, a call without it
-  is answered `404 purchase not found` — the same answer as for a purchase that does not exist — so an
-  agent that never passes it would read its own live purchase as missing.
-
-### Deprecated
-- **The three tools above without `publisher_user_id`.** They still work exactly as in 1.2.x — same
-  request, no query, no body field — so nobody built on 1.2.0 breaks on upgrade. Each such call carries
-  `_meta.deprecation` (`code: purchase_access_without_person`) in its result and writes one line to
-  stderr (one per call, not per poll of an await). A `publisher_user_id` that is present but empty or
-  blank is refused before anything is sent. **Removal plan:** the argument becomes required once
-  shatale-api reports no `purchase_access_without_person_scope` lines by route after this release is in
-  use; the API's switch is turned on only after that.
 
 ### Changed
 - **`await_purchase_approval` knows a fifth outcome, `ended`, and says that only `approved` is
