@@ -100,6 +100,7 @@ all. Unit tests under `tests/unit` are not listed here.
 | `the-banner-says-where-it-points.test.ts` | 4 | No |
 | `one-purchase-walked-through-the-contract.test.ts` | 7 | Partial |
 | `status-await-and-cancel-name-the-person.test.ts` | 1 | No (mock upstream) |
+| `credentials-name-the-person.test.ts` | 3 | No (mock upstream) |
 | `two-transports-one-roster.test.ts` | 6 | No (synthetic key) |
 | `the-checkout-identity-names-the-person.test.ts` | 5 | No (mock upstream) |
 | `request-purchase-drops-undeclared-fields.test.ts` | 1 | No (mock upstream) |

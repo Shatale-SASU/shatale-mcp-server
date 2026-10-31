@@ -81,3 +81,62 @@ export function markServedWithoutPerson(result: ToolCallResult, tool: string, pe
 export function personQuery(person: string | undefined): string {
   return person === undefined ? '' : `?publisher_user_id=${encodeURIComponent(person)}`
 }
+
+// ── SHAT-7667: the same person on the two credential reads ─────────────────────────────────────────
+//
+// get_credential_status and get_credential_emails took only a credential id. The API reads the person
+// from `?publisher_user_id=` on both routes and, once CREDENTIAL_STATUS_REQUIRE_PERSON_SCOPE /
+// CREDENTIAL_EMAILS_REQUIRE_PERSON_SCOPE are on in production, refuses a request without it with 400
+// "publisher_user_id is required: the credential belongs to one person" (status) / "...the mail belongs
+// to one person" (emails). Same transition as the purchase tools: absent is still served and says so
+// (stderr + `_meta.deprecation`); present but blank / not a string is refused before anything is sent;
+// present is sent AS GIVEN (never trimmed). The wording is the credential's own: nothing here claims a
+// purchase.
+
+export const CREDENTIAL_ACCESS_WITHOUT_PERSON_DEPRECATION_CODE = 'credential_access_without_person'
+
+export function credentialAccessWithoutPersonDeprecation(tool: string): string {
+  return (
+    `${tool} was called without publisher_user_id. This still works but is DEPRECATED: pass the ` +
+    'publisher_user_id the credential was requested for. Without it the API can check only the ' +
+    'publisher, not the person the credential (and its mail) belongs to, and once the API requires ' +
+    'the person the call will be refused with 400.'
+  )
+}
+
+/** The schema fragment of get_credential_status and get_credential_emails. */
+export const CREDENTIAL_PUBLISHER_USER_ID_PROPERTY = {
+  type: 'string' as const,
+  description:
+    'The same publisher_user_id the credential was requested for (the person the credential belongs ' +
+    'to). Pass it: the API then answers only for that person\'s credential. Omitting it still works ' +
+    'for now but is DEPRECATED and will be refused once the API requires it.',
+}
+
+/** readPerson for a credential id: same rules, credential wording, credential deprecation code. */
+export function readCredentialPerson(args: Record<string, unknown>, tool: string, credentialId: string): PersonScope {
+  if (args.publisher_user_id === undefined) {
+    process.stderr.write(
+      `shatale-mcp-server: DEPRECATED — ${tool} for credential ${forLog(credentialId)} without ` +
+        `publisher_user_id; served unscoped. ${credentialAccessWithoutPersonDeprecation(tool)}\n`,
+    )
+    return { ok: true, person: undefined }
+  }
+  const person = requireId(args, 'publisher_user_id')
+  if (!person.ok) return person
+  // As given, not trimmed: the API compares the person exactly as stored.
+  return { ok: true, person: args.publisher_user_id as string }
+}
+
+/** Put the credential deprecation on a result that was served without the person. */
+export function markCredentialServedWithoutPerson(result: ToolCallResult, tool: string, person: string | undefined): ToolCallResult {
+  if (person === undefined) {
+    result._meta = {
+      deprecation: {
+        code: CREDENTIAL_ACCESS_WITHOUT_PERSON_DEPRECATION_CODE,
+        message: credentialAccessWithoutPersonDeprecation(tool),
+      },
+    }
+  }
+  return result
+}

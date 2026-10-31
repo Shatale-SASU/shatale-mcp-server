@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
+## 2.1.0 — unreleased (prepared 2026-10-31, SHAT-7667)
+
+> Why a minor: two tools gain an optional input field (`publisher_user_id`). Every 2.0.0 call keeps
+> working unchanged. **Publish before the shatale-api production flags
+> `CREDENTIAL_STATUS_REQUIRE_PERSON_SCOPE` / `CREDENTIAL_EMAILS_REQUIRE_PERSON_SCOPE` go on (01.11):**
+> with them on, a call without the person is refused 400 by the API.
+
+### Added
+- **`get_credential_status` and `get_credential_emails` accept `publisher_user_id`** (optional), the
+  person the credential was requested for. Sent as `?publisher_user_id=` (URL-encoded, AS GIVEN, never
+  trimmed). Without it the request is exactly the old one.
+
+### Deprecated
+- Calling either tool without `publisher_user_id` still works but now says so: `_meta.deprecation`
+  (`credential_access_without_person`) on the result and one stderr line per call. Present but blank or
+  not a string is refused before any request is sent. Wording is the credential's own (new helpers in
+  `src/person-scope.ts`); nothing claims a purchase.
+
+### Tests
+- `credentials-name-the-person` — wire assertions for both tools: two different people give two different
+  queries, no person adds no query, blank / non-string person sends nothing, padded person unchanged.
+
 ## 2.0.0 — unreleased (prepared 2026-10-17, SHAT-5075)
 
 > **BREAKING.** Two tools and one environment variable are removed. Semver calls that a major, even
