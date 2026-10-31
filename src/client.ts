@@ -485,14 +485,15 @@ export class ShataleClient {
     return this.request('POST', '/v1/credentials', { ...input, idempotency_key: entry.key }, 'fixed')
   }
 
-  async getCredentialStatus(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}`, undefined, 'caller-id')
+  // SHAT-7667: the person goes in the query when given, and NOTHING is added when not (no empty parameter).
+  async getCredentialStatus(id: string, publisherUserId?: string): Promise<unknown> {
+    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}${personQuery(publisherUserId)}`, undefined, 'caller-id')
   }
 
   // Emails received on a credential's relay address (verification/OTP mail). Publisher-scoped
   // by the API key on the backend; the agent reads the code it needs to finish signup.
-  async getCredentialEmails(id: string): Promise<unknown> {
-    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}/emails`, undefined, 'caller-id')
+  async getCredentialEmails(id: string, publisherUserId?: string): Promise<unknown> {
+    return this.request('GET', `/v1/credentials/${encodeURIComponent(id)}/emails${personQuery(publisherUserId)}`, undefined, 'caller-id')
   }
 
   // ---- Checkout identity ----
