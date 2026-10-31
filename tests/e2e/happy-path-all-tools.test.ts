@@ -75,8 +75,10 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
   })
 
   test('get_purchase_status with non-existent ID', async () => {
+    // SHAT-7638: name a person, as every real caller must once the person gate is required.
     const result = await client.callTool('get_purchase_status', {
       purchase_id: testId('fake-purchase'),
+      publisher_user_id: testId('user'),
     })
     expect(result.content[0].type).toBe('text')
     // Will return not-found or error, but should not crash
@@ -86,6 +88,7 @@ describeIfKey('Happy Path: Sandbox Tools', () => {
   test('cancel_purchase with non-existent ID', async () => {
     const result = await client.callTool('cancel_purchase', {
       purchase_id: testId('fake-purchase'),
+      publisher_user_id: testId('user'),
     })
     expect(result.content[0].type).toBe('text')
     expect(result.content[0].text).toBeDefined()
