@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   columns beside them.
 
 ### Changed
+- **`request_temporary_credentials`: the example `purpose` no longer reads "Add payment method for
+  AWS account"** (SHAT-7643). It suggested to the agent the one thing we do not want done with these
+  credentials: keeping a Shatale card on file at the merchant. The example is now a neutral sign-in
+  to place the order. Only the description text changed; the schema and the call are the same.
 - **The live mode without money-GO is no longer called "onboarding-only".** It serves the seven
   public tools and no onboarding tool at all, so the name promised something that did not exist. The
   startup banner now reads `live(no-money-GO)`, `explain_shatale` and `list_capabilities` say

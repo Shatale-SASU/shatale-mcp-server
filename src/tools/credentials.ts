@@ -75,7 +75,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
             },
             purpose: {
               type: 'string',
-              description: 'Why the credentials are needed (e.g. "Add payment method for AWS account")',
+              description: 'Why the credentials are needed (e.g. "Sign in to place this order; the shop requires an account")',
             },
           },
           required: ['publisher_user_id', 'agent_id', 'merchant_domain', 'purpose'],
