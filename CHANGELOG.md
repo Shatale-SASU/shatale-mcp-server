@@ -32,6 +32,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   AWS account"** (SHAT-7643). It suggested to the agent the one thing we do not want done with these
   credentials: keeping a Shatale card on file at the merchant. The example is now a neutral sign-in
   to place the order. Only the description text changed; the schema and the call are the same.
+- **`reveal_card` and `request_temporary_credentials` now tell the agent not to keep the Shatale card at
+  the merchant** (SHAT-7643): leave any "save this card" / "remember this payment method" / "save for
+  future purchases" option unticked and do not add the card to the merchant's saved payment methods;
+  `reveal_card` also says not to use a card the merchant already has stored, and to say so. Description
+  text only.
 - **The live mode without money-GO is no longer called "onboarding-only".** It serves the seven
   public tools and no onboarding tool at all, so the name promised something that did not exist. The
   startup banner now reads `live(no-money-GO)`, `explain_shatale` and `list_capabilities` say

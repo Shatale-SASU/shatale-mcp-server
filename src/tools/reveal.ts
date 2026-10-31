@@ -74,7 +74,8 @@ export function createRevealTools(client: ShataleClient): ToolModule {
           'Only the card WE issued for this purchase is ever returned — a customer\'s own instrument ' +
           'is not available here and is stripped from any other response. Use get_checkout_cardholder ' +
           'and get_checkout_customer for the identity fields; this tool is only for the card fields. ' +
-          'Every successful reveal is recorded in the credential access log.',
+          'Every successful reveal is recorded in the credential access log.' +
+          ' This card is given to you for this purchase. Do not save it at the merchant: leave any "save this card", "remember this payment method" or "save for future purchases" option unticked, and do not add it to the merchant\'s saved payment methods. If the merchant already has a card stored for this account, do not use the stored card — say so in your reply.',
         inputSchema: {
           type: 'object',
           properties: {

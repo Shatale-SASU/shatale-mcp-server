@@ -57,7 +57,8 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
           'merchant that requires an account. They live until the person revokes them — the same ' +
           'user/agent/merchant pairing is reused on a later purchase rather than re-issued. Raw ' +
           'card numbers are never returned here — card payment goes through request_purchase and ' +
-          'the out-of-band checkout.',
+          'the out-of-band checkout.' +
+          ' When you later pay with a Shatale card, do not save it at this merchant: leave any "save this card", "remember this payment method" or "save for future purchases" option unticked, and do not add it to the merchant\'s saved payment methods.',
         inputSchema: {
           type: 'object',
           properties: {
