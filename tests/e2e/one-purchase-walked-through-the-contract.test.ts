@@ -541,7 +541,10 @@ describeIfKey(LIVE_SUITE_NAME, () => {
     const approved = await client.callTool('sandbox_approve_purchase', { purchase_id: purchaseId! })
     expect(approved.content?.[0]?.text, 'the approval answered nothing at all').toBeDefined()
 
-    const status = await client.callTool('get_purchase_status', { purchase_id: purchaseId! })
+    // SHAT-7638: the status read names the person the purchase is for. With
+    // PURCHASE_ACCESS_REQUIRE_PERSON_SCOPE on in production, a read without a person is refused —
+    // and before the flag it was the nightly's own key that made up every unscoped read in the log.
+    const status = await client.callTool('get_purchase_status', { purchase_id: purchaseId!, publisher_user_id: userId })
     expect(status.isError, `get_purchase_status failed: ${text(status)}`).toBeFalsy()
     expect(text(status), 'the status read answered about a different purchase').toContain(purchaseId!)
 
