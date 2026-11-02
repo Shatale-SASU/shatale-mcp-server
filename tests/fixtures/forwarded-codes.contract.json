@@ -1,6 +1,7 @@
 {
   "about": "SHAT-3371. The error-code dictionary shared by shatale-api (apps/api) and shatale-mcp-server. This file exists in BOTH repositories with identical bytes: apps/api/testdata/forwarded-codes.contract.json here, tests/fixtures/forwarded-codes.contract.json there. Each repository's CI checks its own side against it. shatale-api's CI also compares the two copies byte for byte (scripts/audit-the-forwarded-codes-contract-is-one-file.mjs reads the copy on shatale-mcp-server's main); shatale-mcp-server's CI does not. So an edit is made to both copies, and lands in shatale-mcp-server first: until it does, the comparison in shatale-api is red. error_codes is the Error.code enum of apps/api/api/openapi.yaml; status_derived is what errorCode() in apps/api/api/v1/error_redact.go returns; forwarded is FORWARDED_CODES in shatale-mcp-server src/errors.ts. All three lists are sorted.",
   "error_codes": [
+    "allow_again_not_available_from_here",
     "ambiguous_email",
     "api_error",
     "auth_failed",
