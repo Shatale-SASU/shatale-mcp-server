@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 > Entries for 0.5.0, 0.5.1 and 0.5.2 were added in 1.0.0. They are reconstructed from the git
 > history between the tags and from the GitHub release bodies.
 
-## 2.1.0 — unreleased (prepared 2026-10-31, SHAT-7667)
+## 2.1.1 — unreleased (prepared 2026-11-05, SHAT-8129)
+
+### Added
+- **Official MCP Registry metadata.** `package.json` gains `mcpName`
+  (`io.github.Shatale-SASU/shatale-mcp-server`) and the repository gains `server.json`
+  (schema 2025-12-11): stdio over the npm package, one optional secret `SHATALE_API_KEY`.
+  No version of the package published before this one carries `mcpName`, so the registry cannot
+  verify any of them: the first version that can be listed is the next one published with this field.
+  Nothing under `src/` changes; no tool, mode or default changes.
+
+## 2.1.0 — published 2026-10-31 (prepared 2026-10-31, SHAT-7667)
 
 > Why a minor: two tools gain an optional input field (`publisher_user_id`). Every 2.0.0 call keeps
 > working unchanged. **Publish before the shatale-api production flags

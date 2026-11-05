@@ -1,8 +1,10 @@
 {
   "name": "shatale-mcp-server",
-  "version": "2.1.0",
+  "mcpName": "io.github.Shatale-SASU/shatale-mcp-server",
+  "version": "2.1.1",
   "files": [
     "dist",
+    "server.json",
     "README.md",
     "LICENSE",
     "SECURITY.md",
