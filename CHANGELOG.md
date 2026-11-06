@@ -15,8 +15,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   No version of the package published before this one carries `mcpName`, so the registry cannot
   verify any of them: the first version that can be listed is the next one published with this field.
   That item alone changes nothing under `src/`, and no tool, mode or default changes with it.
-  ⚠️ The sentence used to read "Nothing under `src/` changes" about the whole version. SHAT-8130
-  below changes `src/`, so the claim is now scoped to the item it was ever true of.
 
 ### Fixed
 - **A guest's first contact gets a path instead of a dead end** (SHAT-8130). Measured from a clean
