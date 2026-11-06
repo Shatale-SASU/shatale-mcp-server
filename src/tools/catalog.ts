@@ -3,6 +3,7 @@ import type { ToolModule } from '../types.js'
 import { jsonResult } from '../types.js'
 import { errorResult, ShataleApiError } from '../errors.js'
 import { requireId } from '../validate.js'
+import { REGISTER_URL } from './guest.js'
 
 /**
  * The catalogue's own account of itself, from the endpoint search_merchants uses.
@@ -10,13 +11,18 @@ import { requireId } from '../validate.js'
  * Returns `undefined` when it cannot be established — a probe that fails must never replace the
  * caller's original error with a worse one, so the 404 stands and this simply adds nothing.
  */
-async function catalogState(client: ShataleClient): Promise<string | undefined> {
+async function catalogSelfAccount(
+  client: ShataleClient,
+): Promise<{ state?: string; message?: string }> {
   try {
     const catalog = await client.request('GET', '/v1/merchants/catalog', undefined, 'fixed')
-    const state = (catalog as { catalog_state?: unknown } | null)?.catalog_state
-    return typeof state === 'string' ? state : undefined
+    const body = catalog as { catalog_state?: unknown; catalog_message?: unknown } | null
+    return {
+      state: typeof body?.catalog_state === 'string' ? body.catalog_state : undefined,
+      message: typeof body?.catalog_message === 'string' ? body.catalog_message : undefined,
+    }
   } catch {
-    return undefined
+    return {}
   }
 }
 
@@ -63,6 +69,21 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           // SHAT-2678: the query string filters, it does not address. No id here for a 404 to be
           // about, so do not send the caller looking for one.
           const result = await client.request('GET', `/v1/merchants/catalog?${params}`, undefined, 'fixed')
+          // ⚠️ SHAT-8130: THE EXPLANATION TOLD THE READER WHERE TO GO AND DID NOT SAY WHERE THAT IS.
+          //
+          // Measured from a clean machine with no key: on an unpublished catalogue the API's own
+          // `catalog_message` sends the reader to "the API Keys page of the publisher console" — a
+          // console a guest does not have and an address that appears nowhere in the response. An
+          // instruction without a path is a dead end delivered in a confident voice, and the guest
+          // who hits it is someone who just arrived from a link.
+          //
+          // The message itself is NOT rewritten here: it belongs to the API, and two sites wording
+          // one answer drift apart. Only the address is added, from the single definition the guest
+          // tools already use.
+          const body = result as { catalog_state?: unknown } | null
+          if (typeof body?.catalog_state === 'string' && body.catalog_state !== 'published') {
+            return jsonResult({ ...(result as Record<string, unknown>), register_url: REGISTER_URL })
+          }
           return jsonResult(result)
         } catch (err) {
           return errorResult(err, 'catalog_search_failed')
@@ -97,14 +118,20 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           // here in different words. Two sites answering one question out of separate knowledge
           // drift apart, and the one that drifts is the one nobody touches.
           if (err instanceof ShataleApiError && err.code === 'not_found') {
-            const state = await catalogState(client)
+            const { state, message } = await catalogSelfAccount(client)
             // Only the catalogue's own word overrides the 404. If it IS published, this really is
             // an unknown id and the original advice is the correct advice — so it survives.
             if (state !== undefined && state !== 'published') {
+              // ⚠️ SHAT-8130: `merchant: null` WITH A STATE AND NO SENTENCE READS AS A FAULT.
+              // The neighbour search_merchants carries `catalog_message`, which says in words why
+              // an empty answer is correct; this path dropped it and left a bare null. Silence on a
+              // first contact is read as breakage, so the sentence travels with the state.
               return jsonResult({
                 catalog_state: state,
+                ...(message !== undefined ? { catalog_message: message } : {}),
                 merchant_id: merchantId.value,
                 merchant: null,
+                register_url: REGISTER_URL,
               })
             }
           }
