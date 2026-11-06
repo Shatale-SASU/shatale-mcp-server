@@ -14,7 +14,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   (schema 2025-12-11): stdio over the npm package, one optional secret `SHATALE_API_KEY`.
   No version of the package published before this one carries `mcpName`, so the registry cannot
   verify any of them: the first version that can be listed is the next one published with this field.
-  Nothing under `src/` changes; no tool, mode or default changes.
+  That item alone changes nothing under `src/`, and no tool, mode or default changes with it.
+
+### Fixed
+- **A guest's first contact gets a path instead of a dead end** (SHAT-8130). Measured from a clean
+  machine with no key, three things a reader arriving from a link ran into. `search_merchants` on an
+  unpublished catalogue returned the API's own `catalog_message`, which sends the reader to "the API
+  Keys page of the publisher console" — a console a guest does not have, at an address that appeared
+  nowhere in the response; the response now carries `register_url` beside it. The message itself is
+  NOT rewritten here: it belongs to the API, and two sites wording one answer drift apart.
+  `get_merchant_details` answered `merchant: null` with a state and no sentence while its neighbour
+  carried `catalog_message`; it now carries both, so an empty catalogue no longer reads as breakage.
+  And `explain_shatale`'s "Card handling" section opened with the history of that note — what it
+  promised before 2026-08-27 and that the promise was withdrawn; it now states the distinction
+  directly. What that section is about did not change: the card Shatale issues is returned in full,
+  the person's own card never is.
 
 ## 2.1.0 — published 2026-10-31 (prepared 2026-10-31, SHAT-7667)
 

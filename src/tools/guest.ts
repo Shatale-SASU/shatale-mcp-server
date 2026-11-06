@@ -17,7 +17,9 @@ export interface GuestContext {
   getToolNames: () => string[]
 }
 
-const REGISTER_URL = 'https://admin.shatale.com/register?ref=mcp'
+// Exported so the catalogue tools point a guest at the SAME registration URL this file already
+// uses (SHAT-8130). A second copy of the address in another module is a second thing to go stale.
+export const REGISTER_URL = 'https://admin.shatale.com/register?ref=mcp'
 const GUEST_CAP_USD = 1000
 const APPROVAL_THRESHOLD_USD = 500
 const ALLOWED_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF']
@@ -121,9 +123,8 @@ ${toolList}
   without \`SHATALE_MODE=live\` is refused (fat-finger guard).
 
 ## Card handling — two different cards, and which one reaches you
-Until 2026-08-27 this note made a blanket promise that no card details ever reach you. That is
-no longer true, by
-decision, and the distinction it was missing is whose card it is.
+There are two cards in a Shatale purchase, and only one of them ever reaches you. Which one that
+is depends on whose card it is.
 
 THE CARD SHATALE ISSUES for a purchase IS returned in full. We mint it for that purchase, the
 cardholder is Shatale SASU, and it is handed to you precisely so you can pay with it — a masked
