@@ -61,7 +61,7 @@ jobs:
             exit 1
           fi
           echo "Control held: a src/ change with no changelog entry is refused."
-          node scripts/a-code-change-must-say-what-changed.mjs --files src/client.ts CHANGELOG.md >/dev/null
+          node scripts/a-code-change-must-say-what-changed.mjs --files src/client.ts docs/internal/CHANGES.md >/dev/null
           echo "Control held: the same change WITH an entry passes."
           node scripts/a-code-change-must-say-what-changed.mjs --files tests/unit/x.test.ts >/dev/null
           echo "Control held: a change that ships nothing needs no entry."

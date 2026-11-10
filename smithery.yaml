@@ -12,7 +12,8 @@ description: |
   - Policy engine: spend limits, MCC blocking, balance checks
   - Works with Claude Desktop, Cursor, Windsurf, Claude Code
 
-  No card number or CVV is ever returned into the agent's context. Live mode exists and moves
+  The person's own card is never returned. The card Shatale issues for a purchase is returned in
+  full on the reveal path, deliberately, so the agent can pay with it. Live mode exists and moves
   real money, behind three separate deliberate acts (a live key, SHATALE_MODE=live, and a
   SHA-256-matched SHATALE_MONEY_GO); with a sandbox key none of it is reachable.
 

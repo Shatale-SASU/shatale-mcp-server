@@ -67,10 +67,8 @@ This MCP server is designed with the following security principles:
 
   **Boundaries, stated because a disclosure is easy to under-describe:**
   - The card is capped at the purchase amount. It is **not** merchant-locked — that is a decision,
-    not an oversight. It stays usable until one of three things ends it: **the card expires, it is
-    locked, or it is quarantined.** Nothing about completing a purchase ends it by itself. So the
-    returned details permit spending the capped amount **at any merchant** until one of those three
-    happens.
+    not an oversight. It stays live after the checkout until we deactivate it, so the returned
+    details permit spending the capped amount **at any merchant** until then.
   - This says nothing about what the upstream API stores, logs, or returns to other clients.
 
   ⚠️ **Honest history: this bullet has been wrong twice in twenty-four hours.** It first understated

@@ -214,7 +214,9 @@ describe('SHAT-3592 · the package tells strangers only what we do', () => {
     const t = tools.find((x) => x.name === 'sandbox_complete_onboarding')!
     expect(t.description).toMatch(/profile complete/i)
     expect(t.description).toMatch(/KYC/)
-    expect(t.description).toMatch(/3-D Secure/i)
-    expect(readme).toMatch(/sandbox_complete_onboarding.*profile complete.*3-D Secure/i)
+    // 2.1.2 (SHAT-8315): the mechanism is not named outside — the claim stays, the word does not.
+    expect(t.description).toMatch(/card authentication enrolled/i)
+    expect(t.description).not.toMatch(/3-D Secure|3DS/i)
+    expect(readme).toMatch(/sandbox_complete_onboarding.*profile complete.*card authentication enrolled/i)
   })
 })

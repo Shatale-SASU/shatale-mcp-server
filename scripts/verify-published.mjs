@@ -8,7 +8,7 @@
 // whatever tag the release used. A tarball missing a directory, or built from a different commit,
 // passes every check in this repo unnoticed.
 //
-// This is not hypothetical here. CHANGELOG records it in this project's own words: "The 0.5.0
+// This is not hypothetical here. The change log (now docs/internal/CHANGES.md; history before 2.1.2 is in git) records it in this project's own words: "The 0.5.0
 // tarball on npm was not built from the code at that tag."
 //
 // ⚠️ AND THE CRITERION IS FIXED BEFORE THE MEASUREMENT, ON PURPOSE. Deciding what counts as "the

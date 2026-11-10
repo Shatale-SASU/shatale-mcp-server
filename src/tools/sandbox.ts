@@ -239,7 +239,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
       // the publisher cabinet this morning: a denial still carries the noun.
       description:
         'Mark a sandbox test user as fully onboarded: profile complete, KYC at basic level, ' +
-        '3-D Secure enrolled. Skips real verification steps. Pass the SAME user_id you gave ' +
+        'card authentication enrolled. Skips real verification steps. Pass the SAME user_id you gave ' +
         'sandbox_create_user — your own identifier for the person, which is the only one you have.',
       inputSchema: {
         type: 'object',
