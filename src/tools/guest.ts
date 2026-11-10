@@ -127,11 +127,10 @@ decision, and the distinction it was missing is whose card it is.
 
 THE CARD SHATALE ISSUES for a purchase IS returned in full. We mint it for that purchase, the
 cardholder is Shatale SASU, and it is handed to you precisely so you can pay with it — a masked
-number cannot be typed into a checkout form. It is capped at the purchase amount and it is NOT
-merchant-locked, so those details permit spending that amount at any merchant until the card
-expires, is locked, or is quarantined; completing the purchase does not end it by itself. Treat
-them as live payment credentials: use them for the checkout, do not repeat them into logs or a
-summary.
+number cannot be typed into a checkout form. It is capped at the purchase amount and it is NOT merchant-locked, and it stays live after the
+checkout until we deactivate it. So those details permit spending the capped amount at any
+merchant until then. Treat them as live payment credentials: use them for the checkout, do not
+repeat them into logs or a summary.
 
 THE PERSON'S OWN CARD IS NEVER RETURNED, in any mode, on any path. It funds the purchase and it
 does not leave our side.

@@ -13,7 +13,9 @@
 //
 // ── THE RULE, AND WHY IT IS THIS NARROW ───────────────────────────────────────
 //
-// A change under src/ must come with a change to CHANGELOG.md. That is all.
+// A change under src/ must come with a change to docs/internal/CHANGES.md — the internal change
+// log. CHANGELOG.md was removed from the package and the repo on 10.11.2026 (SHAT-8315); the log is
+// not shipped. That is all.
 //
 // The scope is deliberately small. A guard that also fired on tests, scripts, workflows or the README
 // would be red on most pull requests in this repository, and a check that cries on ordinary work gets
@@ -32,7 +34,7 @@ import { execFileSync } from 'node:child_process';
 const SHIPPED = /^src\//;
 
 /** The file that has to move with them. */
-const CHANGELOG = 'CHANGELOG.md';
+const CHANGELOG = 'docs/internal/CHANGES.md';
 
 /**
  * verdict decides on a list of changed paths. Pure, so the controls can feed it synthetic sets and
@@ -225,7 +227,7 @@ function main(argv) {
   console.error('unannounced, and the person installing it has no way to learn what moved — which is');
   console.error('what happened to #51, #50, #56, #57 and #58, twice over two releases.');
   console.error('');
-  console.error('Add a line under ## [Unreleased] in CHANGELOG.md. If the change is internal, say');
+  console.error('Add a line under ## [Unreleased] in docs/internal/CHANGES.md. If the change is internal, say');
   console.error('that: "internal: X, no behaviour change" is a valid entry and takes one line.');
   console.error('Exempting refactors is where the next miss would hide — every one of the five above');
   console.error('was made by somebody who judged their change too small to mention.');

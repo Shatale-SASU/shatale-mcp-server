@@ -85,11 +85,13 @@ const DECLARED: { unit: string; tools: string[]; why: string }[] = [
   },
   {
     unit:
-      "No card number or CVV is ever returned into the agent's context. Live mode exists and moves " +
+      "The person's own card is never returned. The card Shatale issues for a purchase is returned in " +
+      'full on the reveal path, deliberately, so the agent can pay with it. Live mode exists and moves ' +
       'real money, behind three separate deliberate acts (a live key, SHATALE_MODE=live, and a ' +
       'SHA-256-matched SHATALE_MONEY_GO); with a sandbox key none of it is reachable.',
-    tools: [],
-    why: 'states a limit and a refusal, not a capability. Its truth is guarded by tests/unit/no-tool-result-carries-a-card and tests/unit/money-gate',
+    tools: ['reveal_card'],
+    // 2.1.2 (SHAT-8315): the former unit claimed no card number is ever returned — false since reveal_card.
+    why: 'names the one card that is returned (reveal_card) and states the refusals. Truth guarded by tests/unit/no-tool-result-carries-a-card and tests/unit/money-gate',
   },
 ]
 

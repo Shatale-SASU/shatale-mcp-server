@@ -1,14 +1,13 @@
 {
   "name": "shatale-mcp-server",
   "mcpName": "io.github.Shatale-SASU/shatale-mcp-server",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "files": [
     "dist",
     "server.json",
     "README.md",
     "LICENSE",
-    "SECURITY.md",
-    "CHANGELOG.md"
+    "SECURITY.md"
   ],
   "description": "MCP server for Shatale — AI agent payment infrastructure: purchases, virtual cards, merchant catalog, and policy engine (22 tools with a sandbox key; the per-mode matrix is in the README)",
   "type": "module",

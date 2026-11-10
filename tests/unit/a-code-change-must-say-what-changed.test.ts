@@ -22,7 +22,7 @@ describe('a code change must say what changed', () => {
   })
 
   test('shipped code WITH a changelog entry passes', () => {
-    const v = verdict(['src/tools/checkout.ts', 'CHANGELOG.md'])
+    const v = verdict(['src/tools/checkout.ts', 'docs/internal/CHANGES.md'])
     expect(v.ok).toBe(true)
   })
 
@@ -52,7 +52,7 @@ describe('a code change must say what changed', () => {
   // A release commit moves the changelog and no code. It must not be refused for the inverse reason —
   // the rule is one-directional on purpose.
   test('a changelog-only change passes', () => {
-    expect(verdict(['CHANGELOG.md']).ok).toBe(true)
+    expect(verdict(['docs/internal/CHANGES.md']).ok).toBe(true)
   })
 
   // POSITIVE CONTROL ON THE CONTROLS. Every assertion above is about a small hand-written list, and a
@@ -62,7 +62,7 @@ describe('a code change must say what changed', () => {
   test('the entry is what changes the answer, nothing else', () => {
     const code = ['src/index.ts']
     expect(verdict(code).ok).toBe(false)
-    expect(verdict([...code, 'CHANGELOG.md']).ok).toBe(true)
+    expect(verdict([...code, 'docs/internal/CHANGES.md']).ok).toBe(true)
   })
 })
 
