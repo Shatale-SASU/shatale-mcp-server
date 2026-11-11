@@ -18,9 +18,8 @@ import { forLog } from '../log-value.js'
 // What makes the PAN reach the agent is that the CLIENT METHOD uses the allowlisted path; break that
 // and the response arrives redacted, which is the failure this design wants.
 //
-// ⚠️ AND WHAT IT DOES NOT RETURN. The endpoint stopped returning `three_ds_password` (SHAT-2323): one
-// static 3DS password is shared by every card in the pool, so revealing it once for one card discloses
-// it for all of them. If it ever reappears in this response, that is not a feature of this tool — it is
+// ⚠️ AND WHAT IT DOES NOT RETURN. The endpoint stopped returning `three_ds_password` (SHAT-2323); it
+// is not part of this response. If it ever reappears in this response, that is not a feature of this tool — it is
 // SHAT-2259 reopening, and the containment migration 201 exists to make that answerable by query.
 //
 // Every call is journalled: card_credential_access_logs, written by the reveal repository itself
