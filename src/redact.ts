@@ -87,7 +87,6 @@
  *
  * ⚠️ AND THE DISCRIMINATOR IS PROVENANCE, NOT A FIELD IN THE BODY. A field in a response body can be
  * removed or renamed by the API (`merchant_locked` was, SHAT-2710), so it cannot be what decides
- * whether to reveal a PAN. A response field cannot be the thing that decides
  * whether to reveal a PAN. What we know for certain is which endpoint we called, so revealing is an
  * ALLOWLIST of paths that return a card WE issued. Anything else keeps the scrub, including any
  * shape we have not seen yet.
