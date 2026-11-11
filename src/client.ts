@@ -329,8 +329,8 @@ export class ShataleClient {
       // ⚠️ THE PATH IS PASSED NOW, BECAUSE THE QUESTION IS WHOSE CARD IT IS (SHAT-2610). The scrub
       // was shape-based and could not tell the card we issued — a tool we handed the agent so it
       // could pay — from the customer's own instrument, which is never ours to show. Provenance is
-      // what we know for certain; the body misdescribes itself (the sandbox approval claims
-      // merchant_locked, and no such field is sent to the issuer at all).
+      // what we know for certain; a field in the body is not (`merchant_locked` was removed by
+      // SHAT-2710).
       return redactPurchaseCard(await res.json(), path)
     } finally {
       clearTimeout(timeout)
