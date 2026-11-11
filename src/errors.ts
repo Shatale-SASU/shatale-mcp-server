@@ -100,21 +100,6 @@ const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }
       'Use the last4 returned by the create call. Do NOT retry this on a live key — the sandbox ' +
       'refuses on purpose, and the id in your path is correct.',
   },
-  // SHAT-8325 (409 on POST /v1/purchases). Money was taken from the person's card for an earlier
-  // purchase that did not go through and is not resolved yet, so the API charges nothing new to that
-  // card. Without this entry the agent saw the generic 409 envelope, which ends in «then retry» —
-  // the exact repeat this refusal exists to stop. Words: Voland, SHAT-8325 comment 31901. They do NOT
-  // mention «another card»: that is an invitation to try again by another path, beside a sentence
-  // that forbids suggesting a retry.
-  unresolved_payment_on_a_failed_purchase: {
-    message:
-      'An earlier payment on this card for a purchase that did not go through is not resolved yet, ' +
-      'so no new purchase is charged to this card.',
-    suggested_fix:
-      'Do not retry, under this key or a new one — the answer stays the same until that payment is ' +
-      'resolved. Nothing was created or held. Tell the person that an earlier payment on this card ' +
-      'needs to be sorted out with support, and do not suggest trying the purchase again.',
-  },
 }
 
 /**
