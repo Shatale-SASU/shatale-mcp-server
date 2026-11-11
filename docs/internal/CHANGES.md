@@ -5,6 +5,8 @@ you would for a public reader — no card-lifecycle mechanics, limits, issuer in
 History before 2.1.2 is in git history (the former CHANGELOG.md).
 
 ## [Unreleased]
+- The published package carries no source comments (`removeComments`), checked by a test over `dist/`.
+  Comments that described card internals were rewritten in the source (SHAT-8313, SHAT-8333).
 
 ## [2.1.2] — 2026-11-10
 - Card handling text in `explain_shatale`, README and SECURITY.md corrected: the person's own card is

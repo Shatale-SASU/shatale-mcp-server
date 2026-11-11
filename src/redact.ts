@@ -3,7 +3,7 @@
  * logs or the chat history from a path we have not deliberately allowed.
  *
  * 🔴 THE PARAGRAPH THAT STOOD HERE DESCRIBED A RESPONSE THAT NO LONGER EXISTS, AND NAMED A FILE TO
- * PROVE IT (SHAT-3346). It read: "The backend's purchase response embeds the raw pool-card PAN + CVV
+ * PROVE IT (SHAT-3346). It read: "The backend's purchase response embeds the raw PAN + CVV of the purchase's card
  * under `payment.card` when a card is issued (apps/api purchases.go purchaseToJSON)."
  *
  * Measured on apps/api origin/main, 2026-09-15 — purchases.go builds that block as
@@ -97,7 +97,7 @@
 // goes stale silently — which is exactly what happened when the allowlist was introduced and the
 // "never returned" promise stayed (SHAT-2678 follow-up).
 export const OUR_CARD_PATHS: RegExp[] = [
-  // Sandbox approval hands back the pool card for the checkout the agent is about to fill.
+  // Sandbox approval hands back the purchase's card for the checkout the agent is about to fill.
   /^\/v1\/sandbox\/purchases\/[^/]+\/approve$/,
   // The dedicated no-store reveal path, for when the client learns to call it.
   /^\/v1\/purchases\/[^/]+\/card-credentials$/,

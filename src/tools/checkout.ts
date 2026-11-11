@@ -6,7 +6,7 @@ import { requireId, requirePersonId, exactStringFields, describeShape } from '..
 import { forLog } from '../log-value.js'
 
 // A merchant checkout form can ask for the CARDHOLDER and the BUYER separately. Shatale returns them
-// as two honest, legitimately-distinct identities (they need not match — the pool card is Shatale's,
+// as two honest, legitimately-distinct identities (they need not match — the purchase's card is Shatale's,
 // the purchase is for the end-user). These two tools expose each half so the agent fills the right
 // value into the right field. Card credentials (PAN/CVV) are NOT here — they come out-of-band.
 

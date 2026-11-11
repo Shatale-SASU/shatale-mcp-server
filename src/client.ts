@@ -499,7 +499,7 @@ export class ShataleClient {
   // ---- Checkout identity ----
 
   // Returns the two honest identities for a purchase's checkout: billing_identity (Shatale, the
-  // cardholder on the pool card) and merchant_customer_identity (the end-user / buyer). Live money
+  // cardholder on the purchase's card) and merchant_customer_identity (the end-user / buyer). Live money
   // path (agent-scoped by the API key's publisher); no card credentials here.
   // The reveal path the redaction allowlist has been holding open since SHAT-2610. `redact.ts:71`
   // lists it with the comment "for when the client learns to call it" — this is the client learning.
@@ -512,8 +512,7 @@ export class ShataleClient {
   //
   // The endpoint is agent-scoped and journalled: every call writes card_credential_access_logs
   // (apps/api/internal/purchases/pgx/card_reveal_repo.go:149). It returns this card's PAN, expiry and
-  // CVV and NOT `three_ds_password` — that removal is the point of SHAT-2323, because one pool 3DS
-  // password is shared by every card in the pool and revealing it once discloses it for all of them.
+  // CVV and NOT `three_ds_password` — that removal is the point of SHAT-2323.
   //
   // ⚠️ `publisherUserId` TRAVELS AS THE QUERY PARAMETER shatale-api's person gate reads
   // (RevealCard: r.URL.Query().Get("publisher_user_id"), SHAT-4016). A query, not a body, because this
