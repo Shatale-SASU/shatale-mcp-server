@@ -57,6 +57,7 @@
     "shipping_address_required",
     "shipping_not_required",
     "terms_version_stale",
+    "unresolved_payment_on_a_failed_purchase",
     "user_exists",
     "validation_failed",
     "webhook_endpoint_disabled",
@@ -77,6 +78,7 @@
     "validation_failed"
   ],
   "forwarded": [
-    "sandbox_no_pan"
+    "sandbox_no_pan",
+    "unresolved_payment_on_a_failed_purchase"
   ]
 }
