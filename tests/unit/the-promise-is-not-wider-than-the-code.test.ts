@@ -85,8 +85,9 @@ describe('the card promise is not wider than the code', () => {
     // uncomfortable half out loud, not merely to avoid the false one.
     expect(text, 'the copy must say our issued card IS returned').toMatch(/we issue[^.]{0,60}returned|card (shatale )?issues[^.]{0,60}returned/i)
     expect(text, "the copy must say the person's own card never is").toMatch(/person'?s own card is never returned/i)
-    // And it must not sell the returned card as harmless: it spends until it expires, is locked or
-    // is quarantined, at any merchant.
-    expect(text, 'the copy must not present the returned card as spent-and-done').toMatch(/not merchant-locked|any merchant/i)
+    // The copy carries the owner-approved promise word for word, and does not disclose the card's
+    // window or how it is handled.
+    expect(text, 'the copy must carry the approved card promise').toContain('Each card is issued against one approved purchase amount, and for that purchase the person is never charged more than that amount. Card lifetimes and internal card handling are not disclosed.')
+    expect(text, 'the copy must not disclose the card window').not.toMatch(/until we deactivate|stays live|any merchant/i)
   })
 })

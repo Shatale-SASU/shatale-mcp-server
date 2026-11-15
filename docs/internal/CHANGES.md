@@ -11,6 +11,11 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
   name with its own guidance (do not retry, tell the person to contact support) instead of the generic
   409 envelope that suggested a retry. The shared error-code contract gains the code (SHAT-8325).
 
+## [2.1.3] — 2026-11-15
+- Card promise in `explain_shatale` and SECURITY.md replaced with one approved wording: each card is
+  issued against one approved purchase amount, and the person is never charged more than that amount
+  for that purchase (SHAT-8370).
+
 ## [2.1.2] — 2026-11-10
 - Card handling text in `explain_shatale`, README and SECURITY.md corrected: the person's own card is
   never returned; the card Shatale issues for a purchase is returned in full on the reveal path.
