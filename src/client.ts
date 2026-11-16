@@ -522,11 +522,26 @@ export class ShataleClient {
   // `undefined` is the DEPRECATED transition (reveal.ts REVEAL_WITHOUT_PERSON_DEPRECATION): the
   // request goes out exactly as 1.1.x sent it, with no query at all — not an empty parameter, which
   // the API trims to "" and treats the same, but which would make the wire record lie about intent.
-  async getCardCredentials(id: string, publisherUserId?: string): Promise<unknown> {
+  //
+  // ⚠️ `pageCurrency` IS THE OPEN PAGE'S CURRENCY, AND ITS ABSENCE MUST BE A BARE PATH — NOT AN EMPTY
+  // PARAMETER (SHAT-8390). shatale-api reads an empty value as "not asked" and serves the reveal by
+  // compatibility, so `?page_currency=` would behave exactly like no gate while READING, on the wire
+  // and in the access log, as a gate that was asked and passed. The parameter is therefore built only
+  // when there is a value, and a blank one is no value — the same rule `publisherUserId` states above,
+  // for the same reason.
+  async getCardCredentials(id: string, publisherUserId?: string, pageCurrency?: string): Promise<unknown> {
+    const query: string[] = []
+    if (publisherUserId !== undefined) {
+      query.push(`publisher_user_id=${encodeURIComponent(publisherUserId)}`)
+    }
+    const currency = (pageCurrency ?? '').trim()
+    if (currency !== '') {
+      query.push(`page_currency=${encodeURIComponent(currency)}`)
+    }
     return this.request(
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/card-credentials` +
-        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
+        (query.length === 0 ? '' : `?${query.join('&')}`),
       undefined,
       // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
       // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's

@@ -89,6 +89,17 @@ export function createRevealTools(client: ShataleClient): ToolModule {
                 'to). Pass it: the API then reveals the card only to the person whose purchase it ' +
                 'is. Omitting it still works for now but is DEPRECATED and will become an error.',
             },
+            // SHAT-8390. The currency the OPEN checkout page charges in, as the page itself states it —
+            // not the currency of the card, and not what the model believes the price to be. Shatale
+            // compares it with the currency the MERCHANT priced this purchase in, refuses the reveal when
+            // they differ and cancels the purchase. Omit it when the page's currency could not be read:
+            // Shatale then behaves exactly as it did before this field existed.
+            page_currency: {
+              type: 'string' as const,
+              description:
+                'ISO 4217 code of the currency the open checkout page charges in (e.g. "USD"), read ' +
+                'from the page itself. Omit it if the page does not state one.',
+            },
           },
           // ⚠️ NOT YET IN `required`, AND THAT IS A TRANSITION, NOT A DECISION (SHAT-3023, 28.09.2026).
           // Published 1.1.0/1.1.1 shipped this tool with purchase_id alone, and whoever built on
@@ -126,8 +137,13 @@ export function createRevealTools(client: ShataleClient): ToolModule {
               `publisher_user_id; served unscoped. ${REVEAL_WITHOUT_PERSON_DEPRECATION}\n`,
           )
         }
+        // The page's currency is passed THROUGH, not judged here: which currencies a purchase may be
+        // charged in is shatale-api's to decide (one reader, SHAT-8511), and a second opinion in this
+        // server would be a second door onto the same money. A value that is not a string is treated as
+        // absent — this tool refuses nothing it was not asked to refuse.
+        const pageCurrency = typeof args.page_currency === 'string' ? args.page_currency : undefined
         try {
-          const data = await client.getCardCredentials(id.value, personValue)
+          const data = await client.getCardCredentials(id.value, personValue, pageCurrency)
           // Fail loud rather than hand back an empty-but-successful reveal. An agent given `{}` at a
           // live checkout form fills nothing and reports success, and the purchase stalls with no cause
           // recorded anywhere. The usual reason is that the purchase is not payment_ready yet.
