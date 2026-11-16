@@ -13,6 +13,8 @@
     "conflict",
     "consent_required",
     "consents_required",
+    "currency_mismatch_hold_stands",
+    "currency_mismatch_purchase_canceled",
     "current_factor_invalid",
     "current_factor_locked",
     "current_factor_required",
@@ -79,6 +81,8 @@
     "validation_failed"
   ],
   "forwarded": [
+    "currency_mismatch_hold_stands",
+    "currency_mismatch_purchase_canceled",
     "sandbox_no_pan",
     "unresolved_payment_on_a_failed_purchase"
   ]

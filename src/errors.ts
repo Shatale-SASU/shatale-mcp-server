@@ -30,6 +30,19 @@ export interface StructuredError {
   request_id?: string
   /** SHAT-6291: where to send the person, when the API names one (open_url only). */
   next_action?: { type: 'open_url'; url: string }
+  /**
+   * SHAT-8390: THE ONE SENTENCE OF UPSTREAM PROSE THIS CLIENT CARRIES, AND WHY IT IS NOT A BREACH
+   * OF THE RULE AT THE TOP OF THIS FILE.
+   *
+   * That rule — «a detail of somebody else's error never reaches the agent» — is about prose the
+   * server did not mean to publish: messages, details, driver strings. `person_message` is the
+   * opposite: a sentence the API writes FOR THE PERSON, agreed in advance, and carried only for
+   * codes that declare they have one. It is never read as advice and never merged into `message`
+   * or `suggested_fix` — those stay OUR words, written for the agent. It rides in a field of its
+   * own so an app can show it to the person, and `extractPersonMessage` refuses anything that is
+   * not one plain, bounded, single-line string.
+   */
+  person_message?: string
 }
 
 export class ShataleApiError extends Error {
@@ -37,6 +50,7 @@ export class ShataleApiError extends Error {
   readonly suggested_fix: string
   readonly request_id?: string
   readonly next_action?: { type: 'open_url'; url: string }
+  readonly person_message?: string
 
   constructor(err: StructuredError) {
     super(err.message)
@@ -45,12 +59,14 @@ export class ShataleApiError extends Error {
     this.suggested_fix = err.suggested_fix
     this.request_id = err.request_id
     this.next_action = err.next_action
+    this.person_message = err.person_message
   }
 
   toStructured(): StructuredError {
     const out: StructuredError = { code: this.code, message: this.message, suggested_fix: this.suggested_fix }
     if (this.request_id) out.request_id = this.request_id
     if (this.next_action) out.next_action = this.next_action
+    if (this.person_message) out.person_message = this.person_message
     return out
   }
 }
@@ -115,7 +131,64 @@ const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }
       'resolved. Nothing was created or held. Tell the person that an earlier payment on this card ' +
       'needs to be sorted out with support, and do not suggest trying the purchase again.',
   },
+  // SHAT-8390 (409 on GET /v1/purchases/{id}/card-credentials). The open checkout page charges in a
+  // currency other than the one the merchant priced this purchase in, so the card is NOT handed out.
+  // Two codes, because what happened to the money differs, and the person must not be told the wrong
+  // one — hence `person_message`, the API's sentence for them, carried beside our own words.
+  //
+  // 🔴 WITHOUT THESE ENTRIES THE REFUSAL ARRIVED AS THE GENERIC 409 ENVELOPE, whose advice ends in
+  // «then retry» — measured by the second hand on this very branch. That is the exact repeat the gate
+  // exists to stop, and on the _hold_stands case a retry WITHOUT page_currency is served by
+  // compatibility, so the envelope was an instruction to walk around the gate.
+  currency_mismatch_purchase_canceled: {
+    message:
+      'The checkout page charges in a different currency than this purchase was priced in. The card ' +
+      'was not revealed and the purchase has been cancelled.',
+    suggested_fix:
+      'Do not retry this reveal, with or without page_currency — the purchase is cancelled and no card ' +
+      'will be handed out for it. Nothing was taken from the person. If the shop really does charge in ' +
+      'that currency, a new purchase has to be requested at that currency and price.',
+  },
+  currency_mismatch_hold_stands: {
+    message:
+      'The checkout page charges in a different currency than this purchase was priced in. The card was ' +
+      'not revealed, and the purchase could NOT be cancelled because a payment on it may already be in ' +
+      'progress.',
+    suggested_fix:
+      'Do not retry this reveal, and do not retry it without page_currency — that would walk around the ' +
+      'check rather than pass it. Do not start a new purchase for the same thing until this one is ' +
+      'resolved: money may be in flight on it. Tell the person the purchase could not be paid and that ' +
+      'the amount is still reserved on their card; where this refusal carries a person_message, use its ' +
+      'words.',
+  },
 }
+
+/**
+ * SHAT-8390: the codes whose body carries a sentence written for the PERSON. A closed list of its
+ * own, deliberately NOT a property of every forwarded code: carrying prose is an exception that each
+ * code earns, not a default a future entry inherits by being added above.
+ */
+const CODES_WITH_A_PERSON_MESSAGE = new Set(['currency_mismatch_purchase_canceled', 'currency_mismatch_hold_stands'])
+
+/** The longest person_message carried. Voland's longest sentence set is ~290 characters; this is room, not a target. */
+const PERSON_MESSAGE_MAX = 600
+
+/**
+ * What disqualifies a person_message from being ONE PLAIN LINE.
+ *
+ * 🔴 THE FIRST VERSION OF THIS SAID "no control characters" AND MEANT \u0000-\u001f\u007f, WHICH IS NOT
+ * THE SAME CLAIM (second hand, 16.11.2026). Two families walked straight through it:
+ *   - U+2028 LINE SEPARATOR / U+2029 PARAGRAPH SEPARATOR — line breaks that are not C0, so the text that
+ *     was promised to be one line is two, wherever it is shown or logged;
+ *   - U+202A-U+202E and U+2066-U+2069 — the bidi overrides. U+202E (RLO) reverses what a display shows,
+ *     so a sentence can READ as the opposite of its bytes to the person it was written for.
+ * Today the only sender is our own API and the words are Voland's constants, so nothing was exploited.
+ * The rule is tightened anyway, because the claim this field rests on is "one plain line a display can
+ * show as written", and a check that does not test that claim is not evidence for it.
+ *
+ * \p{Cc} is the control class by Unicode's own definition rather than a hand-typed range.
+ */
+const NOT_ONE_PLAIN_LINE = /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069]/u
 
 /**
  * Pull the upstream error CODE out of a body, and only if it is one we agreed to forward.
@@ -130,11 +203,34 @@ export function extractForwardedCode(body: unknown): string | undefined {
   return Object.prototype.hasOwnProperty.call(FORWARDED_CODES, code) ? code : undefined
 }
 
-export function forwardedRefusal(code: string, requestId?: string): ShataleApiError | undefined {
+/**
+ * Pull the PERSON'S sentence out of a body — one field by name, for a code that declares it has one.
+ *
+ * The same discipline as {@link extractForwardedCode}, one notch tighter because this one IS prose:
+ * a plain string, trimmed non-empty, no control characters (so it cannot end a log line or smuggle a
+ * second line into a display), and bounded in length (so a body cannot hand an agent a novel). A
+ * value that fails any of these is dropped — the refusal still arrives, in our own words, with the
+ * person's sentence absent rather than wrong.
+ */
+export function extractPersonMessage(body: unknown, code: string): string | undefined {
+  if (!CODES_WITH_A_PERSON_MESSAGE.has(code)) return undefined
+  if (typeof body !== 'object' || body === null) return undefined
+  const raw = (body as Record<string, unknown>).person_message
+  if (typeof raw !== 'string') return undefined
+  const v = raw.trim()
+  if (v === '' || v.length > PERSON_MESSAGE_MAX) return undefined
+  if (NOT_ONE_PLAIN_LINE.test(v)) return undefined
+  return v
+}
+
+export function forwardedRefusal(code: string, requestId?: string, personMessage?: string): ShataleApiError | undefined {
   const known = FORWARDED_CODES[code]
   if (!known) return undefined
   const e: StructuredError = { code, message: known.message, suggested_fix: known.suggested_fix }
   if (requestId) e.request_id = requestId
+  // Only for a code that declares it: a sentence arriving under a code that has none is upstream
+  // prose nobody agreed to carry, and it is dropped unread rather than passed on.
+  if (personMessage && CODES_WITH_A_PERSON_MESSAGE.has(code)) e.person_message = personMessage
   return new ShataleApiError(e)
 }
 

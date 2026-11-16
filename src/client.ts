@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, extractForwardedCode, extractPersonMessage, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 import { forLog } from './log-value.js'
 import { personQuery } from './person-scope.js'
@@ -262,12 +262,16 @@ export class ShataleClient {
         // бы в исключение о клиенте вместо отказа сервера.
         let requestId: string | undefined
         let forwarded: string | undefined
+        let personMessage: string | undefined
         let shippingCode: string | undefined
         let shippingAction: { type: 'open_url'; url: string } | undefined
         try {
           const body = await res.json()
           requestId = extractRequestId(body)
           forwarded = extractForwardedCode(body)
+          // SHAT-8390: read in the SAME single pass over the body — a second res.json() would throw on
+          // an already-consumed stream and turn the server's refusal into an exception about us.
+          if (forwarded) personMessage = extractPersonMessage(body, forwarded)
           if (shippingAddress404 && res.status === 404) {
             shippingCode = extractShippingAddressCode(body)
             shippingAction = extractOpenUrlAction(body)
@@ -275,6 +279,7 @@ export class ShataleClient {
         } catch {
           requestId = undefined
           forwarded = undefined
+          personMessage = undefined
           shippingCode = undefined
           shippingAction = undefined
         }
@@ -299,7 +304,7 @@ export class ShataleClient {
         // предупреждение «не повторяй на живом ключе» становится «проверь id в пути» — то есть
         // указанием смотреть ровно не туда.
         if (forwarded) {
-          const named = forwardedRefusal(forwarded, requestId)
+          const named = forwardedRefusal(forwarded, requestId, personMessage)
           if (named) throw named
         }
         throw mapHttpError(res.status, method, path, requestId, { addressing, keyKind: this.keyKind() })
@@ -522,11 +527,26 @@ export class ShataleClient {
   // `undefined` is the DEPRECATED transition (reveal.ts REVEAL_WITHOUT_PERSON_DEPRECATION): the
   // request goes out exactly as 1.1.x sent it, with no query at all — not an empty parameter, which
   // the API trims to "" and treats the same, but which would make the wire record lie about intent.
-  async getCardCredentials(id: string, publisherUserId?: string): Promise<unknown> {
+  //
+  // ⚠️ `pageCurrency` IS THE OPEN PAGE'S CURRENCY, AND ITS ABSENCE MUST BE A BARE PATH — NOT AN EMPTY
+  // PARAMETER (SHAT-8390). shatale-api reads an empty value as "not asked" and serves the reveal by
+  // compatibility, so `?page_currency=` would behave exactly like no gate while READING, on the wire
+  // and in the access log, as a gate that was asked and passed. The parameter is therefore built only
+  // when there is a value, and a blank one is no value — the same rule `publisherUserId` states above,
+  // for the same reason.
+  async getCardCredentials(id: string, publisherUserId?: string, pageCurrency?: string): Promise<unknown> {
+    const query: string[] = []
+    if (publisherUserId !== undefined) {
+      query.push(`publisher_user_id=${encodeURIComponent(publisherUserId)}`)
+    }
+    const currency = (pageCurrency ?? '').trim()
+    if (currency !== '') {
+      query.push(`page_currency=${encodeURIComponent(currency)}`)
+    }
     return this.request(
       'GET',
       `/v1/purchases/${encodeURIComponent(id)}/card-credentials` +
-        (publisherUserId === undefined ? '' : `?publisher_user_id=${encodeURIComponent(publisherUserId)}`),
+        (query.length === 0 ? '' : `?${query.join('&')}`),
       undefined,
       // The id is the CALLER'S — the same fact the checkout-identity sibling states. Left unstated it
       // defaults to 'unknown', and the commonest refusal of this tool (a 404 on somebody else's
