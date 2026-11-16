@@ -85,8 +85,12 @@ describe('the card promise is not wider than the code', () => {
     // uncomfortable half out loud, not merely to avoid the false one.
     expect(text, 'the copy must say our issued card IS returned').toMatch(/we issue[^.]{0,60}returned|card (shatale )?issues[^.]{0,60}returned/i)
     expect(text, "the copy must say the person's own card never is").toMatch(/person'?s own card is never returned/i)
-    // And it must not sell the returned card as harmless: it spends until it expires, is locked or
-    // is quarantined, at any merchant.
-    expect(text, 'the copy must not present the returned card as spent-and-done').toMatch(/not merchant-locked|any merchant/i)
+    // SHAT-8370: the card's property is stated, its window is not. The copy names the one guarantee that
+    // holds on every path — the person is never charged more than the approved amount — and says that card
+    // lifetimes are not disclosed. It must not describe when or where the returned details can still be
+    // spent: that told a reader of a public repository (and the model itself) how to misuse a leaked card.
+    expect(text, 'the copy must state the property').toContain('Each card is issued against one approved purchase amount, and for that purchase the person is never charged more than that amount.')
+    expect(text, 'the copy must say lifetimes are not disclosed').toContain('Card lifetimes and internal card handling are not disclosed.')
+    expect(text, 'the copy must not describe the window').not.toMatch(/until we deactivate|stays live after|any merchant until/i)
   })
 })

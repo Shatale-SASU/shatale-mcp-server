@@ -5,6 +5,9 @@ you would for a public reader — no card-lifecycle mechanics, limits, issuer in
 History before 2.1.2 is in git history (the former CHANGELOG.md).
 
 ## [Unreleased]
+- Card handling text in `explain_shatale` and SECURITY.md now states the card's guarantee to the person
+  (never charged more than the approved purchase amount) and no longer describes card lifetimes
+  (SHAT-8370).
 - The published package carries no source comments (`removeComments`), checked by a test over `dist/`.
   Comments that described card internals were rewritten in the source (SHAT-8313, SHAT-8333).
 - `request_purchase`: the API's 409 `unresolved_payment_on_a_failed_purchase` reaches the agent by
