@@ -157,7 +157,9 @@ const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }
     suggested_fix:
       'Do not retry this reveal, and do not retry it without page_currency — that would walk around the ' +
       'check rather than pass it. Do not start a new purchase for the same thing until this one is ' +
-      'resolved: money may be in flight on it. Tell the person what the person_message says.',
+      'resolved: money may be in flight on it. Tell the person the purchase could not be paid and that ' +
+      'the amount is still reserved on their card; where this refusal carries a person_message, use its ' +
+      'words.',
   },
 }
 
@@ -170,6 +172,23 @@ const CODES_WITH_A_PERSON_MESSAGE = new Set(['currency_mismatch_purchase_cancele
 
 /** The longest person_message carried. Voland's longest sentence set is ~290 characters; this is room, not a target. */
 const PERSON_MESSAGE_MAX = 600
+
+/**
+ * What disqualifies a person_message from being ONE PLAIN LINE.
+ *
+ * 🔴 THE FIRST VERSION OF THIS SAID "no control characters" AND MEANT \u0000-\u001f\u007f, WHICH IS NOT
+ * THE SAME CLAIM (second hand, 16.11.2026). Two families walked straight through it:
+ *   - U+2028 LINE SEPARATOR / U+2029 PARAGRAPH SEPARATOR — line breaks that are not C0, so the text that
+ *     was promised to be one line is two, wherever it is shown or logged;
+ *   - U+202A-U+202E and U+2066-U+2069 — the bidi overrides. U+202E (RLO) reverses what a display shows,
+ *     so a sentence can READ as the opposite of its bytes to the person it was written for.
+ * Today the only sender is our own API and the words are Voland's constants, so nothing was exploited.
+ * The rule is tightened anyway, because the claim this field rests on is "one plain line a display can
+ * show as written", and a check that does not test that claim is not evidence for it.
+ *
+ * \p{Cc} is the control class by Unicode's own definition rather than a hand-typed range.
+ */
+const NOT_ONE_PLAIN_LINE = /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069]/u
 
 /**
  * Pull the upstream error CODE out of a body, and only if it is one we agreed to forward.
@@ -200,8 +219,7 @@ export function extractPersonMessage(body: unknown, code: string): string | unde
   if (typeof raw !== 'string') return undefined
   const v = raw.trim()
   if (v === '' || v.length > PERSON_MESSAGE_MAX) return undefined
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f]/.test(v)) return undefined
+  if (NOT_ONE_PLAIN_LINE.test(v)) return undefined
   return v
 }
 
