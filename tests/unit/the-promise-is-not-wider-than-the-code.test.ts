@@ -94,3 +94,45 @@ describe('the card promise is not wider than the code', () => {
     expect(text, 'the copy must not describe the window').not.toMatch(/until we deactivate|stays live after|any merchant until/i)
   })
 })
+
+// SHAT-8370, second hand (Buklya) on #131: the exact old sentence was refused, a PARAPHRASE was not — «The details
+// remain usable at other shops until the card is switched off.» passed, and SECURITY.md was not read at all. The
+// refusal is by CLASS now, over BOTH public texts: anything that says how long, until when, or where else the
+// returned card details can still be spent. The property is stated (above); its window is not.
+const WINDOW_CLASS = new RegExp(
+  [
+    String.raw`until\b[^.]{0,40}\b(deactivat|switch(ed)? off|turn(ed)? off|disabl|expir|lock|quarantin|cancel)`,
+    String.raw`\b(remain|remains|stay|stays|is|are|keeps?)\s+(still\s+)?(usable|live|valid|active|spendable)\b`,
+    String.raw`\b(at|in|with)\s+(other|another|any|different)\s+(shop|store|merchant|retailer|seller)s?\b`,
+    String.raw`\b(after|past|beyond)\s+the\s+(checkout|purchase)\b[^.]{0,40}\b(spend|use|usable|charge)`,
+  ].join('|'),
+  'i',
+)
+
+describe('the card text names no window, in any words, in either public text (SHAT-8370)', () => {
+  test('the class catches the words it is written against', () => {
+    for (const s of [
+      'It stays live after the checkout until we deactivate it.',
+      'The details remain usable at other shops until the card is switched off.',
+      'So those details permit spending the capped amount at any merchant until then.',
+      'The card is still valid after the purchase and can be used to spend elsewhere.',
+    ]) {
+      expect(s, 'positive control: the pattern must catch this').toMatch(WINDOW_CLASS)
+    }
+    expect('Each card is issued against one approved purchase amount, and for that purchase the person is never charged more than that amount. Card lifetimes and internal card handling are not disclosed.',
+      'negative control: the approved text must pass').not.toMatch(WINDOW_CLASS)
+  })
+
+  test('explain_shatale names no window', async () => {
+    const m = (await explainText()).match(WINDOW_CLASS)
+    expect(m?.[0] ?? null, 'explain_shatale describes when or where the card can still be spent').toBeNull()
+  })
+
+  test('SECURITY.md names no window', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { fileURLToPath } = await import('node:url')
+    const text = readFileSync(fileURLToPath(new URL('../../SECURITY.md', import.meta.url)), 'utf8')
+    const m = text.replace(/\s+/g, ' ').match(WINDOW_CLASS)
+    expect(m?.[0] ?? null, 'SECURITY.md describes when or where the card can still be spent').toBeNull()
+  })
+})
