@@ -137,11 +137,44 @@ export function createRevealTools(client: ShataleClient): ToolModule {
               `publisher_user_id; served unscoped. ${REVEAL_WITHOUT_PERSON_DEPRECATION}\n`,
           )
         }
-        // The page's currency is passed THROUGH, not judged here: which currencies a purchase may be
-        // charged in is shatale-api's to decide (one reader, SHAT-8511), and a second opinion in this
-        // server would be a second door onto the same money. A value that is not a string is treated as
-        // absent — this tool refuses nothing it was not asked to refuse.
-        const pageCurrency = typeof args.page_currency === 'string' ? args.page_currency : undefined
+        // WHICH currencies a purchase may be charged in is shatale-api's to decide (one reader,
+        // SHAT-8511), and a second opinion here would be a second door onto the same money. So the
+        // VALUE is passed through unjudged — but its SHAPE is not.
+        //
+        // 🔴 AND THE SHAPE IS CHECKED BECAUSE OF WHAT THE API DOES WITH A VALUE IT CANNOT READ
+        // (measured by the second hand on this branch, 16.11.2026). The API compares the string with
+        // the purchase's currency and, on a difference, REFUSES THE REVEAL AND CANCELS THE PURCHASE.
+        // It does not ask whether the string is a currency code at all. So a model that read «$»,
+        // «dollars» or a zero-width space off the page — U+200B is not whitespace, `trim` leaves it —
+        // would not report a mismatch: it would CANCEL THE PERSON'S PURCHASE over an unreadable answer.
+        // "I could not read the page's currency" is not "the page is in another currency", and only
+        // the caller can tell those apart.
+        //
+        // Refused rather than quietly dropped, for the reason stated above about publisher_user_id: a
+        // caller that tried to state the currency and got it wrong has made a mistake, and treating it
+        // as absent would hide that mistake behind the compatibility path — here by walking around the
+        // very gate it was trying to pass. Nothing is sent, nothing is cancelled, and the agent is told
+        // what a readable answer looks like.
+        //
+        // ⚠️ THIS IS A SECOND LINE, NOT THE LINE. Any other caller can still send «$» straight to the
+        // API; the cancel on an unreadable currency is the API's to fix (SHAT-8390, the gate itself).
+        let pageCurrency: string | undefined
+        if (args.page_currency !== undefined && args.page_currency !== null) {
+          if (typeof args.page_currency !== 'string' || !/^[A-Za-z]{3}$/.test(args.page_currency.trim())) {
+            return refusal({
+              code: 'page_currency_unreadable',
+              message:
+                'page_currency must be a three-letter ISO 4217 currency code, as the checkout page states ' +
+                'it — for example "USD". Nothing was sent and nothing was changed.',
+              suggested_fix:
+                'Read the currency CODE from the page and pass it (USD, EUR, GBP). A symbol such as "$", ' +
+                'a word such as "dollars", or a value with stray characters in it is not a code. If the ' +
+                'page does not state a currency you can read, OMIT page_currency rather than guessing: a ' +
+                'guess that is wrong cancels the person\'s purchase.',
+            })
+          }
+          pageCurrency = args.page_currency.trim()
+        }
         try {
           const data = await client.getCardCredentials(id.value, personValue, pageCurrency)
           // Fail loud rather than hand back an empty-but-successful reveal. An agent given `{}` at a

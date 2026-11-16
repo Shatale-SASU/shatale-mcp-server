@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { PurchaseInput, CredentialInput, SandboxAuthInput } from './types.js'
 import { VERSION as CLIENT_VERSION } from './version.js'
-import { mapHttpError, extractRequestId, extractForwardedCode, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
+import { mapHttpError, extractRequestId, extractForwardedCode, extractPersonMessage, forwardedRefusal, extractShippingAddressCode, extractOpenUrlAction, SHIPPING_ADDRESS_404, SHIPPING_NOT_REQUIRED, SHIPPING_ADDRESS_UNRECOGNISED, ShataleApiError, BUILT_IN_MCC_NOTE, type RequestAddressing, type KeyKind } from './errors.js'
 import { redactPurchaseCard } from './redact.js'
 import { forLog } from './log-value.js'
 import { personQuery } from './person-scope.js'
@@ -262,12 +262,16 @@ export class ShataleClient {
         // бы в исключение о клиенте вместо отказа сервера.
         let requestId: string | undefined
         let forwarded: string | undefined
+        let personMessage: string | undefined
         let shippingCode: string | undefined
         let shippingAction: { type: 'open_url'; url: string } | undefined
         try {
           const body = await res.json()
           requestId = extractRequestId(body)
           forwarded = extractForwardedCode(body)
+          // SHAT-8390: read in the SAME single pass over the body — a second res.json() would throw on
+          // an already-consumed stream and turn the server's refusal into an exception about us.
+          if (forwarded) personMessage = extractPersonMessage(body, forwarded)
           if (shippingAddress404 && res.status === 404) {
             shippingCode = extractShippingAddressCode(body)
             shippingAction = extractOpenUrlAction(body)
@@ -275,6 +279,7 @@ export class ShataleClient {
         } catch {
           requestId = undefined
           forwarded = undefined
+          personMessage = undefined
           shippingCode = undefined
           shippingAction = undefined
         }
@@ -299,7 +304,7 @@ export class ShataleClient {
         // предупреждение «не повторяй на живом ключе» становится «проверь id в пути» — то есть
         // указанием смотреть ровно не туда.
         if (forwarded) {
-          const named = forwardedRefusal(forwarded, requestId)
+          const named = forwardedRefusal(forwarded, requestId, personMessage)
           if (named) throw named
         }
         throw mapHttpError(res.status, method, path, requestId, { addressing, keyKind: this.keyKind() })

@@ -55,13 +55,70 @@ describe('reveal_card carries the currency of the page it will be typed into', (
     expect(url.search).toBe('')
   })
 
-  it('a blank page currency is the same as none — never an empty parameter', async () => {
+  // 🔴 A VALUE THAT IS NOT A CURRENCY CODE IS REFUSED HERE, AND THE REASON IS NOT TIDINESS.
+  // The API compares the string with the purchase's currency and, on a difference, REFUSES THE REVEAL
+  // AND CANCELS THE PURCHASE — it never asks whether the string is a code at all (measured by the
+  // second hand, 16.11.2026). So a model that read «$» or a zero-width space off the page would not
+  // report a mismatch: it would cancel the person's purchase over an answer nobody could read.
+  // U+200B is in this list on purpose: it is NOT whitespace, so `trim` leaves it and only the shape
+  // check catches it.
+  for (const [name, value] of [
+    ['a symbol', '$'],
+    ['a word', 'dollars'],
+    ['a zero-width space inside a code', 'US\u200BD'],
+    ['a code with a stray character', 'USD='],
+    ['blank', '   '],
+    ['empty', ''],
+    ['not a string', 7],
+  ] as const) {
+    it(`refuses ${name} rather than letting it cancel the purchase`, async () => {
+      const fn = captureFetch()
+      const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
+        purchase_id: PURCHASE,
+        page_currency: value,
+      })
+      // Nothing was sent: a refusal that still called the API would have cancelled the purchase.
+      expect(fn).not.toHaveBeenCalled()
+      const err = JSON.parse(String(res.content[0].text)).error as Record<string, unknown>
+      expect(err.code).toBe('page_currency_unreadable')
+      expect(String(err.suggested_fix)).toContain('OMIT page_currency')
+    })
+  }
+
+  // CONTROL: the refusal is about the SHAPE, not about the field. An absent field is still the
+  // compatibility path, and a readable code still goes out.
+  it('CONTROL: an absent field is not a refusal, and a readable code is sent', async () => {
+    const fn = captureFetch()
+    const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
+      purchase_id: PURCHASE,
+    })
+    // The call WENT OUT — that is what "not a refusal" means here. (The body this harness returns is a
+    // stand-in and the tool judges its shape separately; the assertion is about the gate, not the card.)
+    expect(fn).toHaveBeenCalled()
+    const err = JSON.parse(String(res.content[0].text)).error as Record<string, unknown> | undefined
+    expect(err?.code).not.toBe('page_currency_unreadable')
+    expect(urlOf(fn).search).toBe('')
+  })
+
+  it('surrounding spaces are trimmed, not refused', async () => {
     const fn = captureFetch()
     await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
-      page_currency: '   ',
+      page_currency: '  usd  ',
     })
-    expect(urlOf(fn).search).toBe('')
+    expect(urlOf(fn).searchParams.get('page_currency')).toBe('usd')
+  })
+
+  // The second hand's surviving mutant: nothing held the ENCODING. A value carrying '&' would have
+  // appended a parameter of its own — here a second publisher_user_id, which the API answers 400
+  // (so no hole today), but a test that cannot see the encoding cannot see the next value either.
+  // The shape check above refuses '&' now; this keeps the encoder honest for whatever shape comes next.
+  it('the value is encoded, not spliced into the query', async () => {
+    const fn = captureFetch()
+    await new ShataleClient(BASE, 'sk_sandbox_abc').getCardCredentials(PURCHASE, 'u1', 'US&publisher_user_id=x')
+    const url = urlOf(fn)
+    expect(url.searchParams.getAll('publisher_user_id')).toEqual(['u1'])
+    expect(url.searchParams.get('page_currency')).toBe('US&publisher_user_id=x')
   })
 
   // 🔴 AND IT MUST NOT PUSH THE PERSON OFF THE WIRE. publisher_user_id is the gate shatale-api cannot
