@@ -5,6 +5,7 @@ you would for a public reader — no card-lifecycle mechanics, limits, issuer in
 History before 2.1.2 is in git history (the former CHANGELOG.md).
 
 ## [Unreleased]
+- Test: the card text in `explain_shatale` and SECURITY.md must equal the approved text as a whole (whitelist); the earlier word-pattern refusal is replaced, so an added sentence in any words fails (SHAT-8370).
 
 ## [2.1.3] — 2026-11-16
 - Card handling text in `explain_shatale` and SECURITY.md now states the card's guarantee to the person
