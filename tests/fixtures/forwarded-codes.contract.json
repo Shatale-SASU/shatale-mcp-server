@@ -41,6 +41,7 @@
     "no_card_on_file",
     "not_found",
     "not_implemented",
+    "page_currency_not_convertible",
     "payment_method_expired",
     "plan_agent_in_testing",
     "plan_not_for_sale",
