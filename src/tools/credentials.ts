@@ -39,6 +39,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
   const tools = ([
       {
         name: 'request_temporary_credentials',
+        title: 'Requests temporary sign-in details for a store.',
         // ⚠️ THE WORDS "temporary, short-lived" WERE HERE AND THEY DESCRIBED A MECHANISM THAT IS
         // GONE (SHAT-3428/SHAT-3443). The owner cancelled the term: the pairing user/agent/merchant
         // lives until the person revokes it, so a mailbox is not short-lived and never was closed by
@@ -84,6 +85,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
       },
       {
         name: 'get_credential_status',
+        title: 'Returns the status of a temporary sign-in request.',
         description: 'Check the status of a credential request.',
         inputSchema: {
           type: 'object',
@@ -99,6 +101,7 @@ export function createCredentialTools(client: ShataleClient): ToolModule {
       },
       {
         name: 'get_credential_emails',
+        title: 'Retrieves messages sent to the temporary store address.',
         description:
           'Read emails received on a credential\'s relay address, newest first — ' +
           'e.g. the verification code or confirmation link a merchant sends after you register ' +

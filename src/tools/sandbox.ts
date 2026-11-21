@@ -144,6 +144,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
   const tools: ToolDefinition[] = [
     {
       name: 'sandbox_simulate_authorization',
+      title: 'Runs a policy check in the sandbox with no effect.',
       description:
         'Run the Shatale policy engine against a simulated authorization — side-effect-free ' +
         '(no purchase, no ledger, no outbox, no money). Returns the approve/decline decision ' +
@@ -194,6 +195,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     },
     {
       name: 'sandbox_create_user',
+      title: 'Creates a sandbox test user that is allowed to buy.',
       description:
         "Create one of YOUR OWN sandbox users and give it the delegation that lets it buy. This is " +
         "the first step: request_purchase needs a publisher_user_id that has an active delegation, " +
@@ -228,6 +230,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     },
     {
       name: 'sandbox_complete_onboarding',
+      title: 'Marks a sandbox test user as ready.',
       // SHAT-3592. This used to claim the call left the test user with money available to spend.
       // It does not: the endpoint it reaches, POST /v1/sandbox/users/{id}/onboarding, runs one
       // UPDATE — profile_status='complete', kyc_level='basic', threeds_onboarded=TRUE. Nothing
@@ -263,6 +266,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
     },
     {
       name: 'sandbox_approve_purchase',
+      title: "Approves a purchase on the person's behalf in the sandbox.",
       description:
         'Manually approve a sandbox purchase that is pending user/admin approval ' +
         '(simulates the human-in-the-loop approval beat).',

@@ -54,6 +54,12 @@ export interface SandboxAuthInput {
 /** Tool definition for listing */
 export interface ToolDefinition {
   name: string
+  /**
+   * SHAT-8734. The short PUBLIC summary of the tool, for listings people read (shatale.com/mcp, client
+   * catalogs) — the approved text, byte for byte; `description` stays the text written for the model.
+   * Pinned by tests/unit/every-tool-has-its-approved-summary.test.ts.
+   */
+  title: string
   description: string
   inputSchema: {
     type: 'object'

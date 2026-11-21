@@ -31,6 +31,9 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
   which pointed at sources the package never carried, are no longer shipped; and `prepack` refuses a
   tarball that differs from what `src/` builds (`npm run gate:pack`) (SHAT-8133).
 - Test: the card text in `explain_shatale` and SECURITY.md must equal the approved text as a whole (whitelist); the earlier word-pattern refusal is replaced, so an added sentence in any words fails (SHAT-8370).
+- Every tool now carries a short public summary as its MCP `title` (for example `search_merchants`:
+  "Searches the merchant catalog."), for listings people read. The `description` written for the
+  model is unchanged. A test pins each tool's approved text (SHAT-8734).
 
 ## [2.1.3] — 2026-11-16
 - Card handling text in `explain_shatale` and SECURITY.md now states the card's guarantee to the person

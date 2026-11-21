@@ -34,6 +34,7 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
     tools: [
       {
         name: 'list_capabilities',
+        title: 'Lists the tools available in the current mode.',
         description:
           'Lists all capabilities currently available on this MCP server, based on the configured API key mode.',
         inputSchema: {
@@ -44,6 +45,7 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
       },
       {
         name: 'list_mcc_codes',
+        title: 'Looks up merchant category (MCC) codes.',
         description:
           'Search or list MCC (Merchant Category Codes) used for spending policy configuration.',
         inputSchema: {

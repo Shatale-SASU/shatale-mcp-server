@@ -67,6 +67,7 @@ export function createRevealTools(client: ShataleClient): ToolModule {
     tools: [
       {
         name: 'reveal_card',
+        title: 'Reveals the purchase card so the payment can be completed.',
         description:
           'Reveal the card credentials (number, expiry, CVV) of the Shatale card issued for THIS ' +
           'purchase, so the agent can complete a merchant checkout that has no out-of-band path. ' +
