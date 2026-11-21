@@ -40,6 +40,7 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
           type: 'object',
           properties: {},
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'list_mcc_codes',
@@ -54,6 +55,7 @@ export function createCommonTools(client: ShataleClient, ctx: GuestContext): Too
             },
           },
         },
+        annotations: { readOnlyHint: true },
       },
     ],
     handlers: {

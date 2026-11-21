@@ -190,6 +190,7 @@ export function createSandboxTools(client: ShataleClient): ToolModule {
         },
         required: ['agent_id', 'amount', 'currency', 'mcc', 'merchant_name', 'card_number'],
       },
+      annotations: { readOnlyHint: true },
     },
     {
       name: 'sandbox_create_user',

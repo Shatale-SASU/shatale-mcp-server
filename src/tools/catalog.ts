@@ -37,6 +37,7 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
             country: { type: 'string', description: 'Filter by country code (e.g., "US", "DE", "FR")' },
           },
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'get_merchant_details',
@@ -50,6 +51,7 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           },
           required: ['merchant_id'],
         },
+        annotations: { readOnlyHint: true },
       },
     ],
     handlers: {

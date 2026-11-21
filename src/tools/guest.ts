@@ -411,6 +411,7 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           type: 'object',
           properties: {},
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'simulate_purchase_flow',
@@ -448,6 +449,7 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           },
           required: ['merchant', 'amount', 'description'],
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'generate_policy_template',
@@ -476,6 +478,7 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           },
           required: ['use_case'],
         },
+        annotations: { readOnlyHint: true },
       },
     ],
     handlers: {

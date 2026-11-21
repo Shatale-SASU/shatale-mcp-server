@@ -8,6 +8,11 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
 - `reveal_card` takes an optional `page_currency`: the currency the open checkout page charges in, as
   the page states it. Shatale compares it with the currency the purchase was priced in and refuses the
   reveal when they differ. Omit it and the tool behaves exactly as before (SHAT-8390).
+- Eight tools now carry the MCP annotation `readOnlyHint: true`: `explain_shatale`,
+  `simulate_purchase_flow`, `generate_policy_template`, `list_capabilities`, `list_mcc_codes`,
+  `search_merchants`, `get_merchant_details`, `sandbox_simulate_authorization`. A client may call these
+  without asking first. No tool that changes state or answers with card, personal or sign-in data
+  carries it; a test pins the exact list (SHAT-8729).
 - That refusal now reaches the agent by name — `currency_mismatch_purchase_canceled` or
   `currency_mismatch_hold_stands` — with guidance that says not to retry, instead of the generic 409
   envelope that suggested one. A sentence written for the person travels beside it as `person_message`

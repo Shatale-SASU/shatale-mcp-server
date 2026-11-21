@@ -60,6 +60,15 @@ export interface ToolDefinition {
     properties: Record<string, unknown>
     required?: string[]
   }
+  /**
+   * SHAT-8729. readOnlyHint: true lets a client call the tool WITHOUT asking the person first, so it is
+   * set only where the tool changes nothing AND its answer carries no card number, secret, personal
+   * data or store credentials. The approved list is pinned by
+   * tests/unit/read-only-hint-only-where-approved.test.ts; a tool absent from it carries no hint.
+   */
+  annotations?: {
+    readOnlyHint?: boolean
+  }
 }
 
 /** Tool handler function */
