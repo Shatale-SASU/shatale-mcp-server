@@ -16,6 +16,11 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
   or a value with stray characters is not a code, and passing one on would have been read as a
   mismatch — which cancels the purchase. Nothing is sent; omit the field instead of guessing
   (SHAT-8390).
+- Packaging: the tarball holds exactly the compiled `.js` and `.d.ts` that `src/` builds, plus
+  LICENSE, README.md, SECURITY.md, server.json and package.json. `npm run build` empties `dist/` first;
+  `files` no longer takes the whole of `dist/` (test files and dot-paths are excluded); source maps,
+  which pointed at sources the package never carried, are no longer shipped; and `prepack` refuses a
+  tarball that differs from what `src/` builds (`npm run gate:pack`) (SHAT-8133).
 - Test: the card text in `explain_shatale` and SECURITY.md must equal the approved text as a whole (whitelist); the earlier word-pattern refusal is replaced, so an added sentence in any words fails (SHAT-8370).
 
 ## [2.1.3] — 2026-11-16
