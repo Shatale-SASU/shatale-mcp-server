@@ -12,6 +12,10 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
   `currency_mismatch_hold_stands` — with guidance that says not to retry, instead of the generic 409
   envelope that suggested one. A sentence written for the person travels beside it as `person_message`
   when the API sends one. The shared error-code contract gains both codes (SHAT-8390).
+- The third refusal of the same check, `page_currency_not_convertible` (the page's currency could not
+  be turned into a safe limit; the card was not issued and the purchase was cancelled), now reaches the
+  agent by name with its `person_message`, instead of the generic 409 envelope. The shared contract
+  already listed the code; it now lists it as forwarded too (SHAT-8390).
 - `page_currency` is refused unless it is a three-letter currency code. A symbol such as `$`, a word,
   or a value with stray characters is not a code, and passing one on would have been read as a
   mismatch — which cancels the purchase. Nothing is sent; omit the field instead of guessing

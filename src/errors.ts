@@ -161,6 +161,20 @@ const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }
       'the amount is still reserved on their card; where this refusal carries a person_message, use its ' +
       'words.',
   },
+  // SHAT-8390 CONVERT (409 on the same reveal). The page charges in another currency and the API could
+  // not turn the merchant's price into a safe spending limit in it, so the card was NOT issued and the
+  // purchase was cancelled with its hold released — the API sends this code ONLY after the cancel went
+  // through (a cancel that did not answers currency_mismatch_hold_stands). The contract has carried the
+  // code since #136; until this entry the refusal reached the agent as the generic 409 «then retry».
+  page_currency_not_convertible: {
+    message:
+      'The checkout page charges in a currency that could not be converted into a safe spending limit ' +
+      'for this purchase. The card was not issued and the purchase has been cancelled.',
+    suggested_fix:
+      'Do not retry this reveal, with or without page_currency — the purchase is cancelled and no card ' +
+      'will be handed out for it. Nothing was taken from the person and nothing is held. Tell the person ' +
+      'the purchase could not be paid; where this refusal carries a person_message, use its words.',
+  },
 }
 
 /**
@@ -168,7 +182,11 @@ const FORWARDED_CODES: Record<string, { message: string; suggested_fix: string }
  * own, deliberately NOT a property of every forwarded code: carrying prose is an exception that each
  * code earns, not a default a future entry inherits by being added above.
  */
-const CODES_WITH_A_PERSON_MESSAGE = new Set(['currency_mismatch_purchase_canceled', 'currency_mismatch_hold_stands'])
+const CODES_WITH_A_PERSON_MESSAGE = new Set([
+  'currency_mismatch_purchase_canceled',
+  'currency_mismatch_hold_stands',
+  'page_currency_not_convertible',
+])
 
 /** The longest person_message carried. Voland's longest sentence set is ~290 characters; this is room, not a target. */
 const PERSON_MESSAGE_MAX = 600
