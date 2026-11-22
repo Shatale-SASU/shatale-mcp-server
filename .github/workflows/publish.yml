@@ -208,6 +208,11 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: "https://registry.npmjs.org"
+      # The SAME npm as the publish job below: the prepack gate must first meet the publishing npm
+      # here, in a dry run, not at the real publish (22.11.2026, v2.1.4 died there on npm 12's shape).
+      # Keep this pin equal to the publish job's; the version check fails the job if they drift.
+      - run: npm install -g npm@12.2.3
+      - run: test "$(npm --version)" = "12.2.3"
       - run: npm ci
       - run: npx tsc
       - run: npm publish --dry-run
