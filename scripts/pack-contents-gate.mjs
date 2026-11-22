@@ -61,11 +61,29 @@ export function packedFiles(root) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  return filesOfPackJson(raw)
+}
+
+/**
+ * The file list out of `npm pack --json`. Two shapes are known and both are read exactly:
+ *   npm ≤ 11: an ARRAY with one entry per package — `[{ name, files: [...] }]`;
+ *   npm 12:   an OBJECT keyed by package name     — `{ "<name>": { name, files: [...] } }`.
+ * The 2.1.4 release run died on the second (publish.yml installs npm@latest, which became 12.x)
+ * while every earlier job, on the runner's npm 10/11, saw the first. Anything else — more than one
+ * package, no `files` array — is still refused: a gate that guesses at a shape it cannot read is a
+ * gate that passes a tarball it never looked at.
+ *
+ * @param {string} raw stdout of `npm pack --dry-run --json`
+ * @returns {string[]} sorted package-relative paths
+ */
+export function filesOfPackJson(raw) {
   const parsed = JSON.parse(raw)
-  if (!Array.isArray(parsed) || parsed.length !== 1 || !Array.isArray(parsed[0]?.files)) {
+  const entries =
+    Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? Object.values(parsed) : null
+  if (!entries || entries.length !== 1 || !Array.isArray(entries[0]?.files)) {
     throw new Error(`npm pack --json answered in a shape this gate cannot read: ${raw.slice(0, 200)}`)
   }
-  return parsed[0].files.map((f) => f.path).sort()
+  return entries[0].files.map((f) => f.path).sort()
 }
 
 /**
