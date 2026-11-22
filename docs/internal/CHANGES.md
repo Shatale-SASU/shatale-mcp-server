@@ -6,7 +6,7 @@ History before 2.1.2 is in git history (the former CHANGELOG.md).
 
 ## [Unreleased]
 
-## [2.1.4] — 2026-11-18
+## [2.1.4] — 2026-11-22
 - `reveal_card` takes an optional `page_currency`: the currency the open checkout page charges in, as
   the page states it. Shatale compares it with the currency the purchase was priced in and refuses the
   reveal when they differ. Omit it and the tool behaves exactly as before (SHAT-8390).
