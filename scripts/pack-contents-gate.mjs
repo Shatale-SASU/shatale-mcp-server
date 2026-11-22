@@ -18,7 +18,7 @@
 // CI alike — and as `npm run gate:pack` on its own.
 
 import { execFileSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -61,7 +61,8 @@ export function packedFiles(root) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  return filesOfPackJson(raw)
+  const name = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).name
+  return filesOfPackJson(raw, name)
 }
 
 /**
@@ -74,12 +75,19 @@ export function packedFiles(root) {
  * gate that passes a tarball it never looked at.
  *
  * @param {string} raw stdout of `npm pack --dry-run --json`
+ * @param {string} [expectedName] our package name; in the npm 12 object form the key must equal it
  * @returns {string[]} sorted package-relative paths
  */
-export function filesOfPackJson(raw) {
+export function filesOfPackJson(raw, expectedName) {
   const parsed = JSON.parse(raw)
-  const entries =
-    Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? Object.values(parsed) : null
+  let entries = null
+  if (Array.isArray(parsed)) entries = parsed
+  else if (parsed && typeof parsed === 'object') {
+    // npm 12: the key IS the package name. When the caller knows ours, a value under another key is
+    // not our tarball and is refused, not read.
+    const keys = Object.keys(parsed)
+    if (expectedName === undefined || (keys.length === 1 && keys[0] === expectedName)) entries = Object.values(parsed)
+  }
   if (!entries || entries.length !== 1 || !Array.isArray(entries[0]?.files)) {
     throw new Error(`npm pack --json answered in a shape this gate cannot read: ${raw.slice(0, 200)}`)
   }

@@ -63,6 +63,9 @@ describe('SHAT-8133: the tarball carries only what src/ builds', () => {
     expect(() => filesOfPackJson(JSON.stringify({ a: one, b: one }))).toThrow(/shape this gate cannot read/)
     expect(() => filesOfPackJson(JSON.stringify({ 'shatale-mcp-server': { name: 'x' } }))).toThrow(/shape this gate cannot read/)
     expect(() => filesOfPackJson('null')).toThrow(/shape this gate cannot read/)
+    // With our name known, the npm 12 key must be it: someone else's tarball under another key is refused.
+    expect(filesOfPackJson(JSON.stringify({ 'shatale-mcp-server': one }), 'shatale-mcp-server')).toEqual(['dist/index.js', 'package.json'])
+    expect(() => filesOfPackJson(JSON.stringify({ 'other-pkg': one }), 'shatale-mcp-server')).toThrow(/shape this gate cannot read/)
   })
 
   it('the gate decides in both directions (pure)', () => {
