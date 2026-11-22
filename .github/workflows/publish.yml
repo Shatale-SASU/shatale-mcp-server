@@ -208,6 +208,11 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: "https://registry.npmjs.org"
+      # The SAME npm as the publish job below: the prepack gate must first meet the publishing npm
+      # here, in a dry run, not at the real publish (22.11.2026, v2.1.4 died there on npm 12's shape).
+      # Keep this pin equal to the publish job's; the version check fails the job if they drift.
+      - run: npm install -g npm@12.2.3
+      - run: test "$(npm --version)" = "12.2.3"
       - run: npm ci
       - run: npx tsc
       - run: npm publish --dry-run
@@ -243,8 +248,11 @@ jobs:
           cache: npm
           registry-url: "https://registry.npmjs.org"
       # Trusted publishing (OIDC) requires npm >= 11.5.1; Node 20 ships npm 10.
+      # PINNED, not @latest: on 22.11.2026 @latest became npm 12, whose `npm pack --json` changed shape,
+      # and the v2.1.4 release died at publish time on a version nobody had chosen (run 45017501381).
+      # Move this pin on purpose, with the prepack gate run on the new npm first.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@12.2.3
       - run: npm ci
       - run: npx tsc
 

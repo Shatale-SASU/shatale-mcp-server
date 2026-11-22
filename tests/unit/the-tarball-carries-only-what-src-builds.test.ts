@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 // @ts-expect-error — plain .mjs script, no types; the same functions `npm run gate:pack` and prepack run.
-import { expectedFromSrc, packedFiles, verdict, ROOT_FILES } from '../../scripts/pack-contents-gate.mjs'
+import { expectedFromSrc, packedFiles, verdict, ROOT_FILES, filesOfPackJson } from '../../scripts/pack-contents-gate.mjs'
 
 /**
  * SHAT-8133 — THE TARBALL CARRIES EXACTLY WHAT src/ BUILDS, PLUS THE ROOT FILES.
@@ -53,6 +53,21 @@ function gate(dir: string): { ok: boolean; out: string } {
 }
 
 describe('SHAT-8133: the tarball carries only what src/ builds', () => {
+  it('reads both shapes of `npm pack --json` (npm ≤11 array, npm 12 object) and refuses anything else', () => {
+    const files = [{ path: 'package.json' }, { path: 'dist/index.js' }]
+    const one = { id: 'shatale-mcp-server@2.1.4', name: 'shatale-mcp-server', files }
+    expect(filesOfPackJson(JSON.stringify([one]))).toEqual(['dist/index.js', 'package.json'])
+    // npm 12.x: the 2.1.4 release run died here — keyed by package name.
+    expect(filesOfPackJson(JSON.stringify({ 'shatale-mcp-server': one }))).toEqual(['dist/index.js', 'package.json'])
+    expect(() => filesOfPackJson(JSON.stringify([one, one]))).toThrow(/shape this gate cannot read/)
+    expect(() => filesOfPackJson(JSON.stringify({ a: one, b: one }))).toThrow(/shape this gate cannot read/)
+    expect(() => filesOfPackJson(JSON.stringify({ 'shatale-mcp-server': { name: 'x' } }))).toThrow(/shape this gate cannot read/)
+    expect(() => filesOfPackJson('null')).toThrow(/shape this gate cannot read/)
+    // With our name known, the npm 12 key must be it: someone else's tarball under another key is refused.
+    expect(filesOfPackJson(JSON.stringify({ 'shatale-mcp-server': one }), 'shatale-mcp-server')).toEqual(['dist/index.js', 'package.json'])
+    expect(() => filesOfPackJson(JSON.stringify({ 'other-pkg': one }), 'shatale-mcp-server')).toThrow(/shape this gate cannot read/)
+  })
+
   it('the gate decides in both directions (pure)', () => {
     expect(verdict(['a', 'b'], ['a', 'b'])).toEqual({ ok: true, extra: [], missing: [] })
     expect(verdict(['a', 'b', 'dist/.env'], ['a', 'b'])).toEqual({ ok: false, extra: ['dist/.env'], missing: [] })
