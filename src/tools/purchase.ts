@@ -88,6 +88,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
     tools: [
       {
         name: 'request_purchase',
+        title: 'Starts a purchase request for approval.',
         description:
           // NOT "executes the payment" — that was the description until SHAT-2683, and no branch of
           // the backend does it. RequestPurchase answers with a STATUS, and the reachable ones
@@ -165,6 +166,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       },
       {
         name: 'get_purchase_status',
+        title: 'Returns the status of a purchase.',
         description: 'Get the current status of a purchase request by its ID.',
         inputSchema: {
           type: 'object',
@@ -180,6 +182,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       },
       {
         name: 'await_purchase_approval',
+        title: 'Waits for the person to approve or decline a purchase.',
         description:
           'Wait for the person to answer a purchase that needs their approval, instead of polling. ' +
           'Returns approved, declined, expired, ended — or still_waiting, which means nobody has answered ' +
@@ -206,6 +209,7 @@ export function createPurchaseTools(client: ShataleClient, options: PurchaseTool
       },
       {
         name: 'cancel_purchase',
+        title: 'Cancels a purchase request.',
         description: 'Cancel a pending purchase request. Only works for purchases not yet executed.',
         inputSchema: {
           type: 'object',

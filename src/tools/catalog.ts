@@ -25,6 +25,7 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
     tools: [
       {
         name: 'search_merchants',
+        title: 'Searches the merchant catalog.',
         description:
           'Search the Shatale merchant catalog. Find merchants by category, capability, keyword, or country. ' +
           'Returns merchants with their MCP capabilities so you can determine which merchants support agent-driven purchases.',
@@ -37,9 +38,11 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
             country: { type: 'string', description: 'Filter by country code (e.g., "US", "DE", "FR")' },
           },
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'get_merchant_details',
+        title: 'Returns details about a merchant.',
         description:
           'Get detailed information about a specific merchant, including their MCP server configuration, ' +
           'available tools, rate limits, and capabilities. Use this after search_merchants to get integration details.',
@@ -50,6 +53,7 @@ export function createCatalogTools(client: ShataleClient): ToolModule {
           },
           required: ['merchant_id'],
         },
+        annotations: { readOnlyHint: true },
       },
     ],
     handlers: {

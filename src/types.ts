@@ -54,11 +54,26 @@ export interface SandboxAuthInput {
 /** Tool definition for listing */
 export interface ToolDefinition {
   name: string
+  /**
+   * SHAT-8734. The short PUBLIC summary of the tool, for listings people read (shatale.com/mcp, client
+   * catalogs) — the approved text, byte for byte; `description` stays the text written for the model.
+   * Pinned by tests/unit/every-tool-has-its-approved-summary.test.ts.
+   */
+  title: string
   description: string
   inputSchema: {
     type: 'object'
     properties: Record<string, unknown>
     required?: string[]
+  }
+  /**
+   * SHAT-8729. readOnlyHint: true lets a client call the tool WITHOUT asking the person first, so it is
+   * set only where the tool changes nothing AND its answer carries no card number, secret, personal
+   * data or store credentials. The approved list is pinned by
+   * tests/unit/read-only-hint-only-where-approved.test.ts; a tool absent from it carries no hint.
+   */
+  annotations?: {
+    readOnlyHint?: boolean
   }
 }
 

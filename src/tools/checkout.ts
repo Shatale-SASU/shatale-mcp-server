@@ -125,6 +125,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
     tools: [
       {
         name: 'get_checkout_cardholder',
+        title: 'Provides the cardholder fields needed to complete checkout.',
         description:
           "The CARDHOLDER / billing identity to put in a merchant's cardholder and billing-address " +
           'fields: Shatale (the legal owner of the card being used). This is NOT the buyer — use ' +
@@ -138,6 +139,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
       },
       {
         name: 'get_checkout_customer',
+        title: 'Provides the customer details needed for a checkout form.',
         description:
           "The BUYER / customer identity to put in a merchant's name, email and customer/donor " +
           'fields: the end-user this purchase is for. This is NOT the cardholder — use ' +
@@ -150,6 +152,7 @@ export function createCheckoutTools(client: ShataleClient): ToolModule {
       },
       {
         name: 'get_shipping_address',
+        title: 'Provides the shipping address for an order.',
         description:
           "Read the person's delivery address for THIS purchase, to complete a merchant's shipping " +
           'form. It is PERSONAL DATA. It is released only while the purchase is payment_ready ' +

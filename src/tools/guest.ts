@@ -403,6 +403,7 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
     tools: [
       {
         name: 'explain_shatale',
+        title: 'Introduces the Shatale MCP server and what it can do.',
         description:
           'Entry point. Reports the current mode (GUEST / DEMO(SANDBOX) / LIVE), the tools ' +
           'available in that mode, the recommended first prompt, and how to move from demo to ' +
@@ -411,9 +412,11 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           type: 'object',
           properties: {},
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'simulate_purchase_flow',
+        title: 'Walks through a purchase end to end without charging anything.',
         description:
           'Simulates the Shatale agent payment lifecycle in guest mode: policy check, ' +
           'approval decision (approved / declined / requires_approval), virtual card step and ' +
@@ -448,9 +451,11 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           },
           required: ['merchant', 'amount', 'description'],
         },
+        annotations: { readOnlyHint: true },
       },
       {
         name: 'generate_policy_template',
+        title: 'Creates and validates a spending-policy template.',
         description:
           'Generates a spending policy template for a use case AND validates it: risk level, ' +
           'warnings, and recommended controls (approval threshold, max transaction, blocked ' +
@@ -476,6 +481,7 @@ export function createGuestTools(ctx: GuestContext): ToolModule {
           },
           required: ['use_case'],
         },
+        annotations: { readOnlyHint: true },
       },
     ],
     handlers: {

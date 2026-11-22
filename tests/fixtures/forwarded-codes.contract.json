@@ -84,6 +84,7 @@
   "forwarded": [
     "currency_mismatch_hold_stands",
     "currency_mismatch_purchase_canceled",
+    "page_currency_not_convertible",
     "sandbox_no_pan",
     "unresolved_payment_on_a_failed_purchase"
   ]
