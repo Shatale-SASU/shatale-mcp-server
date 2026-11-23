@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { ShataleClient } from '../../src/client.js'
-import { createRevealTools } from '../../src/tools/reveal.js'
 import { installStdioErrorHandling } from '../../src/stdio-hardening.js'
 import * as logValue from '../../src/log-value.js'
-import { cardCredentials } from '../fixtures/api-response-shapes'
 
 // SHAT-4307 (1). A line this server writes to stderr is read by the OPERATOR, and it is read line by
 // line — a host's log viewer, `grep`, a collector that ships one record per line. Three of those lines
 // carried a value somebody else chose, interpolated as is:
 //
 //   reveal_card      — the DEPRECATED line carried `purchase_id` from the CALLER (the model);
-//                      requireId only trims, so a newline inside the id survived.
+//                      requireId only trims, so a newline inside the id survived. That line is gone
+//                      since SHAT-8736: a reveal without the person is refused, not served and logged.
 //   stdio-hardening  — the protocol-error line carried the parser's message, and V8's JSON.parse
 //                      message QUOTES the offending frame: a \r or U+2028 sent by the client lands in
 //                      the log raw (measured: node -e 'JSON.parse("x\r\u2028…")').
@@ -43,7 +42,6 @@ const HOSTILE = [
 ] as const
 
 const FORGED = 'shatale-mcp-server: reveal_card ok, person scope checked'
-const HOSTILE_ID = `pur_4307${HOSTILE.join('x')}\n${FORGED}`
 
 // A line is safe when its only line break is the one the server put at the end, and nothing between
 // carries a control or a separator. The class is the union of what HOSTILE names, stated once.
@@ -79,37 +77,6 @@ describe('the encoder: what reaches the log is the value, and only one line of i
 
   it('control: an ordinary id is printed readably, merely quoted', () => {
     expect(logValue.forLog('pur_01H8')).toBe('"pur_01H8"')
-  })
-})
-
-describe('reveal_card: the DEPRECATED line carries the caller\'s id as a value, not as text', () => {
-  function captureStderr(): string[] {
-    const written: string[] = []
-    vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-      written.push(String(chunk))
-      return true
-    }) as typeof process.stderr.write)
-    return written
-  }
-
-  it('a purchase_id with newlines, controls and separators produces ONE line, and no forged one', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(JSON.stringify(cardCredentials()), { status: 200, headers: { 'Content-Type': 'application/json' } })),
-    )
-    const written = captureStderr()
-    await createRevealTools(new ShataleClient('https://api.example.test', 'sk_sandbox_abc')).handlers.reveal_card({
-      purchase_id: HOSTILE_ID,
-    })
-    const deprecated = written.filter((w) => w.includes('DEPRECATED'))
-    // Positive control: the line under test was written at all. Without it every assertion below
-    // is about an empty list.
-    expect(deprecated, 'the DEPRECATED line was not written — nothing below measures anything').toHaveLength(1)
-    const line = deprecated[0]
-    assertOneSafeLine(line, 'DEPRECATED line')
-    expect(line.split('\n').filter((l) => l.startsWith('shatale-mcp-server: reveal_card ok')), 'a forged line').toEqual([])
-    // And the operator still reads the id: its encoded form stands in the line, and decodes back.
-    expect(line).toContain(logValue.forLog(HOSTILE_ID))
   })
 })
 

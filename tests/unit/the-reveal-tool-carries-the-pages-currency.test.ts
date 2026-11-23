@@ -35,6 +35,7 @@ describe('reveal_card carries the currency of the page it will be typed into', (
     const fn = captureFetch()
     await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
       page_currency: 'USD',
     })
     const url = urlOf(fn)
@@ -42,17 +43,18 @@ describe('reveal_card carries the currency of the page it will be typed into', (
     expect(url.searchParams.get('page_currency')).toBe('USD')
   })
 
-  // 🔴 THE CASE THAT CATCHES THE SILENT LOSS. Without a parameter the URL must carry no query at all —
-  // not an empty one — because the API reads an empty value as "not asked" and would pass, while a
+  // 🔴 THE CASE THAT CATCHES THE SILENT LOSS. Without a parameter the URL must carry no page_currency at
+  // all — not an empty one (the person is always there since SHAT-8736, so the query is exactly that) — because the API reads an empty value as "not asked" and would pass, while a
   // reviewer reading `?page_currency=` would believe the gate is acting.
-  it('sends no query at all when the page currency is unknown', async () => {
+  it('sends no page_currency at all when the page currency is unknown', async () => {
     const fn = captureFetch()
     await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
     })
     const url = urlOf(fn)
     expect(url.pathname).toBe(`/v1/purchases/${PURCHASE}/card-credentials`)
-    expect(url.search).toBe('')
+    expect(url.search).toBe('?publisher_user_id=usr_8390')
   })
 
   // 🔴 A VALUE THAT IS NOT A CURRENCY CODE IS REFUSED HERE, AND THE REASON IS NOT TIDINESS.
@@ -75,6 +77,7 @@ describe('reveal_card carries the currency of the page it will be typed into', (
       const fn = captureFetch()
       const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
         purchase_id: PURCHASE,
+        publisher_user_id: 'usr_8390',
         page_currency: value,
       })
       // Nothing was sent: a refusal that still called the API would have cancelled the purchase.
@@ -91,19 +94,21 @@ describe('reveal_card carries the currency of the page it will be typed into', (
     const fn = captureFetch()
     const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
     })
     // The call WENT OUT — that is what "not a refusal" means here. (The body this harness returns is a
     // stand-in and the tool judges its shape separately; the assertion is about the gate, not the card.)
     expect(fn).toHaveBeenCalled()
     const err = JSON.parse(String(res.content[0].text)).error as Record<string, unknown> | undefined
     expect(err?.code).not.toBe('page_currency_unreadable')
-    expect(urlOf(fn).search).toBe('')
+    expect(urlOf(fn).search).toBe('?publisher_user_id=usr_8390')
   })
 
   it('surrounding spaces are trimmed, not refused', async () => {
     const fn = captureFetch()
     await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
       page_currency: '  usd  ',
     })
     expect(urlOf(fn).searchParams.get('page_currency')).toBe('usd')

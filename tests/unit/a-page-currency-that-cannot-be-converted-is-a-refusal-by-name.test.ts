@@ -32,6 +32,7 @@ describe('409 page_currency_not_convertible reaches the agent by name', () => {
   async function reveal() {
     const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
       page_currency: 'JPY',
     })
     return JSON.parse(String(res.content[0].text)).error as Record<string, unknown>

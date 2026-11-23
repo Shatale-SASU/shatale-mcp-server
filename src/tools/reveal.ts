@@ -3,7 +3,6 @@ import type { ToolModule } from '../types.js'
 import { jsonResult, textResult } from '../types.js'
 import { errorResult, refusal } from '../errors.js'
 import { requireId, requirePersonId, exactStringFields, describeShape } from '../validate.js'
-import { forLog } from '../log-value.js'
 
 // reveal_card — the agent-scoped reveal of the card Shatale issued for THIS purchase (SHAT-3023).
 //
@@ -50,17 +49,13 @@ function hasCard(v: unknown): v is Record<string, unknown> {
 // would be SHAT-2259 reopening, not a feature to forward. The refusal names keys only, never a value.
 const REVEALED_CARD_FIELDS = ['pan', 'cvv', 'exp_month', 'exp_year', 'last4'] as const
 
-// ⚠️ THE TRANSITION IS LOUD, OR IT IS PERMANENT (SHAT-3023 / SHAT-4051). A reveal without the person
-// is served as before, and each one says so in TWO places: the result's `_meta` (the caller that
-// omitted it reads its own result) and stderr (the operator who runs the process reads its log).
-// Neither carries anything of the card — only the tool name and the purchase id the caller supplied.
-// shatale-api counts the same event on its side (`event=reveal_without_person_scope`); when that
-// count is zero after the concierge pin moves past this release, `publisher_user_id` becomes required
-// here and the API's flag is switched on. Until then this sentence is the countdown.
-export const REVEAL_WITHOUT_PERSON_DEPRECATION =
-  'reveal_card was called without publisher_user_id. This still works but is DEPRECATED: pass the ' +
-  'publisher_user_id the purchase was requested for. Without it the API can check only the ' +
-  'publisher, not the person, and a future release will refuse the call.'
+// ⚠️ THE PERSON IS REQUIRED (SHAT-8736). The transition SHAT-3023 / SHAT-4051 opened — absent person
+// served unscoped, with a deprecation in `_meta` and on stderr — is closed. shatale-api already refuses
+// an unscoped reveal in production (REVEAL_REQUIRE_PERSON_SCOPE=true), and the reveal journal
+// (card_credential_access_logs, #6458) must always name the person a card was revealed to. This is
+// ATTRIBUTION, not a ban on revealing: a call that names the person is served exactly as before. A call
+// that does not is refused HERE, before any request leaves, with an argument error that says what to
+// pass — not after a round trip that would end in the API's refusal anyway.
 
 export function createRevealTools(client: ShataleClient): ToolModule {
   return {
@@ -88,7 +83,7 @@ export function createRevealTools(client: ShataleClient): ToolModule {
               description:
                 'The same publisher_user_id the purchase was requested for (the person it belongs ' +
                 'to). Pass it: the API then reveals the card only to the person whose purchase it ' +
-                'is. Omitting it still works for now but is DEPRECATED and will become an error.',
+                'is. Required: a call without it is refused before any request is sent.',
             },
             // SHAT-8390. The currency the OPEN checkout page charges in, as the page itself states it —
             // not the currency of the card, and not what the model believes the price to be. Shatale
@@ -102,11 +97,10 @@ export function createRevealTools(client: ShataleClient): ToolModule {
                 'from the page itself. Omit it if the page does not state one.',
             },
           },
-          // ⚠️ NOT YET IN `required`, AND THAT IS A TRANSITION, NOT A DECISION (SHAT-3023, 28.09.2026).
-          // Published 1.1.0/1.1.1 shipped this tool with purchase_id alone, and whoever built on
-          // those versions calls it that way; the owner's rule is that an existing caller does not
-          // break on upgrade. So an absent person is still served — and says so, every time, below.
-          required: ['purchase_id'],
+          // SHAT-8736: the person is required. Declared here so a client that honours the schema never
+          // builds the call without it; enforced in the handler too, because a schema is advice to the
+          // caller, not a check on it.
+          required: ['purchase_id', 'publisher_user_id'],
         },
       },
     ],
@@ -114,30 +108,14 @@ export function createRevealTools(client: ShataleClient): ToolModule {
       reveal_card: async (args) => {
         const id = requireId(args, 'purchase_id')
         if (!id.ok) return id.result
-        // ⚠️ THE PERSON, NOT ONLY THE PUBLISHER (SHAT-4016 / SHAT-4051). Without it the API can only
-        // check that the key's publisher owns the purchase, so any person of that publisher could
-        // name another person's purchase id and receive that card. shatale-api keeps the parameter
-        // optional for compatibility and names THIS tool as the one live caller that does not send
-        // it — the reason the person gate cannot be switched on.
-        //
-        // ABSENT is the transition (see REVEAL_WITHOUT_PERSON_DEPRECATION). PRESENT BUT UNUSABLE —
-        // empty, whitespace, not a string — is refused: a caller that tried to name a person and got
-        // it wrong has made a mistake, and serving it unscoped would hide the mistake behind the
-        // compatibility path meant for callers that never knew the field.
-        let personValue: string | undefined
-        if (args.publisher_user_id !== undefined) {
-          const person = requirePersonId(args)
-          if (!person.ok) return person.result
-          personValue = person.value
-        } else {
-          // The id is the CALLER'S, and requireId only trims it: a newline inside it would end this
-          // line and let the rest read as a line the server wrote. forLog quotes and escapes it
-          // (SHAT-4307); the operator still reads the whole id.
-          process.stderr.write(
-            `shatale-mcp-server: DEPRECATED — reveal_card for purchase ${forLog(id.value)} without ` +
-              `publisher_user_id; served unscoped. ${REVEAL_WITHOUT_PERSON_DEPRECATION}\n`,
-          )
-        }
+        // ⚠️ THE PERSON, NOT ONLY THE PUBLISHER (SHAT-4016 / SHAT-4051 / SHAT-8736). Without it the API
+        // can only check that the key's publisher owns the purchase, so any person of that publisher
+        // could name another person's purchase id and receive that card — and the reveal journal could
+        // not say who received it. ABSENT, empty, whitespace or not a string: all refused, one rule
+        // (requirePersonId), and nothing is sent.
+        const person = requirePersonId(args)
+        if (!person.ok) return person.result
+        const personValue = person.value
         // WHICH currencies a purchase may be charged in is shatale-api's to decide (one reader,
         // SHAT-8511), and a second opinion here would be a second door onto the same money. So the
         // VALUE is passed through unjudged — but its SHAPE is not.
@@ -203,11 +181,7 @@ export function createRevealTools(client: ShataleClient): ToolModule {
                 'shatale-mcp-server, or report it with this message.',
             })
           }
-          const result = jsonResult(card.fields)
-          if (personValue === undefined) {
-            result._meta = { deprecation: { code: 'reveal_without_person', message: REVEAL_WITHOUT_PERSON_DEPRECATION } }
-          }
-          return result
+          return jsonResult(card.fields)
         } catch (err) {
           return errorResult(err, 'reveal_card_failed')
         }

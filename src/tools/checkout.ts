@@ -61,7 +61,7 @@ const purchaseIdProperty = {
 // person only when the caller names one, and this tool never did. So any person of a publisher could
 // name another person's purchase id and read that person's identity. ABSENT stays served — published
 // 1.0.x–1.3.0 callers send purchase_id alone, and the owner's rule is that an upgrade does not break
-// them — and says so in `_meta` and on stderr, exactly like reveal_card. PRESENT BUT UNUSABLE (empty,
+// them — and says so in `_meta` and on stderr, as reveal_card did until SHAT-8736 made the person required there. PRESENT BUT UNUSABLE (empty,
 // whitespace, not a string) is refused before anything is sent.
 export const CHECKOUT_IDENTITY_WITHOUT_PERSON_DEPRECATION =
   'This checkout identity tool was called without publisher_user_id. This still works but is ' +
