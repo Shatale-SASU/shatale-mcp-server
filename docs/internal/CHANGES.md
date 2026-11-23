@@ -5,9 +5,14 @@ you would for a public reader — no card-lifecycle mechanics, limits, issuer in
 History before 2.1.2 is in git history (the former CHANGELOG.md).
 
 ## [Unreleased]
-- `reveal_card` now requires `publisher_user_id`. A call without it is refused before any request is
-  sent, with an argument error that names the field; a call that passes it is served exactly as
-  before. The stderr and `_meta` deprecation notice for the old call is gone (SHAT-8736).
+
+## [2.1.5] — 2026-11-23
+- **Behaviour change.** `reveal_card` now requires `publisher_user_id`. A call without it is refused
+  before any request is sent, with an argument error that names the field; a call that passes it is
+  served exactly as before. Callers that omitted the field must now pass it. The stderr and `_meta`
+  deprecation notice for the old call is gone (SHAT-8736).
+- Packaging check: the pack-contents gate reads the shape of `npm pack --json` as npm 12 writes it, and
+  npm is pinned to 12.2.3 where the gate runs. The tarball contents are unchanged (SHAT-8133).
 
 ## [2.1.4] — 2026-11-22
 - `reveal_card` takes an optional `page_currency`: the currency the open checkout page charges in, as
