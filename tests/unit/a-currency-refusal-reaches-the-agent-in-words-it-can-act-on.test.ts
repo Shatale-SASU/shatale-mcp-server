@@ -36,6 +36,7 @@ describe('a page-currency refusal reaches the agent in words it can act on', () 
   async function reveal() {
     const res = await createRevealTools(new ShataleClient(BASE, 'sk_sandbox_abc')).handlers.reveal_card({
       purchase_id: PURCHASE,
+      publisher_user_id: 'usr_8390',
       page_currency: 'USD',
     })
     return JSON.parse(String(res.content[0].text)).error as Record<string, unknown>

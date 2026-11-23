@@ -524,9 +524,9 @@ export class ShataleClient {
   // is a GET. The scrub decides on the path WITHOUT the query (redact.ts pathReturnsOurCard splits on
   // '?'), so this does not move the call off the allowlist.
   //
-  // `undefined` is the DEPRECATED transition (reveal.ts REVEAL_WITHOUT_PERSON_DEPRECATION): the
-  // request goes out exactly as 1.1.x sent it, with no query at all — not an empty parameter, which
-  // the API trims to "" and treats the same, but which would make the wire record lie about intent.
+  // reveal_card always passes it (required since SHAT-8736; the tool refuses a call without it before
+  // reaching here). `undefined` still builds no query at all — not an empty parameter, which the API
+  // trims to "" and treats the same, but which would make the wire record lie about intent.
   //
   // ⚠️ `pageCurrency` IS THE OPEN PAGE'S CURRENCY, AND ITS ABSENCE MUST BE A BARE PATH — NOT AN EMPTY
   // PARAMETER (SHAT-8390). shatale-api reads an empty value as "not asked" and serves the reveal by

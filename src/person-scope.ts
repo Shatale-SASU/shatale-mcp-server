@@ -12,7 +12,7 @@ import { forLog } from './log-value.js'
 // it is then answered 404 "purchase not found", byte for byte the answer for a purchase that does not
 // exist. An agent on a version that never sends it would read its own live purchase as nonexistent.
 //
-// ⚠️ THE SAME TRANSITION AS reveal_card (reveal.ts, SHAT-3023), ON PURPOSE. Absent is served exactly as
+// ⚠️ THE SAME TRANSITION reveal_card went through (reveal.ts, SHAT-3023; closed there by SHAT-8736), ON PURPOSE. Absent is served exactly as
 // 1.2.x served it and says so, in two places: the result's `_meta` (the caller reads its own result) and
 // stderr (the operator reads the process log). Present but unusable — empty, whitespace, not a string —
 // is REFUSED: a caller that tried to name a person and got it wrong made a mistake, and serving it

@@ -303,22 +303,26 @@ describe('SHAT-3023: one purchase, walked through the contract (mock upstream)',
     expect(log, 'the MCP process wrote the CVV to its log').not.toContain(SENTINEL_CVV)
   })
 
-  // ⚠️ THE TRANSITION, THROUGH THE REAL SDK (SHAT-3023). A unit test can set `_meta` on a handler's
-  // result; only the built server over stdio shows that it SURVIVES the MCP SDK to the caller — and
-  // that the operator's copy lands on the process's stderr without the card.
-  test('a reveal without the person still works, and the deprecation reaches the caller and the log', async () => {
-    const revealed = await client.callTool('reveal_card', { purchase_id: 'pur_mock_1' })
-    expect(revealed.isError, `the 1.1.x-shaped call broke: ${text(revealed)}`).toBeFalsy()
-    expect(JSON.parse(text(revealed))).toEqual(API_CARD_CREDENTIALS)
-    expect(revealed._meta?.deprecation?.code, 'the deprecation did not reach the MCP caller').toBe(
-      'reveal_without_person',
-    )
-    const reveal = mock.lastRequest('GET', '/v1/purchases/pur_mock_1/card-credentials')
-    expect(reveal?.query, 'the unscoped call must carry no query at all').toEqual({})
-    const log = client.getStderr()
-    expect(log).toContain('DEPRECATED')
-    expect(log).not.toContain(SENTINEL_PAN)
-    expect(log).not.toContain(SENTINEL_CVV)
+  // ⚠️ THE PERSON IS REQUIRED, THROUGH THE REAL SDK (SHAT-8736). The transition SHAT-3023 opened is
+  // closed: a reveal without publisher_user_id is refused by the tool, before any request leaves, and
+  // the refusal reaches the MCP caller as a tool error that names the missing argument.
+  test('a reveal without the person is refused, and nothing reaches the API', async () => {
+    mock.requests.length = 0
+    const refused = await client.callTool('reveal_card', { purchase_id: 'pur_mock_1' })
+    expect(refused.isError, `an unscoped reveal was served: ${text(refused)}`).toBe(true)
+    expect(text(refused)).toContain('publisher_user_id')
+    expect(text(refused)).not.toContain(SENTINEL_PAN)
+    expect(
+      mock.lastRequest('GET', '/v1/purchases/pur_mock_1/card-credentials'),
+      'a reveal without the person left the process',
+    ).toBeUndefined()
+    // CONTROL: the same call WITH the person goes out and is served — the refusal is about the
+    // absence, not a broken reveal.
+    const served = await client.callTool('reveal_card', { purchase_id: 'pur_mock_1', publisher_user_id: 'usr_mock_1' })
+    expect(served.isError, text(served)).toBeFalsy()
+    expect(JSON.parse(text(served))).toEqual(API_CARD_CREDENTIALS)
+    const sent = mock.lastRequest('GET', '/v1/purchases/pur_mock_1/card-credentials')
+    expect(sent?.query).toEqual({ publisher_user_id: 'usr_mock_1' })
   })
 
   // ⚠️ THE CONTROL FOR THE ASSERTION ABOVE, AND WITHOUT IT "the sentinel arrived" PROVES NOTHING
